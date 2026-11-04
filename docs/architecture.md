@@ -5,7 +5,7 @@
 ```mermaid
 flowchart TB
   OS["Personal Studio OS"] --> Private["Private Workspace"]
-  OS --> Public["Public Space"]
+  Home --> Public["Public Space"]
   Private --> Domains["Workshop · Career · Self-Board"]
   Private --> Tools["Inbox · Search · Connections · Creation · Publication Status"]
   Public --> Tokyo["一期一会 in Tokyo"]
@@ -29,7 +29,17 @@ flowchart TB
 | Public Space · 一期一会 in Tokyo | Activities、Registration | 活动筛选与活动介绍、报名示意 |
 | Public Space · 一期一会 in Tokyo | Stories、About | 活动回顾、文章和品牌介绍，附两个循环演示 |
 
-把两组页面放在同一条侧栏，切换快，也适合少量平级页面。品牌或私人领域一多，导航容易拥挤，公开端也难形成完整的网站体验。Demo 采用顶部空间切换器，私人区用工作侧栏，公开区用品牌站导航。全局检索、收集入口放在私人快捷区。将来新增私人领域、公开页面或品牌时，先新增页面注册项及其渲染函数。Shared Foundation 不占顶层导航。
+首页用四个空间入口建立方向感。顶栏提供空间菜单、搜索与收集快捷入口。领域概览集中展示主要模块和最近内容，集合页提供筛选和 List / Grid。进入详情后可通过面包屑回到所在集合或领域。公开端沿用自己的品牌站导航。Shared Foundation 不占顶层导航。
+
+| 层级 | 示例地址 |
+|---|---|
+| Workspace Landing | `/#/` |
+| 领域概览 | `/#/workshop`、`/#/career`、`/#/self-board` |
+| 集合 | `/#/workshop/projects`、`/#/workshop/knowledge`、`/#/self-board/reading` |
+| 详情 | `/#/workshop/projects/plan` |
+| 公开品牌与详情 | `/#/public/yiqiyihui`、`/#/public/yiqiyihui/activities/quiet` |
+
+本次调整前，空间切换和领域入口已经使用路由。私人内容行、项目与学习示例，以及公开活动和故事都通过 Modal 展示详情。调整后，内容详情使用完整页面，轻量 Modal 保留给报名确认。原先的 `/#/private/...` 和 `/#/public/tokyo/...` 地址仍可进入对应页面。
 
 ## 内容流动与公开运营
 
