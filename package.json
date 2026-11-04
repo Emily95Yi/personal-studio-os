@@ -1,0 +1,6 @@
+{
+  "name": "personal-studio-os",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "node scripts/preview.mjs" }
+}
