@@ -99,3 +99,15 @@ svg { flex: none; vertical-align: middle; }
   .workspace-entry { min-height: 0; padding: 13px; }
   .landing-section + .landing-section { margin-top: 25px; }
 }
+
+.preview-link { margin-top: 15px; }
+.detail-stack { display: grid; gap: 12px; max-width: 680px; }
+.detail-stack h3 { margin: 10px 0 0; font-size: 14px; }
+.section-note { font-size: 13px; }
+.event-fields { display: flex; flex-wrap: wrap; gap: 12px 26px; margin: 13px 0 0; }
+.event-fields div { min-width: 55px; }
+.event-fields dt { color: var(--muted); font-size: 12px; }
+.event-fields dd { margin: 3px 0 0; font-size: 14px; }
+.record-list { max-width: 680px; list-style: none; padding: 0; border-top: 1px solid var(--line); }
+.record-list a { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 4px; border-bottom: 1px solid var(--line); }
+.record-list a:hover { background: #edf1e9; }

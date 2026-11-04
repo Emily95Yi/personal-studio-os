@@ -1,5 +1,8 @@
 import { href, publicHref, readRoute } from './pages.js';
-import { collectionView, landing, missingView, publicView, searchView, workspaceOverview } from './views.js';
+import {
+  collectionView, escapeHtml, eventDetail, landing, missingView, projectOverview, projectSection, publicView,
+  searchView, workspaceOverview,
+} from './views.js';
 import { icon } from './icons.js';
 import { studioRepository } from './repository.js';
 
@@ -15,7 +18,10 @@ function breadcrumbs(route) {
   if (route.type === 'home') return '';
   const crumbs = [[href(), 'Home']];
   if (route.workspace) crumbs.push([href(route.workspaceId), route.workspace.label]);
-  if (route.collection) crumbs.push([null, route.collection.label]);
+  if (route.collection) crumbs.push([href(route.workspaceId, route.collectionId), route.collection.label]);
+  if (route.projectPath) crumbs.push([href(...route.projectPath), route.projectLabel]);
+  if (route.sectionPath) crumbs.push([href(...route.sectionPath), route.section.label]);
+  if (route.eventLabel) crumbs.push([null, route.eventLabel]);
   if (route.brand) {
     crumbs.push([publicHref(route.brandId), route.brand.label]);
     if (route.pageId !== 'home') crumbs.push([null, route.page.label]);
@@ -23,7 +29,7 @@ function breadcrumbs(route) {
   if (route.type === 'search') crumbs.push([null, 'Search']);
   if (route.type === 'missing') crumbs.push([null, '页面未找到']);
   return '<nav class="breadcrumbs" aria-label="面包屑"><ol>' + crumbs.map(([address, label], index) => '<li>' +
-    (index === crumbs.length - 1 ? '<span aria-current="page">' + label + '</span>' : '<a href="' + address + '">' + label + '</a>') +
+    (index === crumbs.length - 1 ? '<span aria-current="page">' + escapeHtml(label) + '</span>' : '<a href="' + address + '">' + escapeHtml(label) + '</a>') +
     '</li>').join('') + '</ol></nav>';
 }
 
@@ -38,6 +44,9 @@ const views = {
   home: landing,
   overview: workspaceOverview,
   collection: collectionView,
+  project: projectOverview,
+  'project-section': projectSection,
+  event: eventDetail,
   public: publicView,
   search: searchView,
   missing: missingView,
@@ -45,7 +54,7 @@ const views = {
 
 function render({ focus = false } = {}) {
   const route = readRoute(location.hash);
-  const label = route.collection?.label ?? route.workspace?.label ??
+  const label = route.eventLabel ?? route.section?.label ?? route.projectLabel ?? route.collection?.label ?? route.workspace?.label ??
     (route.pageId === 'home' ? route.brand.label : route.page?.label) ??
     (route.type === 'search' ? 'Search' : route.type === 'missing' ? '页面未找到' : '');
   document.title = label ? label + ' · Personal Studio OS' : 'Personal Studio OS';

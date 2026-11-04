@@ -38,3 +38,31 @@ export const publicRepository = {
   activities() { return activities; },
   stories() { return stories; },
 };
+
+/**
+ * @typedef {{ id: string, label: string, zh?: string }} ResourceModule
+ * @typedef {{ id: string, title: string, description?: string, resourceModules?: ResourceModule[] }} WorkshopProject
+ * @typedef {{ id: string, projectId: string, title: string, theme?: string, date?: string,
+ * location?: string, attendeeCount?: number, status?: string,
+ * resourceUses?: { resourceId: string, versionId?: string, snapshot?: object }[] }} WorkshopEvent
+ * @typedef {{ id: string, projectId: string, moduleId: string, title: string,
+ * sourceContentId?: string, versionId?: string }} ProjectResource
+ * @typedef {{ id: string, title: string, steps: string[] }} Sop
+ * @typedef {{ id: string, title: string, frequency: string }} Habit
+ * @typedef {{ id: string, title: string, state: string }} Todo
+ */
+
+/** @type {WorkshopProject[]} */
+const projects = [];
+/** @type {WorkshopEvent[]} */
+const events = [];
+/** @type {ProjectResource[]} */
+const projectResources = [];
+
+export const workshopRepository = {
+  listProjects() { return projects.slice(); },
+  getProject(id) { return projects.find(project => project.id === id); },
+  listEvents(projectId) { return events.filter(event => event.projectId === projectId); },
+  getEvent(projectId, id) { return events.find(event => event.projectId === projectId && event.id === id); },
+  listResources(projectId) { return projectResources.filter(resource => resource.projectId === projectId); },
+};

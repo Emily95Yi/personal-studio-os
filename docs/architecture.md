@@ -1,44 +1,60 @@
 # Personal Studio OS 信息架构
 
-首页按访问边界分为 Private Workspace 与 Public Space。第一层是三个私人空间及一个公开品牌，第二层是各自的集合或品牌页面。Workspace Overview 说明空间用途，集合页有独立地址与说明性空状态。
+首页分为 Private Workspace 和 Public Space。私人空间包含 Workshop、Career、Self-Board。公开品牌为「一期一会 in Tokyo」。每个私人空间有独立概览，顶栏保留全局 Search。
 
 ```mermaid
 flowchart TB
   Home["Personal Studio OS"] --> Private["Private Workspace"]
   Home --> Public["Public Space"]
-  Private --> Workshop["Workshop"] --> W["Projects · Sessions · References"]
+  Private --> Workshop["Workshop"] --> Projects["Projects"] --> Project["Project Overview"]
+  Project --> Events["Events"] --> Event["Event Detail"]
+  Project --> Resources["Resources"]
+  Event --> Sections["Overview · Flow · Poster & Media · Reflection"]
   Private --> Career["Career"] --> C["Exams & Practice · Resume & Experience"]
-  Private --> Self["Self-Board"] --> S["Discover · Experience · Reflect & Create"]
+  Private --> Self["Self-Board"] --> S["Discover · Experience · Reflect & Create · SOP & Habits · To-Do"]
   Public --> Tokyo["一期一会 in Tokyo"] --> T["Home · Activities · Stories · About"]
-  Home -. "顶部入口" .-> Search["Search"]
 ```
 
-| 空间 | Overview | 第二层路径 |
+| 空间 | Overview | 集合或品牌页面 |
 |---|---|---|
-| Workshop | `/#/workshop` | `projects`、`sessions`、`references` |
-| Career | `/#/career` | `exams-practice`、`resume-experience` |
-| Self-Board | `/#/self-board` | `discover`、`experience`、`reflect-create` |
-| 一期一会 in Tokyo | `/#/public/yiqiyihui` | Home 使用品牌根地址，其他页面使用 `activities`、`stories`、`about` |
+| Workshop | `/#/workshop` | Projects。进入 Project 后可打开 Events 与 Resources。 |
+| Career | `/#/career` | Exams & Practice、Resume & Experience |
+| Self-Board | `/#/self-board` | Discover、Experience、Reflect & Create、SOP & Habits、To-Do |
+| 一期一会 in Tokyo | `/#/public/yiqiyihui` | Home、Activities、Stories、About |
 
-- **Workshop** 管理线下活动的主题、企划、流程、主持稿和实践复盘。未来一个 Project 可关联多个 Sessions。References 展示项目与资料之间的关系，原始资料保存在 Self-Board 的 Discover，一份原始资料可以被多个项目引用。
-- **Career** 记录职业发展。Exams & Practice 将接入独立题库，考试记录留在职业学习场景。Resume & Experience 汇总简历、工作项目、专业技能与经历。知识或经验未来可按需关联到其他领域。
-- **Self-Board** 为个人兴趣、生活体验和创作提供三个可重叠的视图。Discover 包含阅读、课程、卡牌、心理学理论和网络收藏。Experience 记录旅行、美食、影视、展览与日常探索。Reflect & Create 用于日记、随笔、思考、观后感和个人作品。一个内容可以出现在多个视图，新增主题可使用标签或自定义视图。
+## Workshop
 
-面包屑连接 Home → Workspace → Collection，Hash Router 保留返回、刷新与直接访问。未来详情沿用 `/#/<workspace>/<collection>/<id>`。空白 Demo 中没有记录可打开，访问不存在的详情会给出返回集合的入口。旧的第二层入口已退役，访问其地址可返回对应空间。
+Project 是可反复举办、长期演进的活动形式或系列。每个 Project 可以包含多个主题不同的 Event。Project Overview 提供并列的 Events 与 Resources。Event 的基本信息、流程、海报与媒体、复盘各有独立板块。旧的 Workspace 级 Sessions 或 References 地址可以返回 Workshop 概览。
 
-Search 保留在顶栏。Inbox / Capture 预留为未来统一收集能力。Connections 目前只保留 Repository 的双向查询。创作、发布与报名预留在相应内容或活动详情中。
-
-## 数据与扩展边界
-
-`content`、`relations`、`activities`、`stories` 都是空集合。保留 `studioRepository.list()`、`get()`、`related()`，以及独立的公开读取接口 `publicRepository.activities()` 和 `stories()`。当前为只读 Demo，未来可由受控云端 API 提供数据。
-
-| 维度 | 用途 |
+| 页面 | 结构预览路径 |
 |---|---|
-| Workspace | 可选主归属与多个关联领域。保留既有的 `domains` 关联字段。 |
-| Content Type | 资料、体验、笔记、作品等内容类型。 |
-| Tags | 可增删的多个主题，例如旅行、美食、卡牌或心理学。 |
-| Relations | 保存内容之间的来源、目标与标签，例如项目引用资料。 |
-| Visibility | 内容是否私人或公开。公开页面读取独立的公开投影。 |
-| Status | 草稿、进行中、完成等创作状态。 |
+| Projects | `/#/workshop/projects` |
+| Project Overview | `/#/workshop/projects/preview` |
+| Events | `/#/workshop/projects/preview/events` |
+| Event Detail | `/#/workshop/projects/preview/events/preview` |
+| Resources | `/#/workshop/projects/preview/resources` |
 
-输入与输出是记录属性。Self-Board 的三个入口是导航视图，可在这些维度上组合查询。真实数据的身份校验和授权由未来服务端负责。
+`preview` 是专供结构展示的路由段，业务集合仍为空。所有页面可刷新、直达，通过浏览器返回或面包屑回到上一级。未知 Project、Event 或板块提供返回最近有效上级的入口。
+
+Resources 支持项目专属素材和对 Discover 原始内容的引用。资源模块由 `site/pages.js` 的有序配置驱动。Guiding Questions、Cards、Goals & Expected Outcomes、References 是可替换的默认配置。项目可提供自己的 `resourceModules`，包括空列表。未来可通过调整模块配置新增、删除、重命名和排序，显示名称与稳定模块 ID 分开保存。
+
+## Self-Board
+
+Discover、Experience、Reflect & Create 是内容视图，SOP & Habits、To-Do 是行动视图，五个入口在同一层。一个内容可以出现在多个内容视图，也可以有多个主题和关联领域。
+
+| 入口 | 用途 |
+|---|---|
+| Discover | 阅读、课程、收藏、知识与参考素材 |
+| Experience | 旅行、美食、影视、展览与日常体验 |
+| Reflect & Create | 日记、随笔、思考、文章与创作 |
+| SOP & Habits | SOP 保存可重复使用的流程步骤。Habit 保存有频率的行为。 |
+| To-Do | 一次性任务和计划。后续可与 SOP、Habit 或其他内容建立关联。 |
+
+## 接入真实数据
+
+1. 由受控云端 API 实现 Repository 的查询边界。Project、Event、ProjectResource 各有独立 ID，按 Project 查询 Events 和 Resources。预览路由标识保留给原型，业务记录使用服务端分配的 ID。SOP、Habit、To-Do 分别定义模型。
+2. 资源模块保存稳定 ID、名称和顺序。项目引用通用知识时保存 `sourceContentId`。一个原始内容可被多个项目引用。移除模块前先处理它的资源归属。
+3. 为每个 Event 保留独立记录和历史。实际采用的资源保存资源 ID 与不可变版本 ID，或者保存当时的快照，以便回看。Event 的公开海报或内容未来可通过独立公开投影关联到「一期一会 in Tokyo」。
+4. 保留内容类型、标签、关联、可见性和状态的独立维度。私人接口由服务端验证身份，公开页面只读取批准后的投影。真实数据接入前先验证项目隔离、引用权限和历史版本回放。
+
+当前 Demo 使用空集合与静态页面配置。保留 Search、Repository 双向关联与未来 Inbox / Capture 的扩展位置。

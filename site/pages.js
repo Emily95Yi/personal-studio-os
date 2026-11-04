@@ -1,19 +1,13 @@
+import { workshopRepository } from './repository.js';
+
 export const workspaces = {
   workshop: {
     label: 'Workshop', icon: 'workshop', tone: 'sage',
-    description: '策划线下活动，记录每次实践，按需引用资料。',
+    description: '围绕可重复使用的活动形式，积累实践与设计素材。',
     collections: {
       projects: {
-        label: 'Projects', zh: '活动企划', empty: '还没有活动项目',
-        description: '这里将存放活动主题、企划、流程、主持稿和相关创作。',
-      },
-      sessions: {
-        label: 'Sessions', zh: '执行与复盘', empty: '还没有活动场次',
-        description: '这里将记录实际举办的活动、执行过程与复盘。一个项目可以关联多个场次。',
-      },
-      references: {
-        label: 'References', zh: '关联资料', empty: '还没有引用资料',
-        description: '这里将显示项目关联的资料和素材。原始资料存放在 Self-Board 的 Discover，可供多个项目引用。',
+        label: 'Projects', zh: '活动形式与系列', empty: '还没有活动系列',
+        description: '每个 Project 代表一种可长期演进的活动形式，并可包含多个不同主题的 Event。',
       },
     },
   },
@@ -33,7 +27,7 @@ export const workspaces = {
   },
   'self-board': {
     label: 'Self-Board', icon: 'self', tone: 'lilac',
-    description: '积累兴趣、体验生活，也留一点空间给记录和自由创作。',
+    description: '积累兴趣、体验生活、记录创作，也照顾日常行动。',
     collections: {
       discover: {
         label: 'Discover', zh: '发现与积累', empty: '还没有收藏或资料',
@@ -47,8 +41,49 @@ export const workspaces = {
         label: 'Reflect & Create', zh: '记录与表达', empty: '还没有记录或作品',
         description: '这里将存放日记、随笔、个人思考、读后感、观后感、文章和自由创作。',
       },
+      'sop-habits': {
+        label: 'SOP & Habits', zh: '流程与习惯',
+        sections: [
+          { label: 'SOP', empty: '还没有个人流程', description: 'SOP 由多个步骤组成，可以重复使用。' },
+          { label: 'Habits', empty: '还没有习惯', description: '习惯是按一定频率执行或记录的行为。' },
+        ],
+      },
+      'to-do': {
+        label: 'To-Do', zh: '待办与计划', empty: '还没有待办事项',
+        description: '这里用于记录一次性任务与个人计划。未来可以关联流程、习惯或其他内容。',
+      },
     },
   },
+};
+
+// These entries configure the read-only structure preview. They are not stored records.
+export const workshopStructure = {
+  previewId: 'preview',
+  sections: {
+    events: {
+      label: 'Events', zh: '活动场次',
+      empty: '还没有 Event', description: '这里将列出实际举办或计划举办的活动。每个 Event 都有独立的主题、日期和历史。',
+    },
+    resources: {
+      label: 'Resources', zh: '设计素材与引用',
+      description: '这里收纳项目专属素材，也可以引用 Self-Board / Discover 的原始资料。资源模块按项目配置。',
+    },
+  },
+  eventSections: [
+    { label: 'Overview', zh: '基本信息', fields: [
+      { key: 'theme', label: '主题' }, { key: 'date', label: '日期' }, { key: 'location', label: '地点' },
+      { key: 'attendeeCount', label: '人数' }, { key: 'status', label: '状态' },
+    ] },
+    { label: 'Flow', zh: '活动流程', empty: '还没有流程记录。' },
+    { label: 'Poster & Media', zh: '海报与媒体', empty: '还没有海报或媒体。' },
+    { label: 'Reflection', zh: '总结与复盘', empty: '还没有复盘记录。' },
+  ],
+  defaultResourceModules: [
+    { id: 'guiding-questions', label: 'Guiding Questions', zh: '引导问题' },
+    { id: 'cards', label: 'Cards', zh: '卡牌及应用方法' },
+    { id: 'goals', label: 'Goals & Expected Outcomes', zh: '活动目的与预期效果' },
+    { id: 'references', label: 'References', zh: '理论、资料与外部链接' },
+  ],
 };
 
 export const brands = {
@@ -72,9 +107,42 @@ export function publicHref(brandId, pageId = 'home') {
   return pageId === 'home' ? href('public', brandId) : href('public', brandId, pageId);
 }
 
+function missing(parent, parentLabel) {
+  return { type: 'missing', parent, parentLabel };
+}
+
+function readProjectRoute(collectionRoute, [projectId, sectionId, eventId, ...rest]) {
+  const { previewId, sections } = workshopStructure;
+  const collectionPath = ['workshop', 'projects'];
+  const preview = projectId === previewId;
+  const project = preview ? undefined : workshopRepository.getProject(projectId);
+  if (!preview && !project) return missing(href(...collectionPath), collectionRoute.collection.label);
+
+  const projectPath = [...collectionPath, projectId];
+  const projectLabel = project?.title ?? 'Project 结构预览';
+  const route = { ...collectionRoute, type: 'project', project, projectPath, projectLabel, preview };
+  if (!sectionId) return route;
+  if (!Object.hasOwn(sections, sectionId)) return missing(href(...projectPath), projectLabel);
+
+  const section = sections[sectionId];
+  const sectionPath = [...projectPath, sectionId];
+  const sectionRoute = { ...route, type: 'project-section', section, sectionId, sectionPath };
+  if (!eventId) return sectionRoute;
+  if (sectionId !== 'events' || rest.length) return missing(href(...sectionPath), section.label);
+
+  const event = preview ? undefined : workshopRepository.getEvent(projectId, eventId);
+  if (preview ? eventId !== previewId : !event) return missing(href(...sectionPath), section.label);
+  return { ...sectionRoute, type: 'event', event, eventLabel: event?.title ?? 'Event 结构预览' };
+}
+
 export function readRoute(hash) {
   const [path] = hash.replace(/^#/, '').split('?');
-  const segments = path.split('/').filter(Boolean);
+  let segments;
+  try {
+    segments = path.split('/').filter(Boolean).map(decodeURIComponent);
+  } catch {
+    return missing(href(), 'Home');
+  }
   if (segments[0] === 'private') segments.shift();
   const [root, section, pageId] = segments;
   if (!root || (root === 'home' && !section)) return { type: 'home' };
@@ -85,8 +153,10 @@ export function readRoute(hash) {
     if (!section) return { type: 'overview', workspaceId: root, workspace };
     if (Object.hasOwn(workspace.collections, section)) {
       const collection = workspace.collections[section];
-      if (segments.length === 2) return { type: 'collection', workspaceId: root, workspace, collection };
-      return { type: 'missing', parent: href(root, section), parentLabel: collection.label };
+      const route = { type: 'collection', workspaceId: root, workspace, collectionId: section, collection };
+      if (segments.length === 2) return route;
+      if (root === 'workshop' && section === 'projects') return readProjectRoute(route, segments.slice(2));
+      return missing(href(root, section), collection.label);
     }
     return { type: 'missing', parent: href(root), parentLabel: workspace.label };
   }
