@@ -1,5 +1,6 @@
 /**
  * @typedef {{ id: string, title: string, domains: string[], kind: 'input'|'output',
+ * primaryWorkspace?: string, contentType?: string, tags?: string[],
  * category: string, state: string, visibility: string, format?: string,
  * date: string, description: string }} StudioContent
  * @typedef {[sourceId: string, targetId: string, label: string]} Relation

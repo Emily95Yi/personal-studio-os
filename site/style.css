@@ -70,7 +70,7 @@ svg { flex: none; vertical-align: middle; }
 .workspace-hero { padding: clamp(23px, 5vw, 39px); border-radius: 9px; margin-bottom: 26px; }
 .workspace-hero .page-intro { margin: 0; }
 .module-links { max-width: 680px; border-top: 1px solid var(--line); }
-.module-links a { display: grid; grid-template-columns: minmax(95px, 1fr) minmax(65px, 2fr) auto; align-items: center; gap: 8px; padding: 13px 5px; border-bottom: 1px solid var(--line); }
+.module-links a { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 13px 5px; border-bottom: 1px solid var(--line); }
 .module-links a:hover { background: #edf1e9; }
 .module-links span { font-size: 13px; color: var(--muted); }
 
