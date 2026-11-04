@@ -1,62 +1,33 @@
 # Personal Studio OS 信息架构
 
-个人知识从收集开始，跨领域组织和关联，形成作品或活动。创作成果可以继续留在私人空间。只有经过单独确认的字段与媒体进入公开空间，公开活动产生的反馈再回到私人积累。
+首页按访问边界分为 Private Workspace 与 Public Space。第一层是三个私人空间及一个公开品牌，第二层是各自的集合或品牌页面。空间概览负责指引；集合页有独立地址与说明性空状态。
 
 ```mermaid
 flowchart TB
-  OS["Personal Studio OS"] --> Private["Private Workspace"]
+  Home["Personal Studio OS"] --> Private["Private Workspace"]
   Home --> Public["Public Space"]
-  Private --> Domains["Workshop · Career · Self-Board"]
-  Private --> Tools["Inbox · Search · Connections · Creation · Publication Status"]
-  Public --> Tokyo["一期一会 in Tokyo"]
-  Tokyo --> Pages["Home · Activities · Registration · Stories · About"]
-  Private -.-> Foundation["Shared Foundation：权限、索引、关联、Repository / API"]
-  Public -.-> Foundation
+  Private --> Workshop["Workshop"] --> W["Projects · Knowledge · Resources"]
+  Private --> Career["Career"] --> C["Projects · Learning · Portfolio"]
+  Private --> Self["Self-Board"] --> S["Reading · Watching · Notes · Works"]
+  Public --> Tokyo["一期一会 in Tokyo"] --> T["Home · Activities · Stories · About"]
+  Home -. "顶部入口" .-> Search["Search"]
 ```
 
-## Sitemap
-
-| 第一层 | 第二层 | 页面定位 |
+| 空间 | Overview | 第二层 |
 |---|---|---|
-| Private Workspace | Home | 继续最近工作、找回项目与创作、处理待整理内容 |
-| Private Workspace | Workshop | 活动企划、卡牌 Wiki、方法、带领、素材与复盘的入口 |
-| Private Workspace | Career | 职业经验、技能、作品、资格与练习的入口 |
-| Private Workspace | Self-Board | Reading、Watching、Notes、Thoughts、Inspirations、Journals、Creative Works |
-| Private Workspace | Inbox / Capture、Search | 收集队列与跨领域检索，放在顶部快捷区 |
-| Private Workspace | Connections | 按节点追踪原始输入、跨领域关联、输出及反馈 |
-| Private Workspace | Creation、Publication Status | 查看输出及独立的创作状态、可见性 |
-| Public Space · 一期一会 in Tokyo | Home | 品牌主页、活动与 Stories 入口 |
-| Public Space · 一期一会 in Tokyo | Activities、Registration | 活动筛选与活动介绍、报名示意 |
-| Public Space · 一期一会 in Tokyo | Stories、About | 活动回顾、文章和品牌介绍，附两个循环演示 |
+| Workshop | `/#/workshop` | `projects`、`knowledge`、`resources` |
+| Career | `/#/career` | `projects`、`learning`、`portfolio` |
+| Self-Board | `/#/self-board` | `reading`、`watching`、`notes`、`works` |
+| 一期一会 in Tokyo | `/#/public/yiqiyihui` | Home 使用品牌根地址，其他页面使用 `activities`、`stories`、`about` |
 
-首页用四个空间入口建立方向感。顶栏提供空间菜单、搜索与收集快捷入口。领域概览集中展示主要模块和最近内容，集合页提供筛选和 List / Grid。进入详情后可通过面包屑回到所在集合或领域。公开端沿用自己的品牌站导航。Shared Foundation 不占顶层导航。
+面包屑连接首页、空间和集合，浏览器返回与刷新使用 Hash Router。旧链接中仍有对应页面的 `#/private/…` 与 `#/public/tokyo/…` 继续可用。已移除的集合和虚构记录详情显示找不到页面，并提供返回入口。
 
-| 层级 | 示例地址 |
-|---|---|
-| Workspace Landing | `/#/` |
-| 领域概览 | `/#/workshop`、`/#/career`、`/#/self-board` |
-| 集合 | `/#/workshop/projects`、`/#/workshop/knowledge`、`/#/self-board/reading` |
-| 详情 | `/#/workshop/projects/plan` |
-| 公开品牌与详情 | `/#/public/yiqiyihui`、`/#/public/yiqiyihui/activities/quiet` |
+Search 是顶栏全局入口，当前在空的私人内容 Repository 上查询，未来接入统一索引。Inbox / Capture 预留为全局能力，当前没有入口按钮。Connections 的双向查询留在 Repository。Creation 和 Publication Status 的独立页面已移除，未来分别从空间与内容内操作。Registration 预留为未来 Activities 详情操作。
 
-本次调整前，空间切换和领域入口已经使用路由。私人内容行、项目与学习示例，以及公开活动和故事都通过 Modal 展示详情。调整后，内容详情使用完整页面，轻量 Modal 保留给报名确认。原先的 `/#/private/...` 和 `/#/public/tokyo/...` 地址仍可进入对应页面。
+## 数据与扩展边界
 
-## 内容流动与公开运营
+`content`、`relations`、`activities`、`stories` 都是空集合。上一版的示例内容和依赖示例 ID 的详情、筛选、关系演示与报名预览已移除。代码历史保留，可从此前提交查看。
 
-```mermaid
-flowchart LR
-  A["阅读摘录 · Self-Board"] --> B["主题笔记 · Workshop"]
-  B --> C["活动企划 · 私人输出"]
-  C --> D["人工确认公开摘要与授权素材"]
-  D --> E["公开宣传 / 招募"]
-  E --> F["线下活动"]
-  F --> G["公开回顾 / 内容传播"]
-  G --> E
-  F --> H["私人经验与反馈"]
-  H --> I["更新企划与个人笔记"]
-  I --> F
-```
+`studioRepository.list()`、`get()`、`related()` 保留现有查询形式。公开的 `publicRepository.activities()` 和 `stories()` 保留独立读取边界。Content 仍可区分 input/output、归属领域、创作阶段及可见性；Relation 仍保存来源、目标与标签。未来公开内容从已确认字段生成独立投影。
 
-Repository 的私有查询和公开投影各自有边界。Demo 使用分开的只读示例集合，仅在当前页面保留临时交互状态。真正的私有页面应在身份验证之后由 Worker 提供。公开 API 只返回已经批准的发布投影。当前 Demo 内的 “Private” 是页面概念，数据都是示例。
-
-建议的实体有 Content、Relation、Publication、Asset 和 Feedback。Content 独立记录 input/output、结构化/碎片化、创作阶段、可见性及多个领域。Relation 用来源、目标和关系类型连起来。Publication 保存已批准的字段、媒体授权及渠道信息，不直接暴露原 Content。Asset 在私有 R2 中使用对象键，公开文件通过授权后的副本提供。参与者个人信息、照片及分享默认留在内部。
+这个公开仓库的 Demo 仅呈现信息架构。Private Workspace 是产品区域名称，真实私人数据的身份验证与授权在未来服务端实现。

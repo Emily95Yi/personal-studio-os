@@ -1,118 +1,86 @@
 export const workspaces = {
   workshop: {
-    label: 'Workshop', zh: '活动企划', icon: 'workshop', tone: 'sage', number: '01',
-    description: '活动设计、带领方法与线下实践。',
-    overview: '把一个活动想法带到现场，再把经验带回下一次企划。',
-    collections: [
-      { id: 'projects', label: 'Projects', zh: '项目库', description: '活动企划、实践记录与复盘。', categories: ['活动企划', '活动记录', '活动复盘'] },
-      { id: 'knowledge', label: 'Knowledge', zh: '知识库', description: '卡牌 Wiki、理论、引导问题和参考资料。', kind: 'input' },
-      { id: 'publications', label: 'Publications', zh: '活动发布', description: '活动邀请与可分享的回顾。', categories: ['活动发布', '公开回顾'] },
-      { id: 'library', label: 'Library', zh: '全部内容', description: '浏览 Workshop 关联的全部输入与输出。' },
-    ],
+    label: 'Workshop', icon: 'workshop', tone: 'sage',
+    description: '活动企划、实践与方法积累。',
+    collections: {
+      projects: { label: 'Projects', zh: '项目', empty: '还没有项目', description: '这里将存放你的活动企划与实践记录。' },
+      knowledge: { label: 'Knowledge', zh: '知识', empty: '还没有知识条目', description: '这里将存放带领方法、引导问题与活动复盘。' },
+      resources: { label: 'Resources', zh: '资源', empty: '还没有资源', description: '这里将存放参考资料、卡牌与活动素材。' },
+    },
   },
   career: {
-    label: 'Career', zh: '职业发展', icon: 'career', tone: 'sand', number: '02',
-    description: '职业经验、资格学习与作品档案。',
-    overview: '整理学习与工作经验，把可复用的方法发展成作品。',
-    collections: [
-      { id: 'learning', label: 'Learning', zh: '学习与认证', description: '资格学习、复习重点和题库索引。', categories: ['资格学习'] },
-      { id: 'portfolio', label: 'Portfolio', zh: '职业作品', description: '案例、作品和可以分享的实践经验。', categories: ['职业作品'] },
-      { id: 'projects', label: 'Projects', zh: '工作项目', description: '这里汇总工作项目及其过程记录。', categories: ['工作项目'] },
-      { id: 'library', label: 'Library', zh: '全部内容', description: '浏览 Career 关联的全部输入与输出。' },
-    ],
+    label: 'Career', icon: 'career', tone: 'sand',
+    description: '工作经验、持续学习与职业作品。',
+    collections: {
+      projects: { label: 'Projects', zh: '项目', empty: '还没有项目', description: '这里将存放工作项目及其过程记录。' },
+      learning: { label: 'Learning', zh: '学习', empty: '还没有学习记录', description: '这里将存放课程、资格学习与复习笔记。' },
+      portfolio: { label: 'Portfolio', zh: '作品集', empty: '还没有作品', description: '这里将存放职业作品与实践案例。' },
+    },
   },
   'self-board': {
-    label: 'Self-Board', zh: '个人积累', icon: 'self', tone: 'lilac', number: '03',
-    description: '阅读、观察、思考与个人创作。',
-    overview: '给值得记下的段落和还没想清楚的问题留一点空间。',
-    collections: [
-      { id: 'reading', label: 'Reading', zh: '阅读', description: '阅读摘录、书目与读后思考。', categories: ['Reading'] },
-      { id: 'watching', label: 'Watching', zh: '观看', description: '影视、展览与观看笔记。', categories: ['Watching'] },
-      { id: 'notes', label: 'Notes', zh: '笔记', description: '随手记下的观察和片段。', categories: ['Notes'] },
-      { id: 'thoughts', label: 'Thoughts', zh: '思考', description: '有待继续追问的问题。', categories: ['Thoughts'] },
-      { id: 'inspirations', label: 'Inspirations', zh: '灵感', description: '留给未来作品的线索。', categories: ['Inspirations'] },
-      { id: 'journals', label: 'Journals', zh: '手记', description: '可按时间回看的个人记录。', categories: ['Journals'] },
-      { id: 'creative-works', label: 'Creative Works', zh: '个人作品', description: '短文、写作练习与其他作品。', categories: ['Creative Works'] },
-      { id: 'library', label: 'Library', zh: '全部内容', description: '浏览 Self-Board 关联的全部输入与输出。' },
-    ],
-  },
-};
-
-export const tools = {
-  connections: { label: 'Connections', zh: '内容关联', icon: 'connections' },
-  creation: { label: 'Creation', zh: '创作', icon: 'pen' },
-  publication: { label: 'Publication Status', zh: '发布状态', icon: 'publish' },
-  search: { label: 'Search', zh: '搜索', icon: 'search' },
-  inbox: { label: 'Inbox', zh: '收集箱', icon: 'inbox' },
-};
-
-export const brands = {
-  yiqiyihui: {
-    label: '一期一会 in Tokyo', icon: 'globe', tone: 'clay', number: '04',
-    description: '东京线下活动、公开故事与报名预览。',
-    pages: {
-      home: { label: 'Home', zh: '首页' },
-      activities: { label: 'Activities', zh: '活动', hasDetails: true },
-      registration: { label: 'Registration', zh: '报名' },
-      stories: { label: 'Stories', zh: '故事', hasDetails: true },
-      about: { label: 'About', zh: '关于' },
+    label: 'Self-Board', icon: 'self', tone: 'lilac',
+    description: '给阅读、观察和个人创作留一个地方。',
+    collections: {
+      reading: { label: 'Reading', zh: '阅读', empty: '还没有阅读记录', description: '这里将存放书目、摘录与读后笔记。' },
+      watching: { label: 'Watching', zh: '观看', empty: '还没有观看记录', description: '这里将存放影视、展览与观看笔记。' },
+      notes: { label: 'Notes', zh: '笔记', empty: '还没有笔记', description: '这里将存放随手记下的观察和想法。' },
+      works: { label: 'Works', zh: '作品', empty: '还没有作品', description: '这里将存放写作与其他个人创作。' },
     },
   },
 };
 
-export const defaultBrand = 'yiqiyihui';
+export const brands = {
+  yiqiyihui: {
+    label: '一期一会 in Tokyo', icon: 'globe', tone: 'clay',
+    description: '东京线下活动与公开内容。',
+    pages: {
+      home: { label: 'Home', zh: '首页', empty: '还没有发布内容', description: '这里将展示品牌动态和新发布的内容。' },
+      activities: { label: 'Activities', zh: '活动', empty: '还没有活动', description: '这里将展示公开活动。未来可从活动详情进入报名。' },
+      stories: { label: 'Stories', zh: '故事', empty: '还没有故事', description: '这里将存放公开的活动回顾与文章。' },
+      about: { label: 'About', zh: '关于', empty: '介绍尚未发布', description: '这里将介绍一期一会 in Tokyo 的理念与活动方式。' },
+    },
+  },
+};
 
 export function href(...segments) {
   return '#/' + segments.map(encodeURIComponent).join('/');
 }
 
-export function publicHref(brand, page = 'home', id) {
-  if (id) return href('public', brand, page, id);
-  return page === 'home' ? href('public', brand) : href('public', brand, page);
-}
-
-export function matchesCollection(item, collection) {
-  return (!collection.categories || collection.categories.includes(item.category)) &&
-    (!collection.kind || item.kind === collection.kind);
-}
-
-export function itemHref(item, context = {}) {
-  if (context.type === 'collection') return href(context.workspaceId, context.collection.id, item.id);
-  if (context.type === 'tool') return href(context.toolId, item.id);
-  const workspaceId = context.workspaceId ?? Object.keys(workspaces).find(id => workspaces[id].label === item.domains[0]);
-  if (!workspaceId) return href('search', item.id);
-  const collection = workspaces[workspaceId].collections.find(entry => matchesCollection(item, entry));
-  return href(workspaceId, collection.id, item.id);
+export function publicHref(brandId, pageId = 'home') {
+  return pageId === 'home' ? href('public', brandId) : href('public', brandId, pageId);
 }
 
 export function readRoute(hash) {
-  const [path, query] = hash.replace(/^#/, '').split('?');
-  const params = new URLSearchParams(query);
+  const [path] = hash.replace(/^#/, '').split('?');
   const segments = path.split('/').filter(Boolean);
   if (segments[0] === 'private') segments.shift();
-  const [root, section, id, publicItem] = segments;
+  const [root, section, pageId] = segments;
   if (!root || (root === 'home' && !section)) return { type: 'home' };
+  if (root === 'search' && !section) return { type: 'search' };
 
-  if (root === 'public' && segments.length <= 4) {
-    const brandId = !section || section === 'tokyo' ? defaultBrand : section;
-    const pageId = id || 'home';
+  if (Object.hasOwn(workspaces, root)) {
+    const workspace = workspaces[root];
+    if (!section) return { type: 'overview', workspaceId: root, workspace };
+    if (Object.hasOwn(workspace.collections, section)) {
+      const collection = workspace.collections[section];
+      if (segments.length === 2) return { type: 'collection', workspaceId: root, workspace, collection };
+      return { type: 'missing', parent: href(root, section), parentLabel: collection.label };
+    }
+    return { type: 'missing', parent: href(root), parentLabel: workspace.label };
+  }
+
+  if (root === 'public') {
+    const brandId = !section || section === 'tokyo' ? 'yiqiyihui' : section;
+    const page = pageId || 'home';
     if (Object.hasOwn(brands, brandId)) {
       const brand = brands[brandId];
-      const page = Object.hasOwn(brand.pages, pageId) ? brand.pages[pageId] : null;
-      if (page && (!publicItem || page.hasDetails)) return { type: 'public', brandId, brand, pageId, page, itemId: publicItem, params };
+      if (segments.length <= 3 && Object.hasOwn(brand.pages, page)) {
+        return { type: 'public', brandId, brand, pageId: page, page: brand.pages[page] };
+      }
+      const parentPage = Object.hasOwn(brand.pages, page) ? page : 'home';
+      return { type: 'missing', parent: publicHref(brandId, parentPage), parentLabel: brand.pages[parentPage].label };
     }
   }
 
-  if (Object.hasOwn(workspaces, root) && segments.length <= 3) {
-    const workspace = workspaces[root];
-    if (!section) return { type: 'overview', workspaceId: root, workspace };
-    const collection = workspace.collections.find(item => item.id === section);
-    if (collection) return { type: 'collection', workspaceId: root, workspace, collection, itemId: id };
-  }
-
-  if (Object.hasOwn(tools, root) && segments.length <= 2) {
-    return { type: 'tool', toolId: root, tool: tools[root], itemId: section, params };
-  }
-
-  return { type: 'missing' };
+  return { type: 'missing', parent: href(), parentLabel: 'Home' };
 }
