@@ -1,12 +1,12 @@
 import { href, publicHref, readRoute } from './pages.js';
 import {
-  actionPreview, collectionView, discoverDetail, escapeHtml, eventDetail, landing, missingView, projectOverview,
-  projectSection, publicView, searchView, workshopGallery, workspaceOverview,
+  actionPreview, collectionView, contentDetail, escapeHtml, eventDetail, landing, missingView, projectOverview,
+  projectSection, publicView, searchView, todoWidget, workshopGallery, workspaceOverview,
 } from './views.js';
 import { icon } from './icons.js';
 import { plannerRepository, studioRepository } from './repository.js';
 import { calendarHref, calendarSelection, dateKey, parseDate } from './calendar.js';
-import { calendarView } from './planner-view.js';
+import { calendarView, taskDialog } from './planner-view.js';
 
 const app = document.querySelector('#app');
 let period = 'week';
@@ -31,22 +31,20 @@ function pageContext(route) {
 }
 
 function header(route, { title, ancestors }) {
-  const [address, label] = route.parent ? [route.parent, route.parentLabel] : ancestors.at(-1);
+  const [address, label] = route.parent ? [route.parent, route.parentLabel] :
+    route.type === 'action-preview' ? [href('self-board'), 'Self-Board'] : ancestors.at(-1);
   const home = route.type === 'home';
   const start = home ? '<span class="logo" aria-hidden="true">' + icon('logo', 20) + '</span>' :
     '<a class="header-icon back-link" href="' + address + '" aria-label="返回 ' + escapeHtml(label) +
     '" title="返回 ' + escapeHtml(label) + '">' + icon('back', 19) + '</a><h1>' + escapeHtml(title) + '</h1>';
-  const calendar = route.type === 'overview' && route.workspaceId === 'self-board'
-    ? '<a class="header-icon" href="' + href('calendar') + '" aria-label="打开 Calendar" title="Calendar">' + icon('calendar', 18) + '</a>' : '';
+  const selfBoard = route.type === 'overview' && route.workspaceId === 'self-board';
+  const calendar = home || selfBoard ? '<a class="header-icon" href="' +
+    (selfBoard ? href('calendar') + '?from=self-board' : href('calendar')) +
+    '" aria-label="打开 Calendar" title="Calendar">' + icon('calendar', 18) + '</a>' : '';
   const search = route.type === 'search' ? '' : '<a class="header-icon" href="' + href('search') +
     '" aria-label="搜索" title="搜索">' + icon('search', 18) + '</a>';
   return '<header class="studio-top"><div class="masthead">' + start + '<div class="header-actions">' + calendar + search +
-    '</div></div>' + (!home && ancestors.length > 1 ? breadcrumbs(ancestors) : '') + '</header>';
-}
-
-function breadcrumbs(ancestors) {
-  return '<nav class="breadcrumbs" aria-label="面包屑"><ol>' + ancestors.map(([address, label]) =>
-    '<li><a href="' + address + '">' + escapeHtml(label) + '</a></li>').join('') + '</ol></nav>';
+    '</div></div></header>';
 }
 
 function publicNav(route) {
@@ -60,7 +58,7 @@ const views = {
   home: landing,
   overview: workspaceOverview,
   'workshop-gallery': workshopGallery,
-  'discover-detail': discoverDetail,
+  'content-detail': contentDetail,
   'action-preview': actionPreview,
   calendar: calendarView,
   collection: collectionView,
@@ -79,12 +77,14 @@ function render({ focus = false } = {}) {
     route = readRoute(location.hash);
   }
   const context = pageContext(route);
+  const canEditTasks = route.type === 'calendar' ||
+    (route.workspaceId === 'self-board' && (route.type === 'overview' || route.collectionId === 'to-do'));
   document.title = context.title;
   app.dataset.space = route.type === 'public' ? 'public' : 'private';
   app.innerHTML = '<a class="skip" href="#main">跳到内容</a>' + header(route, context) +
     '<main id="main" class="page-main" tabindex="-1"' +
     (route.type === 'home' ? '' : ' aria-label="' + escapeHtml(context.title) + '"') + '>' + publicNav(route) +
-    views[route.type]({ ...route, period, sopStep }) + '</main>';
+    views[route.type]({ ...route, period, sopStep }) + '</main>' + (canEditTasks ? taskDialog() : '');
   if (focus) app.querySelector('main').focus({ preventScroll: true });
 }
 
@@ -94,12 +94,24 @@ app.addEventListener('click', event => {
     app.querySelector('main').focus();
     return;
   }
+  const calendarLink = event.target.closest('[data-calendar-nav]');
+  if (calendarLink && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+    event.preventDefault();
+    const address = calendarLink.getAttribute('href');
+    history.replaceState(history.state, '', address);
+    app.querySelector('main').innerHTML = calendarView(readRoute(location.hash));
+    const next = [...app.querySelectorAll('[data-calendar-nav]')].find(link => link.getAttribute('href') === address &&
+      (link.getAttribute('aria-current') || link.getAttribute('aria-label') === calendarLink.getAttribute('aria-label')));
+    (next ?? app.querySelector('main')).focus({ preventScroll: true });
+    return;
+  }
   const button = event.target.closest('button');
   if (!button) return;
   if (button.dataset.period) {
     period = button.dataset.period;
-    render();
-    app.querySelector('[data-period="' + period + '"]').focus();
+    const widget = button.closest('.widget-todo');
+    widget.outerHTML = todoWidget(period, widget.dataset.overview === 'true');
+    app.querySelector('[data-period="' + period + '"]').focus({ preventScroll: true });
   }
   if (button.hasAttribute('data-check-in')) {
     plannerRepository.toggleCheckIn(dateKey());
@@ -149,12 +161,16 @@ app.addEventListener('submit', event => {
     done: form.elements.done.checked });
   if (!saved) return;
   form.closest('dialog').close();
-  const { mode, date: selected } = calendarSelection(readRoute(location.hash).params);
-  if (dateKey(selected) !== saved.date) location.hash = calendarHref(date, mode);
-  else {
-    render();
-    app.querySelector('[data-task-edit="' + saved.id + '"]')?.focus();
+  const route = readRoute(location.hash);
+  if (route.type === 'calendar') {
+    const { mode, date: selected } = calendarSelection(route.params);
+    if (dateKey(selected) !== saved.date) {
+      history.replaceState(history.state, '', calendarHref(date, mode, route.params.get('from')));
+    }
   }
+  render();
+  (app.querySelector('[data-task-edit="' + saved.id + '"]') ??
+    app.querySelector('[data-period="' + period + '"]') ?? app.querySelector('main')).focus({ preventScroll: true });
 });
 
 app.addEventListener('input', event => {
@@ -164,10 +180,8 @@ app.addEventListener('input', event => {
   const matches = query ? studioRepository.list({ query }) : [];
   const results = app.querySelector('.search-results');
   const emptyTitle = app.querySelector('.search-status');
-  const emptyDescription = app.querySelector('.search-note');
   const hasContent = matches.length > 0 || studioRepository.list().length > 0;
   emptyTitle.textContent = matches.length ? '搜索结果' : hasContent && query ? '没有匹配的内容' : '还没有可搜索的内容';
-  emptyDescription.hidden = hasContent;
   results.hidden = matches.length === 0;
   results.replaceChildren(...matches.map(item => {
     const row = document.createElement('li');

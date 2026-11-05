@@ -1,6 +1,6 @@
 # 奕Studio 信息架构
 
-首页分为 Private Workspace 和 Public Space。私人空间包含 Workshop、Career、Self-Board。公开品牌为「一期一会 in Tokyo」。每个私人空间有独立概览，顶栏保留全局 Search。
+首页分为 Private Workspace 和 Public Space。私人空间包含 Workshop、Career、Self-Board。公开品牌为「一期一会 in Tokyo」。每个私人空间有独立概览。内页顶栏显示当前标题、返回上一级和必要的快捷图标。
 
 ```mermaid
 flowchart TB
@@ -27,7 +27,7 @@ SOP 和 Habit 有各自的执行页面。SOP 显示可推进和回退的步骤�
 
 ## Calendar 与会话数据
 
-`/#/calendar?view=week&date=YYYY-MM-DD` 可直接打开指定日期和视图。Calendar 的 Day、Week、Month 共用同一份日期状态。点击周历或月历的日期会更新当天事项。点击待办可修改标题、日期与完成状态。
+`/#/calendar?view=week&date=YYYY-MM-DD` 可直接打开指定日期和视图。Calendar 的 Day、Week、Month 共用同一份日期状态。点击周历或月历的日期会更新当天事项。Calendar 和 To-Do Widget 都可在原处打开待办编辑。日历视图和日期切换更新当前地址，不增加历史记录。Workshop 事件可从已有事件数据按日期投影到日历。
 
 Calendar 和 To-Do 共用 `plannerRepository`。Habit Focus 写入的打卡日期也从这里读取。当前 Repository 使用页面内存，路由切换时数据保留，刷新或开启新标签页会使用新的空会话。项目、活动、原始内容和资源集合保持为空。
 
@@ -39,3 +39,5 @@ Calendar 和 To-Do 共用 `plannerRepository`。Habit Focus 写入的打卡日�
 4. 保留内容类型、标签、关联、可见性和状态的独立维度。私人接口由服务端验证身份，公开页面只读取批准后的投影。真实数据接入前先验证项目隔离、引用权限和历史版本回放。
 
 Calendar 持久化接入时，将待办与打卡替换为同一受控 API，保留现有日期筛选和编辑入口。服务端按用户授权读写，处理时区、并发编辑和版本冲突。
+
+[查看 iCloud Calendar 只读同步评估](icloud-calendar.md)

@@ -19,10 +19,15 @@ const activities = [];
 /** @type {Story[]} */
 const stories = [];
 
+export function selfBoardIncludes(item, view) {
+  return (item.domains.includes('Self-Board') || item.primaryWorkspace === 'Self-Board') &&
+    (!view || (item.views?.includes(view) ?? view === 'discover'));
+}
+
 export const studioRepository = {
   list({ domain, kind, query = '' } = {}) {
     const q = query.trim().toLowerCase();
-    return content.filter(item => (!domain || item.domains.includes(domain)) &&
+    return content.filter(item => (!domain || item.domains.includes(domain) || item.primaryWorkspace === domain) &&
       (!kind || item.kind === kind) &&
       [item.title, item.category, item.description, ...item.domains].join(' ').toLowerCase().includes(q));
   },
@@ -64,6 +69,9 @@ export const workshopRepository = {
   listProjects() { return projects.slice(); },
   getProject(id) { return projects.find(project => project.id === id); },
   listEvents(projectId) { return events.filter(event => event.projectId === projectId); },
+  eventsBetween(start, end) {
+    return events.filter(event => /^\d{4}-\d{2}-\d{2}$/.test(event.date) && event.date >= start && event.date <= end);
+  },
   getEvent(projectId, id) { return events.find(event => event.projectId === projectId && event.id === id); },
   listResources(projectId) { return projectResources.filter(resource => resource.projectId === projectId); },
 };

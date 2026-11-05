@@ -59,8 +59,8 @@ export function formatPeriod(date, mode) {
   return mode === 'day' ? formatDay(date) : formatDay(start) + ' 至 ' + formatDay(end);
 }
 
-export function calendarHref(date = new Date(), mode = 'month') {
-  return href('calendar') + '?view=' + mode + '&date=' + dateKey(date);
+export function calendarHref(date = new Date(), mode = 'month', from) {
+  return href('calendar') + '?view=' + mode + '&date=' + dateKey(date) + (from === 'self-board' ? '&from=self-board' : '');
 }
 
 export function calendarSelection(params) {
