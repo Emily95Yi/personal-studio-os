@@ -28,33 +28,6 @@
   color: var(--ink);
   font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --paper: #111c2b;
-    --surface: #192739;
-    --ink: #e4eef9;
-    --muted: #acbfd4;
-    --line: #35485e;
-    --tint: #1e3045;
-    --selected: #283f59;
-    --accent: #a4c9f0;
-    --accent-hover: #c4dffc;
-    --on-accent: #122237;
-    --ring: #95bff1;
-    --error: #ffabb2;
-    --scrim: #050a12aa;
-    --card-hover-border: #6b98c4;
-    --card-hover-bg: #263c56;
-    --card-hover-shadow: 0 10px 24px #04091355;
-    --home-sky: #20354d;
-    --home-ridge: #2a4562;
-    --home-haze: #1b2d43;
-    --home-frame-shadow: 0 18px 56px #04091366;
-    --home-card: rgb(25 39 57 / 72%);
-  }
-}
-
 * { box-sizing: border-box; }
 body, h1, h2, p { margin: 0; }
 a { color: inherit; text-decoration: none; }
@@ -96,12 +69,12 @@ svg { flex: none; vertical-align: middle; }
 [data-page=home] :is(.masthead, .page-main) { width: 100%; padding-inline: clamp(16px, 3.6vw, 54px); }
 [data-page=home] .masthead { justify-content: space-between; min-height: clamp(62px, 6.5vw, 88px); }
 [data-page=home] .home-brand { font-size: clamp(22px, 2.4vw, 34px); font-weight: 450; }
-[data-page=home] .page-main { padding-block: clamp(112px, 17vw, 242px) clamp(28px, 5vw, 64px); }
+[data-page=home] .page-main { padding-block: clamp(80px, 12vw, 174px) clamp(28px, 5vw, 64px); }
 .workspace-entries {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-auto-rows: 1fr;
-  gap: clamp(12px, 1.6vw, 24px);
+  gap: clamp(20px, 2.4vw, 36px) clamp(12px, 1.6vw, 24px);
 }
 .workspace-entry {
   display: grid;
@@ -161,8 +134,9 @@ svg { flex: none; vertical-align: middle; }
 }
 @media (max-width: 500px) {
   .page-main { padding-top: 16px; }
-  [data-page=home] .page-main { padding-top: 88px; }
-  .workspace-entries { grid-template-columns: 1fr; }
+  [data-page=home] .page-main { padding-top: 62px; }
+  .workspace-entries { grid-template-columns: 1fr; grid-auto-rows: auto; row-gap: 12px; }
+  .workspace-entry:not([href^="#/public/"]) + .workspace-entry[href^="#/public/"] { margin-top: 8px; }
   .workspace-entry { min-height: 120px; }
 }
 
