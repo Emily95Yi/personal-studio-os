@@ -1,6 +1,6 @@
-# Personal Studio OS
+# 奕Studio
 
-Workshop 以画廊浏览活动系列和海报。Self-Board 将个人内容与行动安排放在同一个桌面。Calendar 提供 Day、Week、Month 视图。
+Workshop 以画廊浏览活动系列和海报。Self-Board 将个人内容与行动安排放在同一个桌面。Calendar 提供 Day、Week、Month 视图。内部页面用顶栏显示当前标题和上一级入口。
 
 ```sh
 npm run dev

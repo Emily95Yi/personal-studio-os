@@ -1,10 +1,10 @@
-# Personal Studio OS 信息架构
+# 奕Studio 信息架构
 
 首页分为 Private Workspace 和 Public Space。私人空间包含 Workshop、Career、Self-Board。公开品牌为「一期一会 in Tokyo」。每个私人空间有独立概览，顶栏保留全局 Search。
 
 ```mermaid
 flowchart TB
-  Home["Personal Studio OS"] --> Private["Private Workspace"]
+  Home["奕Studio"] --> Private["Private Workspace"]
   Home --> Public["Public Space"]
   Private --> Workshop["Workshop / Projects Gallery"] --> Project["Project Detail / Events Poster Gallery"]
   Project --> Event["Event Detail"]

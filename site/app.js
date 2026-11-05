@@ -12,32 +12,41 @@ const app = document.querySelector('#app');
 let period = 'week';
 let sopStep = 0;
 
-function header(route) {
-  return '<header class="studio-top"><div class="masthead"><a class="brand" href="' + href() + '"><span class="logo">' +
-    icon('logo', 20) + '</span><span>Personal Studio OS</span></a><a class="search-link" href="' + href('search') + '"' +
-    (route.type === 'search' ? ' aria-current="page"' : '') + '>' + icon('search', 18) + '<span>搜索</span></a></div></header>';
+function pageContext(route) {
+  const ancestors = [[href(), '首页']];
+  if (route.workspace) ancestors.push([href(route.workspaceId), route.workspace.label]);
+  if (route.collection && !route.projectPath) {
+    ancestors.push([href(route.workspaceId, route.collectionId), route.collection.label]);
+  }
+  if (route.projectPath) ancestors.push([href(...route.projectPath), route.projectLabel]);
+  if (route.sectionPath && route.type !== 'event') ancestors.push([href(...route.sectionPath), route.section.label]);
+  if (route.brand) ancestors.push([publicHref(route.brandId), route.brand.label]);
+
+  const isAncestorTitle = ['overview', 'workshop-gallery', 'collection', 'project', 'project-section'].includes(route.type) ||
+    (route.type === 'public' && route.pageId === 'home');
+  const title = isAncestorTitle ? ancestors.pop()[1] :
+    route.eventLabel ?? route.actionLabel ?? route.record?.title ?? route.page?.label ??
+    { home: '奕Studio', calendar: 'Calendar', search: 'Search', missing: '页面未找到' }[route.type];
+  return { title, ancestors };
 }
 
-function breadcrumbs(route) {
-  if (route.type === 'home') return '';
-  const crumbs = [[href(), 'Home']];
-  if (route.workspace) crumbs.push([href(route.workspaceId), route.workspace.label]);
-  if (route.collection && !route.projectPath) crumbs.push([href(route.workspaceId, route.collectionId), route.collection.label]);
-  if (route.projectPath) crumbs.push([href(...route.projectPath), route.projectLabel]);
-  if (route.sectionPath && route.type !== 'event') crumbs.push([href(...route.sectionPath), route.section.label]);
-  if (route.eventLabel) crumbs.push([null, route.eventLabel]);
-  if (route.actionLabel) crumbs.push([null, route.actionLabel]);
-  if (route.record) crumbs.push([null, route.record.title]);
-  if (route.type === 'calendar') crumbs.push([null, 'Calendar']);
-  if (route.brand) {
-    crumbs.push([publicHref(route.brandId), route.brand.label]);
-    if (route.pageId !== 'home') crumbs.push([null, route.page.label]);
-  }
-  if (route.type === 'search') crumbs.push([null, 'Search']);
-  if (route.type === 'missing') crumbs.push([null, '页面未找到']);
-  return '<nav class="breadcrumbs" aria-label="面包屑"><ol>' + crumbs.map(([address, label], index) => '<li>' +
-    (index === crumbs.length - 1 ? '<span aria-current="page">' + escapeHtml(label) + '</span>' : '<a href="' + address + '">' + escapeHtml(label) + '</a>') +
-    '</li>').join('') + '</ol></nav>';
+function header(route, { title, ancestors }) {
+  const [address, label] = route.parent ? [route.parent, route.parentLabel] : ancestors.at(-1);
+  const home = route.type === 'home';
+  const start = home ? '<span class="logo" aria-hidden="true">' + icon('logo', 20) + '</span>' :
+    '<a class="header-icon back-link" href="' + address + '" aria-label="返回 ' + escapeHtml(label) +
+    '" title="返回 ' + escapeHtml(label) + '">' + icon('back', 19) + '</a><h1>' + escapeHtml(title) + '</h1>';
+  const calendar = route.type === 'overview' && route.workspaceId === 'self-board'
+    ? '<a class="header-icon" href="' + href('calendar') + '" aria-label="打开 Calendar" title="Calendar">' + icon('calendar', 18) + '</a>' : '';
+  const search = route.type === 'search' ? '' : '<a class="header-icon" href="' + href('search') +
+    '" aria-label="搜索" title="搜索">' + icon('search', 18) + '</a>';
+  return '<header class="studio-top"><div class="masthead">' + start + '<div class="header-actions">' + calendar + search +
+    '</div></div>' + (!home && ancestors.length > 1 ? breadcrumbs(ancestors) : '') + '</header>';
+}
+
+function breadcrumbs(ancestors) {
+  return '<nav class="breadcrumbs" aria-label="面包屑"><ol>' + ancestors.map(([address, label]) =>
+    '<li><a href="' + address + '">' + escapeHtml(label) + '</a></li>').join('') + '</ol></nav>';
 }
 
 function publicNav(route) {
@@ -69,13 +78,12 @@ function render({ focus = false } = {}) {
     history.replaceState(null, '', route.redirect);
     route = readRoute(location.hash);
   }
-  const label = route.record?.title ?? route.actionLabel ?? route.eventLabel ?? route.section?.label ?? route.projectLabel ?? route.collection?.label ?? route.workspace?.label ??
-    (route.pageId === 'home' ? route.brand.label : route.page?.label) ??
-    (route.type === 'calendar' ? 'Calendar' : route.type === 'search' ? 'Search' : route.type === 'missing' ? '页面未找到' : '');
-  document.title = label ? label + ' · Personal Studio OS' : 'Personal Studio OS';
+  const context = pageContext(route);
+  document.title = context.title;
   app.dataset.space = route.type === 'public' ? 'public' : 'private';
-  app.innerHTML = '<a class="skip" href="#main">跳到内容</a>' + header(route) +
-    '<main id="main" class="page-main" tabindex="-1">' + breadcrumbs(route) + publicNav(route) +
+  app.innerHTML = '<a class="skip" href="#main">跳到内容</a>' + header(route, context) +
+    '<main id="main" class="page-main" tabindex="-1"' +
+    (route.type === 'home' ? '' : ' aria-label="' + escapeHtml(context.title) + '"') + '>' + publicNav(route) +
     views[route.type]({ ...route, period, sopStep }) + '</main>';
   if (focus) app.querySelector('main').focus({ preventScroll: true });
 }

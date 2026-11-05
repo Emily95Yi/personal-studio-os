@@ -8,11 +8,6 @@ export function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, char => entities[char]);
 }
 
-function heading(label, title, description = '') {
-  return '<header class="page-intro"><div class="eyebrow">' + escapeHtml(label) + '</div><h1>' + escapeHtml(title) + '</h1>' +
-    (description ? '<p>' + escapeHtml(description) + '</p>' : '') + '</header>';
-}
-
 function emptyState(title, description) {
   return '<section class="empty-state"><h2>' + escapeHtml(title) + '</h2><p>' + escapeHtml(description) + '</p></section>';
 }
@@ -24,7 +19,7 @@ function entry(address, area) {
 }
 
 export function landing() {
-  return '<header class="landing-title"><h1>Personal Studio OS</h1></header>' +
+  return '<header class="landing-title"><h1>奕Studio</h1></header>' +
     '<section class="landing-section" aria-labelledby="private-label"><h2 id="private-label">Private Workspace</h2><div class="workspace-entries">' +
     Object.entries(workspaces).map(([id, area]) => entry(href(id), area)).join('') + '</div></section>' +
     '<section class="landing-section" aria-labelledby="public-label"><h2 id="public-label">Public Space</h2><div class="workspace-entries">' +
@@ -93,7 +88,7 @@ export function actionPreview({ action, sopStep = 0 }) {
   if (action === 'focus') {
     const recent = plannerRepository.checkInsBetween(dateKey(addDays(parseDate(today), -6)), today);
     const checked = recent.includes(today);
-    return heading('SELF-BOARD / HABIT', 'Habit Focus', '打卡结构预览。操作只在当前页面会话中保留，刷新后清除。') +
+    return '<p class="page-note">演示打卡只在当前页面会话中保留，刷新后清除。</p>' +
       '<section class="empty-state"><h2>今日习惯</h2><p>演示每日一次的执行记录。完成后可以标记，误点可以撤销。</p>' +
       '<button type="button" class="action-button" data-check-in>' + (checked ? '撤销今日打卡' : '记录今日打卡') + '</button></section>' +
       '<section class="empty-state action-history"><h2>最近 7 天记录</h2>' +
@@ -101,7 +96,7 @@ export function actionPreview({ action, sopStep = 0 }) {
   }
   const steps = sopSteps.map((step, index) => '<li' + (index === sopStep ? ' aria-current="step"' : '') + '>' +
     (index < sopStep ? '<span class="visually-hidden">已完成：</span>' : '') + step + '</li>').join('');
-  return heading('SELF-BOARD / SOP', 'SOP 执行', '按顺序体验一个可复用流程。进度只在当前页面会话中保留。') +
+  return '<p class="page-note">演示进度只在当前页面会话中保留。</p>' +
     '<section class="empty-state"><h2>流程结构预览</h2><ol class="sop-steps">' + steps + '</ol>' +
     '<p aria-live="polite">' + (sopStep === sopSteps.length ? '流程已完成。' : '当前步骤 ' + (sopStep + 1) + ' / ' + sopSteps.length) + '</p>' +
     '<div class="widget-actions">' + (sopStep ? '<button type="button" class="action-button secondary" data-sop-step="previous">上一步</button>' : '') +
@@ -113,17 +108,14 @@ export function actionPreview({ action, sopStep = 0 }) {
 export function workspaceOverview({ workspace, workspaceId, period = 'week' }) {
   if (workspaceId === 'self-board') {
     const { collections } = workspace;
-    return '<div class="board-header">' + heading('PRIVATE WORKSPACE', workspace.label, workspace.description) +
-      previewLink(href('calendar'), '打开 Calendar') + '</div><div class="board-grid">' +
+    return '<div class="board-grid">' +
       ['discover', 'experience', 'reflect-create'].map(id => contentWidget(id, collections[id])).join('') +
       habitWidget(collections['sop-habits'], true) + todoWidget(collections['to-do'], period, true) + '</div>';
   }
   const entries = Object.entries(workspace.collections).map(([id, collection]) =>
     '<a href="' + href(workspaceId, id) + '"><strong>' + collection.label + '</strong><span>' + collection.zh + '</span>' +
     icon('arrow', 16) + '</a>').join('');
-  return '<div class="workspace-hero ' + workspace.tone + '">' +
-    heading('PRIVATE WORKSPACE', workspace.label, workspace.description) + '</div>' +
-    '<nav class="module-links" aria-label="' + workspace.label + ' 集合">' + entries + '</nav>';
+  return '<nav class="module-links" aria-label="' + workspace.label + ' 集合">' + entries + '</nav>';
 }
 
 function previewLink(address, label) {
@@ -148,7 +140,7 @@ function galleryCard({ address, title, detail, kind, url, placeholder }) {
     (detail ? '<p>' + escapeHtml(detail) + '</p>' : '') + '</div></a>';
 }
 
-export function workshopGallery({ workspace }) {
+export function workshopGallery() {
   const projects = workshopRepository.listProjects();
   const cards = projects.length ? projects.map(project => galleryCard({
     address: href('workshop', 'projects', project.id), title: project.title, detail: project.description,
@@ -157,22 +149,20 @@ export function workshopGallery({ workspace }) {
     address: href('workshop', 'projects', workshopStructure.previewId), title: 'Project 结构预览',
     detail: '查看活动海报与项目资源的布局。', kind: 'project', placeholder: '结构占位',
   });
-  return heading('PRIVATE WORKSPACE', workspace.label, workspace.description) +
-    '<section class="gallery-section" aria-label="Projects Gallery"><div class="section-heading"><h2>Projects</h2>' +
+  return '<section class="gallery-section" aria-label="Projects Gallery"><div class="section-heading"><h2>Projects</h2>' +
     (!projects.length ? '<span>暂无项目 · 可浏览结构预览</span>' : '') + '</div><div class="gallery-grid">' + cards + '</div></section>';
 }
 
-export function collectionView({ workspace, workspaceId, collection, collectionId, period = 'week' }) {
-  const intro = heading(workspace.label, collection.label);
+export function collectionView({ workspaceId, collection, collectionId, period = 'week' }) {
   if (workspaceId === 'self-board') {
-    if (collectionId === 'to-do') return intro + todoWidget(collection, period);
-    if (collectionId === 'sop-habits') return intro + habitWidget(collection);
-    return intro + contentWidget(collectionId, collection, false);
+    if (collectionId === 'to-do') return todoWidget(collection, period);
+    if (collectionId === 'sop-habits') return habitWidget(collection);
+    return contentWidget(collectionId, collection, false);
   }
-  return intro + emptyState(collection.empty, collection.description);
+  return emptyState(collection.empty, collection.description);
 }
 
-export function projectOverview({ project, projectPath, projectLabel, preview }) {
+export function projectOverview({ project, projectPath, preview }) {
   const events = preview ? [] : workshopRepository.listEvents(project.id);
   const cards = events.length ? events.map(event => galleryCard({
     address: href(...projectPath, 'events', event.id), title: event.theme || event.title, detail: event.date,
@@ -181,8 +171,7 @@ export function projectOverview({ project, projectPath, projectLabel, preview })
     address: href(...projectPath, 'events', workshopStructure.previewId), title: 'Event 结构预览',
     detail: '查看流程、媒体、复盘与引用。', kind: 'event', placeholder: '海报占位',
   }) : '';
-  return heading(preview ? 'WORKSHOP / PROJECT PREVIEW' : 'WORKSHOP / PROJECT', projectLabel,
-    preview ? '一个可持续迭代的活动形式。此页面展示 Project 的内容布局。' : project.description) +
+  return (project?.description ? '<p class="page-note">' + escapeHtml(project.description) + '</p>' : '') +
     '<section class="gallery-section" aria-label="Events Poster Gallery"><div class="section-heading"><h2>Events</h2>' +
     (!events.length ? '<span>暂无活动</span>' : '') + '</div>' +
     (cards ? '<div class="gallery-grid poster-grid">' + cards + '</div>' :
@@ -213,11 +202,11 @@ function resourceModules(project, compact = false) {
   }).join('') + '</div>';
 }
 
-export function projectSection({ project, section }) {
-  return heading('WORKSHOP / PROJECT', section.label, section.description) + resourceModules(project);
+export function projectSection({ project }) {
+  return resourceModules(project);
 }
 
-export function eventDetail({ event, eventLabel, preview }) {
+export function eventDetail({ event }) {
   const sections = workshopStructure.eventSections.map(section => {
     let body;
     if (section.fields) {
@@ -241,31 +230,25 @@ export function eventDetail({ event, eventLabel, preview }) {
     return '<li>' + escapeHtml(title) + (use.versionId ? ' · ' + escapeHtml(use.versionId) : '') +
       (resource?.sourceContentId ? ' ' + originalLink(resource.sourceContentId) : '') + '</li>';
   }).join('') + '</ul>' : '<p>暂无当次引用。未来可记录实际采用的资源版本或快照。</p>';
-  return heading(preview ? 'WORKSHOP / EVENT PREVIEW' : 'WORKSHOP / EVENT', eventLabel) +
-    '<div class="detail-stack">' + sections + '<section class="empty-state"><h2>当次引用的资源</h2>' +
+  return '<div class="detail-stack">' + sections + '<section class="empty-state"><h2>当次引用的资源</h2>' +
     related + '</section></div>';
 }
 
 export function discoverDetail({ record }) {
-  return heading('SELF-BOARD / DISCOVER', record.title, record.category) +
-    '<div class="empty-state prose">' + escapeHtml(record.description || '暂无说明。') + '</div>';
+  return (record.category ? '<p class="page-note">' + escapeHtml(record.category) + '</p>' : '') + '<div class="empty-state prose">' + escapeHtml(record.description || '暂无说明。') + '</div>';
 }
 
-export function publicView({ brand, page, pageId }) {
-  const isHome = pageId === 'home';
-  return heading(isHome ? 'PUBLIC SPACE' : brand.label, isHome ? brand.label : page.label,
-    isHome ? brand.description : '') + emptyState(page.empty, page.description);
+export function publicView({ page }) {
+  return emptyState(page.empty, page.description);
 }
 
 export function searchView() {
-  return heading('PERSONAL STUDIO OS', 'Search', '跨空间搜索内容。') +
-    '<form class="search-form" role="search"><label for="studio-query">关键词</label>' +
+  return '<form class="search-form" role="search"><label for="studio-query">关键词</label>' +
     '<div class="search-field">' + icon('search', 18) + '<input id="studio-query" name="query" type="search" placeholder="输入标题或关键词"></div></form>' +
     '<section class="empty-state" aria-live="polite"><h2 class="search-status">还没有可搜索的内容</h2><p class="search-note">接入内容后，可以在这里搜索。</p>' +
     '<ul class="search-results" hidden></ul></section>';
 }
 
-export function missingView({ parent, parentLabel }) {
-  return heading('PERSONAL STUDIO OS', '页面未找到', '这个地址当前没有可浏览的页面。') +
-    '<a class="return-link" href="' + parent + '">返回 ' + escapeHtml(parentLabel) + ' ' + icon('arrow', 15) + '</a>';
+export function missingView() {
+  return '<p>这个地址当前没有可浏览的页面。</p>';
 }

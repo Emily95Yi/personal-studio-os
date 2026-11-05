@@ -49,8 +49,7 @@ function agenda(date) {
 
 export function calendarView({ params }) {
   const { mode, date } = calendarSelection(params);
-  return '<header class="page-intro"><div class="eyebrow">PERSONAL PLANNER</div><h1>Calendar</h1>' +
-    '<p>查看待办与习惯记录。演示编辑和打卡仅在当前页面会话中保留，刷新后清除。</p></header>' +
+  return '<p class="page-note">演示待办和打卡只在当前页面会话中保留，刷新后清除。</p>' +
     '<div class="calendar-toolbar"><div class="segmented" aria-label="日历视图">' +
     modes.map(([key, label]) => dateLink(date, key, label, mode === key ? ' aria-current="page"' : '')).join('') +
     '</div><div class="calendar-controls">' +
