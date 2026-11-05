@@ -1,34 +1,46 @@
 import { href } from './pages.js';
 
-const dayLabel = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' });
-const monthLabel = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long' });
+const tokyoDate = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+const dayLabel = new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', month: 'long', day: 'numeric', weekday: 'short' });
+const monthLabel = new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', year: 'numeric', month: 'long' });
 
-export function dateKey(date = new Date()) {
-  return [String(date.getFullYear()).padStart(4, '0'), String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0')].join('-');
+// UTC dates represent civil calendar days. Only converting an instant to "today" uses Tokyo time.
+export function dateKey(date) {
+  if (!date) return tokyoDate.format(new Date());
+  return [String(date.getUTCFullYear()).padStart(4, '0'), String(date.getUTCMonth() + 1).padStart(2, '0'),
+    String(date.getUTCDate()).padStart(2, '0')].join('-');
+}
+
+export function todayDate(instant = new Date()) {
+  return parseDate(tokyoDate.format(instant));
 }
 
 export function parseDate(key) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(key ?? '')) return null;
-  const date = new Date(key + 'T12:00:00');
+  const date = new Date(key + 'T12:00:00Z');
   return dateKey(date) === key ? date : null;
 }
 
 export function addDays(date, offset) {
   const next = new Date(date);
-  next.setDate(next.getDate() + offset);
+  next.setUTCDate(next.getUTCDate() + offset);
   return next;
 }
 
 export function weekStart(date) {
-  return addDays(date, -((date.getDay() + 6) % 7));
+  return addDays(date, -((date.getUTCDay() + 6) % 7));
 }
 
 export function periodBounds(date, mode) {
-  if (mode === 'month') return [
-    new Date(date.getFullYear(), date.getMonth(), 1, 12),
-    new Date(date.getFullYear(), date.getMonth() + 1, 0, 12),
-  ];
+  if (mode === 'month') {
+    const start = new Date(date);
+    start.setUTCDate(1);
+    const end = new Date(start);
+    end.setUTCMonth(end.getUTCMonth() + 1, 0);
+    return [start, end];
+  }
   if (mode === 'day') return [date, date];
   const start = weekStart(date);
   return [start, addDays(start, 6)];
@@ -45,9 +57,10 @@ export function calendarDays(date, mode) {
 
 export function movePeriod(date, mode, direction) {
   if (mode !== 'month') return addDays(date, direction * (mode === 'week' ? 7 : 1));
-  const first = new Date(date.getFullYear(), date.getMonth() + direction, 1, 12);
+  const first = new Date(date);
+  first.setUTCMonth(date.getUTCMonth() + direction, 1);
   const [, last] = periodBounds(first, 'month');
-  first.setDate(Math.min(date.getDate(), last.getDate()));
+  first.setUTCDate(Math.min(date.getUTCDate(), last.getUTCDate()));
   return first;
 }
 
@@ -56,17 +69,20 @@ export function formatDay(date) { return dayLabel.format(date); }
 export function formatPeriod(date, mode) {
   if (mode === 'month') return monthLabel.format(date);
   const [start, end] = periodBounds(date, mode);
-  return mode === 'day' ? formatDay(date) : formatDay(start) + ' 至 ' + formatDay(end);
+  if (mode === 'day') return formatDay(date);
+  const year = start.getUTCFullYear() === end.getUTCFullYear() ? '' : end.getUTCFullYear() + '年';
+  return start.getUTCFullYear() + '年' + formatDay(start) + ' 至 ' + year + formatDay(end);
 }
 
-export function calendarHref(date = new Date(), mode = 'month', from) {
-  return href('calendar') + '?view=' + mode + '&date=' + dateKey(date) + (from === 'self-board' ? '&from=self-board' : '');
+export function calendarHref(date = todayDate(), mode = 'week', from) {
+  return href('calendar') + '?view=' + mode + '&date=' + dateKey(date) +
+    (['self-board', 'auto'].includes(from) ? '&from=' + from : '');
 }
 
 export function calendarSelection(params) {
   const mode = params.get('view');
   return {
-    mode: ['day', 'week', 'month'].includes(mode) ? mode : 'month',
-    date: parseDate(params.get('date')) ?? parseDate(dateKey()),
+    mode: ['day', 'week', 'month'].includes(mode) ? mode : 'week',
+    date: parseDate(params.get('date')) ?? todayDate(),
   };
 }
