@@ -1,4 +1,4 @@
-import { selfBoardIncludes, studioRepository, workshopRepository } from './repository.js';
+import { plannerRepository, selfBoardIncludes, studioRepository, workshopRepository } from './repository.js';
 
 export const workspaces = {
   workshop: {
@@ -41,13 +41,7 @@ export const workspaces = {
         label: 'Reflect & Create', zh: '记录与表达', empty: '还没有记录或作品',
         description: '这里将存放日记、随笔、个人思考、读后感、观后感、文章和自由创作。',
       },
-      'sop-habits': {
-        label: 'SOP & Habits', zh: '流程与习惯',
-      },
-      'to-do': {
-        label: 'To-Do', zh: '待办与计划', empty: '还没有待办事项',
-        description: '这里用于记录一次性任务与个人计划。未来可以关联流程、习惯或其他内容。',
-      },
+      auto: { label: 'Auto', zh: '计划与行动' },
     },
   },
 };
@@ -147,7 +141,9 @@ export function readRoute(hash) {
   if (root === 'search' && !section) return { type: 'search' };
   if (root === 'calendar' && !section) {
     const params = new URLSearchParams(query);
-    return params.get('from') === 'self-board'
+    const from = params.get('from');
+    if (from === 'auto') return { type: 'calendar', params, parent: href('self-board', 'auto'), parentLabel: 'Auto' };
+    return from === 'self-board'
       ? { type: 'calendar', params, parent: href('self-board'), parentLabel: 'Self-Board' }
       : { type: 'calendar', params };
   }
@@ -155,6 +151,9 @@ export function readRoute(hash) {
   if (Object.hasOwn(workspaces, root)) {
     const workspace = workspaces[root];
     if (!section) return { type: root === 'workshop' ? 'workshop-gallery' : 'overview', workspaceId: root, workspace };
+    if (root === 'self-board' && ['sop-habits', 'to-do'].includes(section)) {
+      return { redirect: href('self-board', 'auto') };
+    }
     if (Object.hasOwn(workspace.collections, section)) {
       const collection = workspace.collections[section];
       const route = { type: 'collection', workspaceId: root, workspace, collectionId: section, collection };
@@ -163,8 +162,9 @@ export function readRoute(hash) {
         return readProjectRoute(route, segments.slice(2));
       }
       if (segments.length === 2) return route;
-      if (root === 'self-board' && section === 'sop-habits' && segments.length === 3 && ['focus', 'sop'].includes(pageId)) {
-        return { ...route, type: 'action-preview', action: pageId, actionLabel: pageId === 'focus' ? 'Habit Focus' : 'SOP 执行' };
+      if (root === 'self-board' && section === 'auto' && segments.length === 3) {
+        const plan = plannerRepository.getPlan(pageId);
+        if (plan) return { ...route, type: 'auto-plan', record: plan, plan };
       }
       if (root === 'self-board' && ['discover', 'experience', 'reflect-create'].includes(section) && segments.length === 3) {
         const record = studioRepository.get(pageId);

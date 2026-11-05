@@ -53,9 +53,6 @@ export const publicRepository = {
  * resourceUses?: { resourceId: string, versionId?: string, snapshot?: object }[] }} WorkshopEvent
  * @typedef {{ id: string, projectId: string, moduleId: string, title: string,
  * sourceContentId?: string, versionId?: string }} ProjectResource
- * @typedef {{ id: string, title: string, steps: string[] }} Sop
- * @typedef {{ id: string, title: string, frequency: string }} Habit
- * @typedef {{ id: string, title: string, state: string }} Todo
  */
 
 /** @type {WorkshopProject[]} */
@@ -76,27 +73,101 @@ export const workshopRepository = {
   listResources(projectId) { return projectResources.filter(resource => resource.projectId === projectId); },
 };
 
-// Session-only sandbox shared by Calendar, To-Do, and the habit preview.
-/** @type {{ id: string, title: string, date: string, done: boolean }[]} */
+/**
+ * Session-only sandbox. Plans, occurrences and completion history have separate identities.
+ * @typedef {{ id: string, title: string, kind: 'one-off'|'recurring'|'quota', paused: boolean,
+ * period?: 'day'|'week'|'month', interval?: number, target?: number, reminder?: string, sourceIds: string[] }} AutoPlan
+ * @typedef {{ id: string, title: string, date: string, done: boolean, skipped?: boolean,
+ * planId?: string, sourceContentId?: string }} PlannedTask
+ * @typedef {{ id: string, planId: string, date: string, taskId?: string }} Completion
+ */
+/** @type {AutoPlan[]} */
+const plans = [];
+/** @type {PlannedTask[]} */
 const tasks = [];
+/** @type {Completion[]} */
+const completions = [];
 const habitDates = new Set();
 
 export const plannerRepository = {
-  tasksBetween(start, end) {
-    return tasks.filter(task => task.date >= start && task.date <= end).map(task => ({ ...task }));
+  listPlans() { return plans.map(plan => ({ ...plan, sourceIds: [...plan.sourceIds] })); },
+  getPlan(id) { return this.listPlans().find(plan => plan.id === id); },
+  savePlan(input) {
+    const index = input.id ? plans.findIndex(plan => plan.id === input.id) : -1;
+    if (input.id && index === -1) return undefined;
+    const title = input.title.trim();
+    if (!title || !['one-off', 'recurring', 'quota'].includes(input.kind)) return undefined;
+    if (input.kind === 'one-off' && input.id && this.tasksForPlan(input.id).filter(task => !task.skipped).length > 1) return undefined;
+    if (input.kind !== 'one-off' && !['day', 'week', 'month'].includes(input.period)) return undefined;
+    if (input.kind === 'recurring' && (!Number.isInteger(input.interval) || input.interval < 1 || input.interval > 999)) return undefined;
+    if (input.kind === 'quota' && (!Number.isInteger(input.target) || input.target < 1 || input.target > 999)) return undefined;
+    const plan = {
+      ...input, title, id: input.id ?? crypto.randomUUID(),
+      paused: plans[index]?.paused ?? false, sourceIds: [...new Set(input.sourceIds ?? [])],
+    };
+    if (index === -1) plans.unshift(plan);
+    else {
+      plans.splice(index, 1);
+      plans.unshift(plan);
+    }
+    return this.getPlan(plan.id);
   },
+  togglePause(id) {
+    const plan = plans.find(entry => entry.id === id);
+    if (plan) plan.paused = !plan.paused;
+  },
+  tasksBetween(start, end) {
+    return tasks.filter(task => !task.skipped && task.date >= start && task.date <= end).map(task => ({ ...task }));
+  },
+  tasksForPlan(id) { return tasks.filter(task => task.planId === id).map(task => ({ ...task })); },
+  standaloneTasks() { return tasks.filter(task => !task.planId).map(task => ({ ...task })); },
   getTask(id) {
     const task = tasks.find(entry => entry.id === id);
     return task && { ...task };
   },
-  saveTask({ id, title, date, done }) {
+  saveTask({ id, title, date, done, planId, completedOn, sourceContentId }) {
     const existing = tasks.find(task => task.id === id);
     if (id && !existing) return undefined;
-    const task = { id: existing?.id ?? crypto.randomUUID(), title: title.trim(), date, done: Boolean(done) };
+    const owner = existing ? existing.planId : planId;
+    const plan = owner ? this.getPlan(owner) : undefined;
+    if (!existing && planId && (!plan || plan.paused ||
+      (plan.kind === 'one-off' && this.tasksForPlan(planId).some(task => !task.skipped)))) return undefined;
+    const task = { ...existing, id: existing?.id ?? crypto.randomUUID(), title: title.trim(), date,
+      done: Boolean(done) && !existing?.skipped, planId: owner };
+    if (sourceContentId === '') delete task.sourceContentId;
+    else if (sourceContentId && (plan?.sourceIds.includes(sourceContentId) || existing?.sourceContentId === sourceContentId)) {
+      task.sourceContentId = sourceContentId;
+    }
+    if (!task.title) return undefined;
     if (existing) Object.assign(existing, task);
     else tasks.push(task);
+    if (task.planId && task.done && !completions.some(entry => entry.taskId === task.id) && completedOn) {
+      completions.push({ id: crypto.randomUUID(), planId: task.planId, taskId: task.id, date: completedOn });
+    }
+    if (!task.done) {
+      const index = completions.findIndex(entry => entry.taskId === task.id);
+      if (index !== -1) completions.splice(index, 1);
+    }
     return { ...task };
   },
+  toggleSkip(id) {
+    const task = tasks.find(entry => entry.id === id);
+    if (!task || task.done) return false;
+    if (task.skipped && this.getPlan(task.planId)?.kind === 'one-off' &&
+        tasks.some(entry => entry.planId === task.planId && entry.id !== task.id && !entry.skipped)) return false;
+    task.skipped = !task.skipped;
+    return true;
+  },
+  recordCompletion(planId, date) {
+    if (plans.some(plan => plan.id === planId && !plan.paused && plan.kind !== 'one-off')) {
+      completions.push({ id: crypto.randomUUID(), planId, date });
+    }
+  },
+  undoCompletion(planId) {
+    const index = completions.findLastIndex(entry => entry.planId === planId && !entry.taskId);
+    if (index !== -1) completions.splice(index, 1);
+  },
+  completionsForPlan(planId) { return completions.filter(entry => entry.planId === planId).map(entry => ({ ...entry })); },
   checkInsBetween(start, end) {
     return [...habitDates].filter(date => date >= start && date <= end).sort();
   },

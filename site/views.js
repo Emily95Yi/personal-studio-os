@@ -1,12 +1,8 @@
 import { icon } from './icons.js';
 import { brands, href, publicHref, workspaces, workshopStructure } from './pages.js';
-import { plannerRepository, selfBoardIncludes, studioRepository, workshopRepository } from './repository.js';
-import { addDays, calendarHref, dateKey, formatPeriod, parseDate, periodBounds } from './calendar.js';
-
-export function escapeHtml(value) {
-  const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-  return String(value).replace(/[&<>"']/g, char => entities[char]);
-}
+import { selfBoardIncludes, studioRepository, workshopRepository } from './repository.js';
+import { autoWidget, autoView } from './auto-view.js';
+import { escapeHtml } from './html.js';
 
 function emptyState(title, description) {
   return '<section class="empty-state"><h2>' + escapeHtml(title) + '</h2>' +
@@ -20,8 +16,7 @@ function entry(address, area) {
 }
 
 export function landing() {
-  return '<header class="landing-title"><h1>奕Studio</h1></header>' +
-    '<section class="landing-section" aria-labelledby="private-label"><h2 id="private-label">Private Workspace</h2><div class="workspace-entries">' +
+  return '<section class="landing-section" aria-labelledby="private-label"><h2 id="private-label">Private Workspace</h2><div class="workspace-entries">' +
     Object.entries(workspaces).map(([id, area]) => entry(href(id), area)).join('') + '</div></section>' +
     '<section class="landing-section" aria-labelledby="public-label"><h2 id="public-label">Public Space</h2><div class="workspace-entries">' +
     Object.entries(brands).map(([id, area]) => entry(publicHref(id), area)).join('') + '</div></section>';
@@ -56,72 +51,12 @@ function contentWidget(id, collection, overview = true) {
     '<div class="widget-items">' + cards + '</div></section>';
 }
 
-function habitWidget(overview = false) {
-  const today = parseDate(dateKey());
-  const [start, end] = periodBounds(today, 'week');
-  const completed = plannerRepository.checkInsBetween(dateKey(start), dateKey(end));
-  const checked = completed.includes(dateKey(today));
-  return '<section class="widget widget-habits">' + (overview ? '<h2>SOP &amp; Habits</h2>' : '') +
-    '<a class="habit-status" href="' + href('self-board', 'sop-habits', 'focus') + '"><div><strong>今日习惯</strong>' +
-    '<small>演示 · ' + (checked ? '已打卡' : '未打卡') + '</small></div><div><small>本周 ' + completed.length + ' / 7 天</small>' +
-    '<progress max="7" value="' + completed.length + '" aria-label="本周打卡天数"></progress></div></a>' +
-    '<div class="widget-actions"><button type="button" class="action-button secondary" data-check-in>' +
-    (checked ? '撤销打卡' : '打卡') + '</button><a class="return-link" href="' + href('self-board', 'sop-habits', 'sop') + '">SOP</a></div></section>';
-}
-
-export function todoWidget(period = 'week', overview = false) {
-  const today = parseDate(dateKey());
-  const [start, end] = periodBounds(today, period);
-  const tasks = plannerRepository.tasksBetween(dateKey(start), dateKey(end)).sort((a, b) => a.date.localeCompare(b.date));
-  const summary = tasks.length ? '<ul class="task-summary">' + (overview ? tasks.slice(0, 4) : tasks).map(task =>
-    '<li><button type="button" data-task-edit="' + escapeHtml(task.id) + '"><strong>' + escapeHtml(task.title) +
-    '</strong><small>' + escapeHtml(task.date.slice(5)) + (task.done ? ' · 已完成' : '') + '</small></button></li>').join('') + '</ul>' :
-    '<p>暂无待办。</p>';
-  return '<section class="widget widget-todo" data-overview="' + overview + '">' +
-    '<div class="section-heading">' + (overview ? '<h2>To-Do' + (tasks.length ? ' <small class="section-note">演示</small>' : '') + '</h2>' : '<small>' + formatPeriod(today, period) + '</small>') +
-    '<div class="planner-actions"><div class="segmented" aria-label="待办摘要周期">' +
-    [['week', '本周'], ['month', '本月']].map(([mode, label]) => '<button type="button" data-period="' +
-      mode + '" aria-pressed="' + (period === mode) + '">' + label + '</button>').join('') + '</div>' +
-    '<a class="header-icon" href="' + escapeHtml(calendarHref(today, period, 'self-board')) +
-    '" aria-label="在 Calendar 查看' + (period === 'week' ? '本周' : '本月') + '待办">' + icon('calendar', 16) + '</a></div></div>' +
-    summary + '</section>';
-}
-
-const sopSteps = ['确认要执行的流程', '按顺序完成当前步骤', '检查结果并结束流程'];
-
-export function actionPreview({ action, sopStep = 0 }) {
-  const today = dateKey();
-  if (action === 'focus') {
-    const recent = plannerRepository.checkInsBetween(dateKey(addDays(parseDate(today), -6)), today);
-    const checked = recent.includes(today);
-    return '<p class="page-note">演示打卡 · 刷新清除</p>' +
-      '<section class="empty-state"><h2>今日习惯</h2><p>每日一次</p>' +
-      '<button type="button" class="action-button" data-check-in>' + (checked ? '撤销打卡' : '打卡') + '</button></section>' +
-      '<section class="empty-state action-history"><h2>最近 7 天</h2><div class="habit-days">' +
-      Array.from({ length: 7 }, (_, index) => dateKey(addDays(parseDate(today), index - 6))).map(date => {
-        const done = recent.includes(date);
-        return '<span class="' + (done ? 'checked' : '') + '">' + date.slice(5) +
-          (done ? ' <span aria-hidden="true">✓</span>' : '') +
-          '<span class="visually-hidden">' + (done ? ' 已打卡' : ' 未打卡') + '</span></span>';
-      }).join('') + '</div></section>';
-  }
-  const steps = sopSteps.map((step, index) => '<li' + (index === sopStep ? ' aria-current="step"' : '') + '>' +
-    (index < sopStep ? '<span class="visually-hidden">已完成：</span>' : '') + step + '</li>').join('');
-  return '<p class="page-note">流程演示 · 刷新清除</p>' +
-    '<section class="empty-state"><h2>流程结构预览</h2><ol class="sop-steps">' + steps + '</ol>' +
-    '<p aria-live="polite">' + (sopStep === sopSteps.length ? '流程已完成。' : '当前步骤 ' + (sopStep + 1) + ' / ' + sopSteps.length) + '</p>' +
-    '<div class="widget-actions">' + (sopStep ? '<button type="button" class="action-button secondary" data-sop-step="previous">上一步</button>' : '') +
-    (sopStep === sopSteps.length ? '<button type="button" class="action-button" data-sop-step="reset">重新开始</button>' :
-      '<button type="button" class="action-button" data-sop-step="next">' + (sopStep === sopSteps.length - 1 ? '完成流程' : '完成此步') + '</button>') +
-    '</div></section>';
-}
-
 export function workspaceOverview({ workspace, workspaceId, period = 'week' }) {
   if (workspaceId === 'self-board') {
     const { collections } = workspace;
     return '<div class="board-grid">' +
       ['discover', 'experience', 'reflect-create'].map(id => contentWidget(id, collections[id])).join('') +
-      habitWidget(true) + todoWidget(period, true) + '</div>';
+      autoWidget(period) + '</div>';
   }
   const entries = Object.entries(workspace.collections).map(([id, collection]) =>
     '<a href="' + href(workspaceId, id) + '"><strong>' + collection.label + '</strong><span>' + collection.zh + '</span>' +
@@ -160,10 +95,9 @@ export function workshopGallery() {
     (!projects.length ? '<span>暂无项目</span>' : '') + '</div><div class="gallery-grid">' + cards + '</div></section>';
 }
 
-export function collectionView({ workspaceId, collection, collectionId, period = 'week' }) {
+export function collectionView({ workspaceId, collection, collectionId }) {
   if (workspaceId === 'self-board') {
-    if (collectionId === 'to-do') return todoWidget(period);
-    if (collectionId === 'sop-habits') return habitWidget();
+    if (collectionId === 'auto') return autoView();
     return contentWidget(collectionId, collection, false);
   }
   return emptyState(collection.empty);
