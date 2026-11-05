@@ -1,12 +1,16 @@
 import { href, publicHref, readRoute } from './pages.js';
 import {
-  collectionView, escapeHtml, eventDetail, landing, missingView, projectOverview, projectSection, publicView,
-  searchView, workspaceOverview,
+  actionPreview, collectionView, discoverDetail, escapeHtml, eventDetail, landing, missingView, projectOverview,
+  projectSection, publicView, searchView, workshopGallery, workspaceOverview,
 } from './views.js';
 import { icon } from './icons.js';
-import { studioRepository } from './repository.js';
+import { plannerRepository, studioRepository } from './repository.js';
+import { calendarHref, calendarSelection, dateKey, parseDate } from './calendar.js';
+import { calendarView } from './planner-view.js';
 
 const app = document.querySelector('#app');
+let period = 'week';
+let sopStep = 0;
 
 function header(route) {
   return '<header class="studio-top"><div class="masthead"><a class="brand" href="' + href() + '"><span class="logo">' +
@@ -18,10 +22,13 @@ function breadcrumbs(route) {
   if (route.type === 'home') return '';
   const crumbs = [[href(), 'Home']];
   if (route.workspace) crumbs.push([href(route.workspaceId), route.workspace.label]);
-  if (route.collection) crumbs.push([href(route.workspaceId, route.collectionId), route.collection.label]);
+  if (route.collection && !route.projectPath) crumbs.push([href(route.workspaceId, route.collectionId), route.collection.label]);
   if (route.projectPath) crumbs.push([href(...route.projectPath), route.projectLabel]);
-  if (route.sectionPath) crumbs.push([href(...route.sectionPath), route.section.label]);
+  if (route.sectionPath && route.type !== 'event') crumbs.push([href(...route.sectionPath), route.section.label]);
   if (route.eventLabel) crumbs.push([null, route.eventLabel]);
+  if (route.actionLabel) crumbs.push([null, route.actionLabel]);
+  if (route.record) crumbs.push([null, route.record.title]);
+  if (route.type === 'calendar') crumbs.push([null, 'Calendar']);
   if (route.brand) {
     crumbs.push([publicHref(route.brandId), route.brand.label]);
     if (route.pageId !== 'home') crumbs.push([null, route.page.label]);
@@ -43,6 +50,10 @@ function publicNav(route) {
 const views = {
   home: landing,
   overview: workspaceOverview,
+  'workshop-gallery': workshopGallery,
+  'discover-detail': discoverDetail,
+  'action-preview': actionPreview,
+  calendar: calendarView,
   collection: collectionView,
   project: projectOverview,
   'project-section': projectSection,
@@ -53,29 +64,93 @@ const views = {
 };
 
 function render({ focus = false } = {}) {
-  const route = readRoute(location.hash);
-  const label = route.eventLabel ?? route.section?.label ?? route.projectLabel ?? route.collection?.label ?? route.workspace?.label ??
+  let route = readRoute(location.hash);
+  if (route.redirect) {
+    history.replaceState(null, '', route.redirect);
+    route = readRoute(location.hash);
+  }
+  const label = route.record?.title ?? route.actionLabel ?? route.eventLabel ?? route.section?.label ?? route.projectLabel ?? route.collection?.label ?? route.workspace?.label ??
     (route.pageId === 'home' ? route.brand.label : route.page?.label) ??
-    (route.type === 'search' ? 'Search' : route.type === 'missing' ? '页面未找到' : '');
+    (route.type === 'calendar' ? 'Calendar' : route.type === 'search' ? 'Search' : route.type === 'missing' ? '页面未找到' : '');
   document.title = label ? label + ' · Personal Studio OS' : 'Personal Studio OS';
   app.dataset.space = route.type === 'public' ? 'public' : 'private';
   app.innerHTML = '<a class="skip" href="#main">跳到内容</a>' + header(route) +
     '<main id="main" class="page-main" tabindex="-1">' + breadcrumbs(route) + publicNav(route) +
-    views[route.type](route) + '</main>';
+    views[route.type]({ ...route, period, sopStep }) + '</main>';
   if (focus) app.querySelector('main').focus({ preventScroll: true });
 }
 
 app.addEventListener('click', event => {
-  if (!event.target.closest('.skip')) return;
-  event.preventDefault();
-  app.querySelector('main').focus();
+  if (event.target.closest('.skip')) {
+    event.preventDefault();
+    app.querySelector('main').focus();
+    return;
+  }
+  const button = event.target.closest('button');
+  if (!button) return;
+  if (button.dataset.period) {
+    period = button.dataset.period;
+    render();
+    app.querySelector('[data-period="' + period + '"]').focus();
+  }
+  if (button.hasAttribute('data-check-in')) {
+    plannerRepository.toggleCheckIn(dateKey());
+    render();
+    app.querySelector('[data-check-in]').focus();
+  }
+  if (button.dataset.sopStep) {
+    const direction = button.dataset.sopStep;
+    sopStep = direction === 'reset' ? 0 : sopStep + (direction === 'next' ? 1 : -1);
+    render();
+    (app.querySelector('[data-sop-step="next"], [data-sop-step="reset"]') ?? app.querySelector('main')).focus();
+  }
+  if (button.hasAttribute('data-task-cancel')) app.querySelector('.task-dialog').close();
+  if (button.dataset.taskNew || button.dataset.taskEdit) {
+    const task = button.dataset.taskEdit ? plannerRepository.getTask(button.dataset.taskEdit) : null;
+    if (button.dataset.taskEdit && !task) return;
+    const dialog = app.querySelector('.task-dialog');
+    const form = dialog.querySelector('form');
+    dialog.querySelector('h2').textContent = task ? '编辑演示待办' : '新建演示待办';
+    form.elements.id.value = task?.id ?? '';
+    form.elements.title.value = task?.title ?? '';
+    form.elements.date.value = task?.date ?? button.dataset.taskNew;
+    form.elements.done.checked = task?.done ?? false;
+    form.elements.title.setCustomValidity('');
+    dialog.showModal();
+    form.elements.title.focus();
+  }
 });
 
 app.addEventListener('submit', event => {
-  if (event.target.matches('.search-form')) event.preventDefault();
+  if (event.target.matches('.search-form')) {
+    event.preventDefault();
+    return;
+  }
+  if (!event.target.matches('[data-task-form]')) return;
+  event.preventDefault();
+  const form = event.target;
+  const title = form.elements.title.value.trim();
+  const date = parseDate(form.elements.date.value);
+  if (!title) {
+    form.elements.title.setCustomValidity('请输入待办标题。');
+    form.elements.title.reportValidity();
+    return;
+  }
+  if (!date) return;
+  const saved = plannerRepository.saveTask({ id: form.elements.id.value || undefined, title, date: dateKey(date),
+    done: form.elements.done.checked });
+  if (!saved) return;
+  form.closest('dialog').close();
+  const { mode, date: selected } = calendarSelection(readRoute(location.hash).params);
+  if (dateKey(selected) !== saved.date) location.hash = calendarHref(date, mode);
+  else {
+    render();
+    app.querySelector('[data-task-edit="' + saved.id + '"]')?.focus();
+  }
 });
 
 app.addEventListener('input', event => {
+  if (event.target.name === 'title' && event.target.form?.matches('[data-task-form]')) event.target.setCustomValidity('');
   if (event.target.id !== 'studio-query') return;
   const query = event.target.value.trim();
   const matches = query ? studioRepository.list({ query }) : [];

@@ -1,7 +1,7 @@
 /**
  * @typedef {{ id: string, title: string, domains: string[], kind: 'input'|'output',
- * primaryWorkspace?: string, contentType?: string, tags?: string[],
- * category: string, state: string, visibility: string, format?: string,
+ * primaryWorkspace?: string, contentType?: string, tags?: string[], views?: string[],
+ * category: string, state: string, visibility: string, format?: string, coverUrl?: string,
  * date: string, description: string }} StudioContent
  * @typedef {[sourceId: string, targetId: string, label: string]} Relation
  * @typedef {{ id: string, title: string, subtitle: string, type: string,
@@ -41,9 +41,10 @@ export const publicRepository = {
 
 /**
  * @typedef {{ id: string, label: string, zh?: string }} ResourceModule
- * @typedef {{ id: string, title: string, description?: string, resourceModules?: ResourceModule[] }} WorkshopProject
+ * @typedef {{ id: string, title: string, description?: string, coverUrl?: string, resourceModules?: ResourceModule[] }} WorkshopProject
  * @typedef {{ id: string, projectId: string, title: string, theme?: string, date?: string,
- * location?: string, attendeeCount?: number, status?: string,
+ * location?: string, attendeeCount?: number, status?: string, posterUrl?: string,
+ * flow?: string, reflection?: string, media?: { url: string, label: string }[],
  * resourceUses?: { resourceId: string, versionId?: string, snapshot?: object }[] }} WorkshopEvent
  * @typedef {{ id: string, projectId: string, moduleId: string, title: string,
  * sourceContentId?: string, versionId?: string }} ProjectResource
@@ -65,4 +66,34 @@ export const workshopRepository = {
   listEvents(projectId) { return events.filter(event => event.projectId === projectId); },
   getEvent(projectId, id) { return events.find(event => event.projectId === projectId && event.id === id); },
   listResources(projectId) { return projectResources.filter(resource => resource.projectId === projectId); },
+};
+
+// Session-only sandbox shared by Calendar, To-Do, and the habit preview.
+/** @type {{ id: string, title: string, date: string, done: boolean }[]} */
+const tasks = [];
+const habitDates = new Set();
+
+export const plannerRepository = {
+  tasksBetween(start, end) {
+    return tasks.filter(task => task.date >= start && task.date <= end).map(task => ({ ...task }));
+  },
+  getTask(id) {
+    const task = tasks.find(entry => entry.id === id);
+    return task && { ...task };
+  },
+  saveTask({ id, title, date, done }) {
+    const existing = tasks.find(task => task.id === id);
+    if (id && !existing) return undefined;
+    const task = { id: existing?.id ?? crypto.randomUUID(), title: title.trim(), date, done: Boolean(done) };
+    if (existing) Object.assign(existing, task);
+    else tasks.push(task);
+    return { ...task };
+  },
+  checkInsBetween(start, end) {
+    return [...habitDates].filter(date => date >= start && date <= end).sort();
+  },
+  toggleCheckIn(date) {
+    if (habitDates.has(date)) habitDates.delete(date);
+    else habitDates.add(date);
+  },
 };
