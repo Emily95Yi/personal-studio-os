@@ -139,6 +139,7 @@ export function readRoute(hash) {
   const [root, section, pageId] = segments;
   if (!root || (root === 'home' && !section)) return { type: 'home' };
   if (root === 'search' && !section) return { type: 'search' };
+  if (root === 'settings' && !section) return { type: 'settings', parent: href('calendar'), parentLabel: 'Calendar' };
   if (root === 'calendar' && !section) {
     const params = new URLSearchParams(query);
     const from = params.get('from');

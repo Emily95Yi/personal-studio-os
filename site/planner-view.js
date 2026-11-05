@@ -3,6 +3,9 @@ import { plannerRepository, workshopRepository } from './repository.js';
 import { href } from './pages.js';
 import { escapeHtml } from './html.js';
 import { taskSourceLink } from './auto-view.js';
+import { allCalendarEvents, calendarTasks, canEdit, feedStatus, onDay, reviewLabel } from './apple-view.js';
+import { eventStatus, eventTimeLabel } from './calendar-events.js';
+import { connection } from './private-api.js';
 
 const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
 const modes = [['day', 'Day'], ['week', 'Week'], ['month', 'Month']];
@@ -16,7 +19,8 @@ function calendarGrid(date, mode, from) {
   const days = calendarDays(date, mode);
   const start = dateKey(days[0]);
   const end = dateKey(days.at(-1));
-  const tasks = plannerRepository.tasksBetween(start, end);
+  const tasks = calendarTasks(start, end);
+  const appointments = allCalendarEvents();
   const checkIns = plannerRepository.checkInsBetween(start, end);
   const events = workshopRepository.eventsBetween(start, end);
   const cells = days.map(day => {
@@ -26,7 +30,8 @@ function calendarGrid(date, mode, from) {
     const taskCount = tasks.filter(task => task.date === key).length;
     const checked = checkIns.includes(key);
     const eventCount = events.filter(event => event.date === key).length;
-    const details = [taskCount ? taskCount + ' 项待办' : '', checked ? '打卡' : '',
+    const appointmentCount = appointments.filter(event => onDay(event, key)).length;
+    const details = [appointmentCount ? appointmentCount + ' 项日程' : '', taskCount ? taskCount + ' 项待办' : '', checked ? '打卡' : '',
       eventCount ? eventCount + ' 场活动' : ''].filter(Boolean);
     const label = '<span class="day-number">' + day.getUTCDate() + '</span>' +
       (details.length ? '<span class="day-indicators">' + details.map(detail => '<small>' + detail + '</small>').join('') + '</span>' : '');
@@ -41,16 +46,24 @@ function calendarGrid(date, mode, from) {
 
 function agenda(date) {
   const key = dateKey(date);
-  const tasks = plannerRepository.tasksBetween(key, key);
+  const tasks = calendarTasks(key, key);
+  const appointments = allCalendarEvents().filter(event => onDay(event, key))
+    .sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start));
   const checked = plannerRepository.checkInsBetween(key, key).length > 0;
   const events = workshopRepository.eventsBetween(key, key);
+  const appointmentRows = appointments.map(event => '<li><button type="button" data-apple-event="' + escapeHtml(event.id) +
+    '"><strong>' + escapeHtml(event.title) + '</strong><span>' + escapeHtml(eventTimeLabel(event)) +
+    ' · <span data-event-status>' + (event.source === 'icloud' ? 'iCloud' : eventStatus[event.status]) +
+    '</span></span></button></li>').join('');
+  const taskRows = tasks.map(task =>
+    '<li><button type="button" data-task-edit="' + escapeHtml(task.id) + '"><strong>' + escapeHtml(task.title) +
+    '</strong><span>' + (task.done ? '已完成' : reviewLabel(task) ? eventStatus.confirmed + ' · ' + reviewLabel(task) : eventStatus.draft) +
+    '</span></button>' + taskSourceLink(task) + '</li>').join('');
   return '<section class="calendar-agenda"><div class="section-heading"><h2>' + formatDay(date) + ' · 当天事项</h2>' +
-    '<button type="button" class="action-button" data-task-new="' + key + '">新建待办</button></div>' +
-    (tasks.length ? '<ul class="agenda-list">' + tasks.map(task =>
-      '<li><button type="button" data-task-edit="' + escapeHtml(task.id) + '"><strong>' + escapeHtml(task.title) +
-      '</strong><span>' + (task.done ? '已完成' : '待处理') + '</span></button>' + taskSourceLink(task) + '</li>').join('') + '</ul>' :
+    (canEdit() ? '<button type="button" class="action-button" data-task-new="' + key + '">新建待办</button>' : '') + '</div>' +
+    (appointmentRows || taskRows ? '<ul class="agenda-list">' + appointmentRows + taskRows + '</ul>' :
       (!checked && !events.length ? '<p>暂无安排。</p>' : '')) +
-    (checked ? '<p class="habit-record">习惯 · 已打卡（演示）</p>' : '') +
+    (checked ? '<p class="habit-record">习惯 · 已打卡</p>' : '') +
     (events.length ? '<ul class="event-agenda">' + events.map(event => '<li><a href="' +
       href('workshop', 'projects', event.projectId, 'events', event.id) + '">' + escapeHtml(event.theme || event.title) +
       '</a><small>Workshop</small></li>').join('') + '</ul>' : '') + '</section>';
@@ -59,7 +72,10 @@ function agenda(date) {
 export function calendarView({ params }) {
   const { mode, date } = calendarSelection(params);
   const from = params.get('from');
-  return '<p class="page-note">演示模式 · 刷新清除</p>' +
+  const refresh = connection.mode === 'private' && connection.feed.status !== 'unconfigured';
+  return '<div class="calendar-source"><span role="status">' + feedStatus(dateKey(date)) + '</span>' +
+    (refresh ? '<button type="button" class="text-action" data-feed-refresh>刷新订阅</button>' : '') +
+    '<a class="text-action" href="' + href('settings') + '">日历设置</a></div>' +
     '<div class="calendar-toolbar"><div class="segmented" aria-label="日历视图">' +
     modes.map(([key, label]) => dateLink(date, key, label, from, mode === key ? ' aria-current="page"' : '')).join('') +
     '</div><div class="calendar-controls">' +
@@ -71,23 +87,26 @@ export function calendarView({ params }) {
 
 export function taskDialog() {
   return '<dialog class="task-dialog" aria-labelledby="task-dialog-title"><form data-task-form>' +
-    '<h2 id="task-dialog-title">演示待办</h2><p>仅本次会话 · 刷新清除</p>' +
+    '<h2 id="task-dialog-title">待办</h2>' + (connection.mode === 'preview' ? '<p>本机预览 · 刷新清除</p>' : '') +
     '<input type="hidden" name="id"><input type="hidden" name="planId"><label>标题<input required maxlength="120" name="title"></label>' +
     '<label>日期<input required type="date" name="date"></label><label data-task-source hidden>关联原始资料<select name="sourceContentId"></select></label><label class="check-label"><input type="checkbox" name="done">已完成</label>' +
     '<p data-form-error role="alert" hidden></p><div class="widget-actions"><button type="button" class="action-button secondary" data-dialog-cancel>取消</button>' +
-    '<button type="submit" class="action-button">应用到演示</button></div></form></dialog>';
+    '<button type="button" class="action-button secondary" data-task-review hidden>Review</button>' +
+    '<button type="submit" class="action-button">保存</button></div></form></dialog>';
 }
 
 export function homeWeekWidget(date = todayDate()) {
   const days = calendarDays(date, 'week');
   const start = dateKey(days[0]);
   const end = dateKey(days.at(-1));
-  const tasks = plannerRepository.tasksBetween(start, end);
+  const tasks = calendarTasks(start, end);
+  const appointments = allCalendarEvents();
   const events = workshopRepository.eventsBetween(start, end);
   const checkIns = plannerRepository.checkInsBetween(start, end);
   const links = days.map((day, index) => {
     const key = dateKey(day);
     const count = tasks.filter(item => item.date === key).length + events.filter(item => item.date === key).length +
+      appointments.filter(event => onDay(event, key)).length +
       Number(checkIns.includes(key));
     return '<a class="home-week-day" href="' + escapeHtml(calendarHref(day, 'day')) +
       '" aria-label="' + formatDay(day) + (count ? '，' + count + ' 项安排' : '') + '"' +
