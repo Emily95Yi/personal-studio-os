@@ -19,6 +19,21 @@ export function readShortcutResult(params) {
 }
 
 export function eventStatusLabel(event) {
+  if (event.syncMode === 'caldav') {
+    const state = event.caldav?.state;
+    const reason = event.caldav?.reason;
+    if (state === 'added') return 'Added';
+    if (state === 'delete_queued') return '删除中';
+    if (state === 'queued' || !state) return 'Pending · 等待同步';
+    return {
+      conflict: 'Pending · 时间冲突',
+      cancelled: 'Pending · 已中止',
+      removed_remotely: 'Pending · 暂无日程',
+      remote_changed: 'Pending · Apple 端记录已改变',
+      delete_changed: 'Pending · Apple 端有更新，请核对后再删除',
+      delete_failed: 'Pending · 删除失败',
+    }[reason] ?? 'Pending · 同步失败';
+  }
   if (['synced', 'sync_error'].includes(event.status)) return eventStatus[event.status];
   if (event.deviceResult === 'added') return '已添加 · 待 iCloud 核对';
   if (event.deviceResult === 'existing') return '已存在 · 待 iCloud 核对';

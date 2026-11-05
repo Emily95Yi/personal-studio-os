@@ -19,3 +19,5 @@ Workshop 预览卡只用于展示结构。本机静态预览的 Auto 和 Calenda
 - [后续 Roadmap](docs/roadmap.md)
 
 Apple Calendar 的使用、私有部署和设备验收见 [集成指南](docs/apple-calendar-integration.md)。使用 Node.js 22.13 或更新版本执行 `npm ci` 和 `npm test`。
+
+CalDAV 双日历测试步骤见 [测试与迁移](docs/icloud-caldav.md)。

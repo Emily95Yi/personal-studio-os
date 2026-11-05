@@ -53,7 +53,7 @@ function agenda(date) {
   const events = workshopRepository.eventsBetween(key, key);
   const appointmentRows = appointments.map(event => '<li><button type="button" data-apple-event="' + escapeHtml(event.id) +
     '"><strong>' + escapeHtml(event.title) + '</strong><span>' + escapeHtml(eventTimeLabel(event)) +
-    ' · <span data-event-status>' + (event.source === 'icloud' ? 'iCloud' : eventStatusLabel(event)) +
+    ' · <span data-event-status>' + (event.source === 'icloud' ? escapeHtml(event.sourceLabel || 'iCloud') : eventStatusLabel(event)) +
     '</span></span></button></li>').join('');
   const taskRows = tasks.map(task =>
     '<li><button type="button" data-task-edit="' + escapeHtml(task.id) + '"><strong>' + escapeHtml(task.title) +
@@ -72,8 +72,10 @@ function agenda(date) {
 export function calendarView({ params }) {
   const { mode, date } = calendarSelection(params);
   const from = params.get('from');
-  const refresh = connection.mode === 'private' && connection.feed.status !== 'unconfigured';
+  const refresh = connection.mode === 'private' && (connection.feed.status !== 'unconfigured' || connection.caldav.configured);
   return '<div class="calendar-source"><span role="status">' + feedStatus(dateKey(date)) + '</span>' +
+    (connection.caldav.configured && connection.feed.status !== 'unconfigured' ?
+      '<span>' + (connection.caldav.stale ? '写入日历 · 已保留缓存' : '写入日历 · ' + escapeHtml(connection.caldav.name)) + '</span>' : '') +
     (refresh ? '<button type="button" class="text-action" data-feed-refresh>刷新订阅</button>' : '') +
     '<a class="text-action" href="' + href('settings') + '">日历设置</a></div>' +
     '<div class="calendar-toolbar"><div class="segmented" aria-label="日历视图">' +

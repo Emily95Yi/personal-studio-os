@@ -1,25 +1,30 @@
 import { plannerRepository } from './repository.js';
 
-export const connection = { mode: 'loading', save: 'idle', feed: { status: 'unconfigured', events: [] } };
+export const connection = { mode: 'loading', save: 'idle', feed: { status: 'unconfigured', events: [] }, caldav: { enabled: false, statuses: [], events: [] } };
 let revision = 0;
 let changed = false;
 let writing;
 let feedRequest = 0;
 let lastFeedAttempt = 0;
 let settingSource = false;
+let caldavRequest = 0;
+let caldavPoll;
 const onChange = new EventTarget();
 
 export function onPrivateChange(handler) { onChange.addEventListener('change', handler); }
 function announce() { onChange.dispatchEvent(new Event('change')); }
 
-async function request(path, { method = 'GET', value } = {}) {
+async function request(path, { method = 'GET', value, durable = true } = {}) {
   const body = value === undefined ? undefined : JSON.stringify(value);
   const response = await fetch('/api/' + path, {
     method, body, cache: 'no-store', credentials: 'same-origin', redirect: 'error', signal: AbortSignal.timeout(15_000),
-    keepalive: body !== undefined && new TextEncoder().encode(body).byteLength < 55_000,
+    keepalive: durable && body !== undefined && new TextEncoder().encode(body).byteLength < 55_000,
     headers: { 'X-Studio-Request': '1', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
   });
-  if (!response.ok) throw Object.assign(new Error('Private API unavailable'), { status: response.status });
+  if (!response.ok) {
+    const failure = await response.json().catch(() => ({}));
+    throw Object.assign(new Error('Private API unavailable'), { status: response.status, code: failure.error });
+  }
   return response.json();
 }
 
@@ -75,6 +80,7 @@ export async function loadFeed({ manual = false, force = false } = {}) {
   if (connection.mode !== 'private' || settingSource) return;
   if (!manual && !force && Date.now() - lastFeedAttempt < 15_000) return;
   const attempt = ++feedRequest;
+  void loadCalDav({ manual });
   lastFeedAttempt = Date.now();
   try {
     const feed = await request(manual ? 'calendar/refresh' : 'calendar/feed', { method: manual ? 'POST' : 'GET' });
@@ -100,6 +106,62 @@ export async function setSource(url) {
     settingSource = false;
   }
   if (url) await loadFeed({ manual: true });
+}
+
+function updateCalDav(data) {
+  const next = { statuses: [], events: [], ...data };
+  if (JSON.stringify(connection.caldav) !== JSON.stringify(next)) {
+    connection.caldav = next;
+    announce();
+  }
+}
+
+export async function loadCalDav({ manual = false } = {}) {
+  if (connection.mode !== 'private') return;
+  const attempt = ++caldavRequest;
+  try {
+    const data = await request(manual ? 'calendar/caldav/refresh' : 'calendar/caldav', { method: manual ? 'POST' : 'GET' });
+    if (attempt === caldavRequest) updateCalDav(data);
+    if (manual && data.configured) pollCalDav();
+  } catch (error) {
+    if (attempt !== caldavRequest || !connection.caldav.enabled) return;
+    if ([401, 403].includes(error.status)) updateCalDav({ enabled: false });
+    else updateCalDav({ ...connection.caldav, stale: true });
+  }
+}
+
+export function pollCalDav(remaining = 7) {
+  clearTimeout(caldavPoll);
+  if (!remaining) return;
+  caldavPoll = setTimeout(async () => {
+    if (location.hash.startsWith('#/public')) return;
+    await loadCalDav();
+    pollCalDav(remaining - 1);
+  }, 1800);
+}
+
+export function discoverCalDav(email, password) {
+  return request('calendar/caldav/discover', { method: 'POST', value: { email, password }, durable: false });
+}
+
+export async function selectCalDav(id) {
+  ++caldavRequest;
+  updateCalDav(await request('calendar/caldav/select', { method: 'POST', value: { id } }));
+  pollCalDav();
+}
+
+export async function disconnectCalDav() {
+  ++caldavRequest;
+  clearTimeout(caldavPoll);
+  updateCalDav(await request('calendar/caldav', { method: 'DELETE' }));
+}
+
+export async function caldavCommand(event, action) {
+  ++caldavRequest;
+  updateCalDav(await request('calendar/caldav/event/' + encodeURIComponent(event.id), {
+    method: 'POST', value: { action, version: event.caldav?.version },
+  }));
+  pollCalDav();
 }
 
 plannerRepository.onChange(plannerChanged);

@@ -135,6 +135,14 @@ export const plannerRepository = {
     changed();
     return { review: { ...review }, event: event && { ...event } };
   },
+  updateCalendarDraft(id, details) {
+    const event = calendarEvents.find(row => row.id === id);
+    if (!event || event.syncMode !== 'caldav') return null;
+    for (const key of ['start', 'end', 'allDay', 'location', 'notes']) event[key] = details[key];
+    if (details.title) event.title = details.title;
+    changed();
+    return { ...event };
+  },
   markDeviceResult(id, result) {
     const event = calendarEvents.find(row => row.id === id);
     if (event?.status !== 'export_launched' || !['added', 'existing'].includes(result)) return;

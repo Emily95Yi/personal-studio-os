@@ -100,7 +100,7 @@ export function parseIcs(ics, window) {
     // Only the marker is needed for matching. Do not put private notes in the projection.
     const marker = /^YiStudio-Event-ID:\s*([\da-f-]{36})[ \t]*$/im.exec(description)?.[1]?.toLowerCase();
     rows.set(id, {
-      id, uid, recurrence, source: 'icloud', marker,
+      id, uid, recurrence, busy: String(item.component.getFirstPropertyValue('transp')).toUpperCase() !== 'TRANSPARENT', source: 'icloud', marker,
       title: String(item.summary || '无标题日程').slice(0, 300),
       location: String(item.location ?? '').slice(0, 300),
       start, end, dayStart, dayEnd, allDay,

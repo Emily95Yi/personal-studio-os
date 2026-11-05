@@ -6,7 +6,26 @@ import { plannerRepository } from './repository.js';
 
 export const canEdit = () => ['private', 'preview'].includes(connection.mode);
 const labelTime = date => dateKey(addDays(parseDate(date), 1));
-export const allCalendarEvents = () => combineEvents(plannerRepository.calendarEvents(), connection.feed.events);
+export function allCalendarEvents() {
+  const local = plannerRepository.calendarEvents();
+  const serverEvents = local.filter(event => event.syncMode === 'caldav');
+  const serverIds = new Set(serverEvents.map(event => event.id));
+  const statuses = new Map(connection.caldav.statuses.map(status => [status.id, status]));
+  const writable = connection.caldav.events;
+  const readOnly = connection.feed.events;
+  const managed = serverEvents.filter(event => statuses.get(event.id)?.state !== 'deleted').map(event => {
+    const caldav = statuses.get(event.id);
+    const remote = (caldav?.state === 'added' || caldav?.reason === 'delete_changed') && writable.find(row => row.uid === event.id + '@yi-studio' && row.marker === event.id);
+    return { ...event, ...(remote ? {
+      start: remote.start, end: remote.end, allDay: remote.allDay, location: remote.location, title: remote.title,
+    } : {}), caldav };
+  });
+  const imported = [...writable.map(event => ({ ...event, id: 'writable:' + event.id, sourceLabel: '奕Studio iCloud' })),
+    ...readOnly.map(event => ({ ...event, id: 'read-only:' + event.id, sourceLabel: '日常 iCloud' }))];
+  const visible = imported.filter(event =>
+    !(event.marker && serverIds.has(event.marker) && event.uid === event.marker + '@yi-studio'));
+  return combineEvents([...local.filter(event => event.syncMode !== 'caldav'), ...managed], visible);
+}
 export const calendarTasks = (start, end) => plannerRepository.tasksBetween(start, end).filter(task => !plannerRepository.eventForTask(task.id));
 export const onDay = (event, day) => event.dayStart <= day && event.dayEnd > day;
 const actionLabels = { remind: 'Remind Only', todo: 'Add To-Do', calendar: 'Add to Calendar' };
@@ -18,7 +37,8 @@ export function settingsView() {
     return '<section class="empty-state"><h2>Apple 日历</h2><p>' + note + '</p></section>';
   }
   const configured = connection.feed.status !== 'unconfigured';
-  return '<section class="empty-state apple-settings"><h2>iCloud 订阅</h2><p data-settings-status role="status">' +
+  return caldavSettings() + '<section class="empty-state apple-settings"><h2>' +
+    (connection.caldav.enabled ? '日常日历 · 只读' : 'iCloud 订阅') + '</h2><p data-settings-status role="status">' +
     (configured ? '订阅已配置。可替换或断开。' : '还没有订阅。') + '</p>' +
     '<form data-apple-settings autocomplete="off"><label>iCloud 公开日历链接' +
     '<input type="password" name="source" maxlength="512" required autocomplete="off" spellcheck="false"></label>' +
@@ -27,12 +47,30 @@ export function settingsView() {
     '</div></form></section>';
 }
 
+function caldavSettings() {
+  if (!connection.caldav.enabled) return '';
+  const connected = connection.caldav.configured;
+  return '<section class="empty-state apple-settings caldav-settings"><h2>奕Studio 日历 · 读写</h2>' +
+    '<p data-caldav-message role="status">' + (connected ? '已连接 ' + escapeHtml(connection.caldav.name) :
+      '先连接专用测试日历，再试自动新增和删除。') + '</p>' +
+    (connected ? '<div class="widget-actions"><button class="action-button secondary" type="button" data-caldav-disconnect>断开写入连接</button></div>' :
+      '<form data-caldav-discover autocomplete="off"><label>Apple 账号' +
+      '<input name="email" type="email" required maxlength="254" autocomplete="off"></label>' +
+      '<label>App 专用密码<input name="password" type="password" required maxlength="64" autocomplete="new-password"></label>' +
+      '<div class="widget-actions"><button class="action-button" type="submit">查找可写日历</button></div></form>' +
+      '<form data-caldav-select hidden><label>写入目标<select required name="calendarId"></select></label>' +
+      '<div class="widget-actions"><button class="action-button" type="submit">连接测试日历</button></div></form>') + '</section>';
+}
+
 export function feedStatus(date) {
   const feed = connection.feed;
   if (connection.mode === 'preview') return '本机预览 · 刷新清除';
   if (connection.mode === 'loading') return '正在载入工作台…';
   if (connection.mode === 'unavailable') return '私有服务不可用';
-  if (feed.status === 'unconfigured') return '未连接 iCloud';
+  if (feed.status === 'unconfigured') {
+    if (!connection.caldav.configured) return '未连接 iCloud';
+    return connection.caldav.stale ? 'iCloud 暂不可读 · 已保留缓存' : 'iCloud · ' + escapeHtml(connection.caldav.name);
+  }
   if (feed.status === 'loading') return '正在读取订阅…';
   if (feed.status === 'error') return 'iCloud 暂不可读';
   if (date && (date < feed.windowStart || date >= feed.windowEnd)) return '该日期超出订阅显示范围';
@@ -56,8 +94,9 @@ export function statusBanner() {
 export function reviewDialog() {
   return `<dialog class="task-dialog apple-dialog" data-review-dialog aria-labelledby="review-title">
     <form data-review-form>
-      <h2 id="review-title">Review</h2><input type="hidden" name="taskId">
+      <h2 id="review-title">Review</h2><input type="hidden" name="taskId"><input type="hidden" name="eventId"><input type="hidden" name="eventVersion">
       <p>Link · <strong data-review-link></strong></p>
+      <label data-caldav-edit-title hidden>日程标题<input name="eventTitle" maxlength="120" disabled></label>
       <fieldset data-review-time hidden><legend>Time · Asia/Tokyo</legend>
         <label class="check-label"><input type="checkbox" name="allDay">全天</label>
         <div class="apple-fields"><label>开始时间<input type="datetime-local" name="startTime"></label>
@@ -88,23 +127,48 @@ export function updateReview(form) {
     field.required = calendar && !field.closest('label').hidden;
     field.disabled = !field.required;
   }
+  form.elements.targetCalendar.closest('label').hidden = connection.caldav.configured;
+  form.querySelector('button[type=submit]').textContent = calendar && connection.caldav.configured ? '保存并同步' : '确认安排';
   form.querySelector('[data-review-summary]').textContent = {
-    calendar: '确认后生成待写入日程。',
+    calendar: connection.caldav.configured ? '保存后检查时间冲突并同步到 ' + connection.caldav.name + '。' : '确认后生成待写入日程。',
     remind: '保留提醒意向。目前没有通知服务。',
     todo: '保留现有待办，不重复创建。',
   }[action.value];
 }
 
-export function openReview(app, task) {
+export function openReview(app, task, event) {
   const dialog = app.querySelector('[data-review-dialog]');
   const form = dialog.querySelector('form');
   form.reset();
   form.elements.taskId.value = task.id;
-  form.elements.action.value = plannerRepository.getReview(task.id)?.action ?? 'calendar';
+  form.elements.eventId.value = event?.id ?? '';
+  form.elements.eventVersion.value = event?.caldav?.version ?? '';
+  form.elements.eventTitle.value = event?.title ?? '';
+  form.elements.eventTitle.disabled = !event;
+  form.elements.eventTitle.required = Boolean(event);
+  form.querySelector('[data-caldav-edit-title]').hidden = !event;
+  form.elements.action.disabled = Boolean(event);
+  form.elements.action.value = event ? 'calendar' : plannerRepository.getReview(task.id)?.action ?? 'calendar';
   form.elements.startTime.value = task.date + 'T09:00';
   form.elements.endTime.value = task.date + 'T10:00';
   form.elements.startDate.value = task.date;
   form.elements.endDate.value = task.date;
+  if (event) {
+    const localTime = value => new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+      hourCycle: 'h23',
+    }).format(new Date(value)).replace(' ', 'T');
+    form.elements.allDay.checked = event.allDay;
+    if (event.allDay) {
+      form.elements.startDate.value = event.start;
+      form.elements.endDate.value = dateKey(addDays(parseDate(event.end), -1));
+    } else {
+      form.elements.startTime.value = localTime(event.start);
+      form.elements.endTime.value = localTime(event.end);
+    }
+    form.elements.place.value = event.location;
+    form.elements.notes.value = event.notes;
+  }
   form.querySelector('[data-review-link]').textContent = task.title;
   form.querySelector('[data-form-error]').hidden = true;
   updateReview(form);
@@ -121,7 +185,7 @@ export function readReview(form) {
     eventTimes(false, fields.startTime.value, fields.endTime.value);
   return times ? { action, details: {
     ...times, location: fields.place.value.trim(), notes: fields.notes.value.trim(),
-    targetCalendar: fields.targetCalendar.value.trim(),
+    targetCalendar: fields.targetCalendar.value.trim(), title: fields.eventId.value ? fields.eventTitle.value.trim() : undefined,
   } } : null;
 }
 
@@ -135,16 +199,17 @@ export function showEvent(app, event) {
   const studio = event.source === 'studio';
   const retry = event.status === 'export_launched' || event.status === 'sync_error';
   const saved = connection.mode === 'preview' || connection.save === 'idle';
-  const exportable = studio && event.status !== 'synced' && !event.mismatch && !event.deviceResult && saved;
+  const automatic = studio && event.syncMode === 'caldav';
+  const exportable = studio && !automatic && event.status !== 'synced' && !event.mismatch && !event.deviceResult && saved;
   const appleDevice = /iPhone|iPad|iPod|Mac/.test(navigator.userAgent);
   const attempt = crypto.randomUUID();
   const link = exportable && appleDevice ? shortcutUrl(event, location.origin, attempt) : null;
   const launch = link ? '<a class="action-button" data-shortcut-launch="' + attempt + '" href="' + escapeHtml(link) +
     '">' + (retry ? '再次加入 Apple 日历' : '加入 Apple 日历') + '</a>' : '';
   const download = exportable ? '<button type="button" class="action-button secondary" data-ics-download>下载 .ics</button>' : '';
-  const flag = studio && event.status === 'export_launched' && !event.mismatch && !event.deviceResult ?
+  const flag = studio && !automatic && event.status === 'export_launched' && !event.mismatch && !event.deviceResult ?
     '<button type="button" class="text-action" data-event-error>标记需核对</button>' : '';
-  const feedback = studio && !saved ? '请等工作台完成保存后再导出。' : event.mismatch ? 'iCloud 有同一来源 ID 的多个记录或日期不一致，请先在 Apple 日历核对。' :
+  const feedback = automatic ? '' : studio && !saved ? '请等工作台完成保存后再导出。' : event.mismatch ? 'iCloud 有同一来源 ID 的多个记录或日期不一致，请先在 Apple 日历核对。' :
     event.deviceResult && event.status !== 'synced' ? '刷新订阅后可核对 iCloud 同步。若需改期，请在 Apple 日历打开原日程。' :
     retry ? '若快捷指令未打开，请检查 YiStudioAddEvent 是否已安装，或下载 .ics。重试前请核对 Apple 日历。' :
     exportable && appleDevice && !link ? '快捷指令参数过长，请下载 .ics 手动导入。' :
@@ -157,10 +222,28 @@ export function showEvent(app, event) {
     '<p>' + escapeHtml(eventTimeLabel(event)) + (event.allDay ? '' : ' · 东京时间') + '</p>' +
     (event.location ? '<p>' + escapeHtml(event.location) + '</p>' : '') +
     (studio && event.notes ? '<p class="prose">' + escapeHtml(event.notes) + '</p>' : '') +
-    '<p>' + (studio ? eventStatusLabel(event) : '来自 iCloud') + '</p>' +
+    '<p>' + (studio ? eventStatusLabel(event) : '来自 ' + escapeHtml(event.sourceLabel || 'iCloud')) + '</p>' +
     (feedback ? '<p>' + feedback + '</p>' : '') +
+    (automatic ? caldavEventActions(event) : '') +
     (launch || download || flag ? '<div class="widget-actions">' + launch + download + flag + '</div>' : '');
   if (!dialog.open) dialog.showModal();
+}
+
+function caldavEventActions(event) {
+  const sync = event.caldav;
+  if (!sync || !connection.caldav.configured) return '';
+  const pending = ['pending', 'error'].includes(sync.state);
+  const conflict = sync.reason === 'conflict';
+  const retry = pending && !['remote_changed', 'delete_failed', 'delete_changed'].includes(sync.reason);
+  const removable = pending || sync.state === 'added';
+  const list = sync.conflicts?.length ? '<ul>' + sync.conflicts.map(row =>
+    '<li>' + escapeHtml(row.title) + ' · ' + escapeHtml(eventTimeLabel(row)) + '</li>').join('') + '</ul>' : '';
+  return list + '<p data-caldav-event-message role="status"></p><div class="widget-actions">' +
+    (retry ? '<button type="button" class="action-button" data-caldav-edit>修改后重试</button>' : '') +
+    (retry && !conflict ? '<button type="button" class="action-button secondary" data-caldav-command="retry">重新添加</button>' : '') +
+    (conflict ? '<button type="button" class="action-button secondary" data-caldav-command="stop">中止添加</button>' : '') +
+    (removable ? '<button type="button" class="text-action" data-caldav-command="delete">删除日程</button>' : '') +
+    '</div>';
 }
 
 export function reviewLabel(task) {
