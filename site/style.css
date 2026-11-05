@@ -259,3 +259,6 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--accent);
 .apple-dialog [data-review-summary] { margin-top: 7px; }
 .apple-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 0 8px; }
 .apple-fields:has(> [hidden]:first-child) { display: none; }
+
+.caldav-settings { margin-bottom: 14px; }
+.caldav-settings select { width: 100%; border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; color: var(--ink); background: var(--paper); font: inherit; }

@@ -9,7 +9,8 @@
   "dependencies": {
     "@js-temporal/polyfill": "0.5.1",
     "ical.js": "2.2.1",
-    "jose": "6.2.15"
+    "jose": "6.2.15",
+    "saxes": "6.0.0"
   },
   "devDependencies": {
     "wrangler": "4.157.0"

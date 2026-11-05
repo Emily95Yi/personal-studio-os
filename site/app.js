@@ -10,7 +10,7 @@ import { plannerRepository, studioRepository } from './repository.js';
 import { calendarHref, calendarSelection, dateKey, movePeriod, parseDate, todayDate } from './calendar.js';
 import { calendarView, homeWeekWidget, taskDialog } from './planner-view.js';
 import { allCalendarEvents, canEdit, eventDialog, reviewDialog, settingsView, showEvent, statusBanner } from './apple-view.js';
-import { connection, loadFeed, loadPlanner, onPrivateChange } from './private-api.js';
+import { connection, loadCalDav, loadFeed, loadPlanner, onPrivateChange } from './private-api.js';
 import { initAppleActions } from './apple-actions.js';
 
 const app = document.querySelector('#app');
@@ -179,7 +179,8 @@ function openTaskDialog(button) {
   const review = form.querySelector('[data-task-review]');
   const confirmed = task && plannerRepository.getReview(task.id);
   const scheduled = task && plannerRepository.eventForTask(task.id);
-  review.hidden = !task || task.skipped;
+  const deleted = scheduled && connection.caldav.statuses.some(row => row.id === scheduled.id && row.state === 'deleted');
+  review.hidden = !task || task.skipped || deleted;
   review.textContent = scheduled ? '查看日历安排' : confirmed ? '重新 Review' : 'Review';
   dialog.showModal();
   (plan ? form.elements.date : form.elements.title).focus();
@@ -307,6 +308,7 @@ app.addEventListener('input', event => {
 let initialized = false;
 let lastMode = connection.mode;
 let lastFeed = connection.feed;
+let lastCalDav = connection.caldav;
 let lastSave = connection.save;
 
 function isCalendarSurface(route) { return ['home', 'calendar', 'settings'].includes(route.type); }
@@ -317,15 +319,22 @@ function enterPrivateSurface() {
   if (!initialized) {
     initialized = true;
     void loadPlanner().then(() => {
-      if (isCalendarSurface(readRoute(location.hash))) void loadFeed();
+      const current = readRoute(location.hash);
+      if (isCalendarSurface(current)) void loadFeed();
+      else if (current.collectionId === 'auto' || current.workspaceId === 'self-board') void loadCalDav();
     });
   } else if (isCalendarSurface(route)) void loadFeed();
+  else if (route.collectionId === 'auto') void loadCalDav();
 }
 
 onPrivateChange(() => {
   const route = readRoute(location.hash);
   const modeChanged = lastMode !== connection.mode;
-  const feedChanged = lastFeed !== connection.feed;
+  const caldavChanged = lastCalDav !== connection.caldav;
+  const setupChanged = lastCalDav.enabled !== connection.caldav.enabled ||
+    lastCalDav.configured !== connection.caldav.configured;
+  const feedChanged = lastFeed !== connection.feed || caldavChanged;
+  lastCalDav = connection.caldav;
   const saveChanged = lastSave !== connection.save;
   lastMode = connection.mode;
   lastFeed = connection.feed;
@@ -333,7 +342,7 @@ onPrivateChange(() => {
   if (route.type === 'public') return;
   const status = app.querySelector('[data-private-status]');
   if (status) status.innerHTML = statusBanner();
-  if (modeChanged) {
+  if (modeChanged || (route.type === 'settings' && setupChanged)) {
     render();
     return;
   }

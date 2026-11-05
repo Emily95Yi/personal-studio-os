@@ -1,3 +1,4 @@
+import { caldavEnabled, createCalDavService } from './caldav-sync.js';
 import { authenticate, isConfigured } from './auth.js';
 import { feedView, getSource, refreshDue, refreshSource, removeSource, saveSource } from './feed.js';
 import { getPlanner, savePlanner, validSnapshot } from './planner.js';
@@ -25,7 +26,11 @@ async function body(request, limit) {
   }
 }
 
-async function planner(request, env, owner) {
+function syncLater(ctx, job) {
+  ctx.waitUntil(job.catch(() => {}));
+}
+
+async function planner(request, env, ctx, owner, caldav) {
   if (request.method === 'GET') return json(await getPlanner(env.DB, owner));
   if (request.method !== 'PUT') return json({ error: 'method' }, 405);
   const input = await body(request, 256 * 1024);
@@ -33,7 +38,41 @@ async function planner(request, env, owner) {
     return json({ error: 'invalid_planner' }, 400);
   }
   const saved = await savePlanner(env.DB, owner, input.revision, input.snapshot);
+  if (saved && caldavEnabled(env)) {
+    syncLater(ctx, caldav.enqueue(env, owner, input.snapshot.events).then(() => caldav.run(env, owner)));
+  }
   return saved ? json(saved) : json({ error: 'conflict' }, 409);
+}
+
+async function caldavApi(request, env, ctx, owner, path, service) {
+  const method = request.method;
+  if (path === '/api/calendar/caldav' && method === 'GET') {
+    if (!caldavEnabled(env)) return json({ enabled: false });
+    syncLater(ctx, getPlanner(env.DB, owner)
+      .then(data => service.enqueue(env, owner, data.snapshot?.events ?? []))
+      .then(() => service.run(env, owner)));
+    return json(await service.view(env, owner));
+  }
+  if (!caldavEnabled(env)) return json({ error: 'not_found' }, 404);
+  let result;
+  if (path === '/api/calendar/caldav' && method === 'DELETE') {
+    result = await service.disconnect(env, owner);
+  } else if (path === '/api/calendar/caldav/discover' && method === 'POST') {
+    result = await service.discover(env, owner, await body(request, 1024));
+  } else if (path === '/api/calendar/caldav/select' && method === 'POST') {
+    const input = await body(request, 512);
+    result = await service.select(env, owner, input?.id);
+    if (!result.error) syncLater(ctx, service.run(env, owner, { manual: true }));
+  } else if (path === '/api/calendar/caldav/refresh' && method === 'POST') {
+    syncLater(ctx, service.run(env, owner, { manual: true }));
+    result = await service.view(env, owner);
+  } else {
+    const event = /^\/api\/calendar\/caldav\/event\/([\da-f-]{36})$/i.exec(path);
+    if (!event || method !== 'POST') return json({ error: 'not_found' }, 404);
+    result = await service.command(env, owner, event[1], await body(request, 1024));
+    if (!result.error) syncLater(ctx, service.run(env, owner));
+  }
+  return json(result, result.status ?? 200);
 }
 
 async function calendar(request, env, ctx, owner, path) {
@@ -70,7 +109,7 @@ async function calendar(request, env, ctx, owner, path) {
 }
 
 // Dependency injection is used by isolated tests. The deployed handler always verifies Access.
-export function createHandler(authorize = authenticate) {
+export function createHandler(authorize = authenticate, caldav = createCalDavService()) {
   return async (request, env, ctx) => {
     const url = new URL(request.url);
     if (!isConfigured(env)) return json({ error: 'unavailable' }, 503);
@@ -89,7 +128,10 @@ export function createHandler(authorize = authenticate) {
       return json({ error: 'forbidden' }, 403);
     }
     try {
-      if (url.pathname === '/api/planner') return await planner(request, env, owner);
+      if (url.pathname === '/api/planner') return await planner(request, env, ctx, owner, caldav);
+      if (url.pathname === '/api/calendar/caldav' || url.pathname.startsWith('/api/calendar/caldav/')) {
+        return await caldavApi(request, env, ctx, owner, url.pathname, caldav);
+      }
       return await calendar(request, env, ctx, owner, url.pathname);
     } catch {
       return json({ error: 'unavailable' }, 503);
@@ -97,4 +139,10 @@ export function createHandler(authorize = authenticate) {
   };
 }
 
-export default { fetch: createHandler() };
+const caldavService = createCalDavService();
+export default {
+  fetch: createHandler(authenticate, caldavService),
+  scheduled(_controller, env, ctx) {
+    if (caldavEnabled(env)) syncLater(ctx, caldavService.drain(env));
+  },
+};
