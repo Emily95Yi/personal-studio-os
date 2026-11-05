@@ -4,7 +4,7 @@ import { href } from './pages.js';
 import { escapeHtml } from './html.js';
 import { taskSourceLink } from './auto-view.js';
 import { allCalendarEvents, calendarTasks, canEdit, feedStatus, onDay, reviewLabel } from './apple-view.js';
-import { eventStatus, eventTimeLabel } from './calendar-events.js';
+import { eventStatus, eventStatusLabel, eventTimeLabel } from './calendar-events.js';
 import { connection } from './private-api.js';
 
 const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
@@ -53,7 +53,7 @@ function agenda(date) {
   const events = workshopRepository.eventsBetween(key, key);
   const appointmentRows = appointments.map(event => '<li><button type="button" data-apple-event="' + escapeHtml(event.id) +
     '"><strong>' + escapeHtml(event.title) + '</strong><span>' + escapeHtml(eventTimeLabel(event)) +
-    ' · <span data-event-status>' + (event.source === 'icloud' ? 'iCloud' : eventStatus[event.status]) +
+    ' · <span data-event-status>' + (event.source === 'icloud' ? 'iCloud' : eventStatusLabel(event)) +
     '</span></span></button></li>').join('');
   const taskRows = tasks.map(task =>
     '<li><button type="button" data-task-edit="' + escapeHtml(task.id) + '"><strong>' + escapeHtml(task.title) +

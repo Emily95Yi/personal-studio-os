@@ -6,7 +6,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import worker from '../worker/index.js';
 import { parseIcs, windowFor } from '../worker/ics.js';
 import { fetchIcs, normalizeSource, openSource, sealSource } from '../worker/source.js';
-import { combineEvents, eventIcs, eventTimes, shortcutUrl } from '../site/calendar-events.js';
+import { combineEvents, eventIcs, eventStatusLabel, eventTimes, readShortcutResult, shortcutUrl } from '../site/calendar-events.js';
 import { plannerRepository } from '../site/repository.js';
 
 const fakeUrl = 'webcal://p1-caldav.icloud.com/published/2/fixture_not_a_real_credential';
@@ -96,6 +96,19 @@ test('Review creates a separate event, .ics and Shortcut round-trip, exact and a
   assert.equal(payload.targetCalendar, 'iCloud fixture');
   assert.equal(payload.start, '2026-11-01T14:30:00.000Z');
   assert.ok(query.get('x-cancel').includes('status=cancel'));
+  const callback = new URL(query.get('x-success'));
+  callback.searchParams.set('result', 'existing');
+  const result = readShortcutResult(callback.searchParams);
+  assert.equal(result.eventId, event.id);
+  assert.equal(result.result, 'existing');
+  plannerRepository.markEvent(event.id, 'export_launched');
+  plannerRepository.markDeviceResult(event.id, result.result);
+  const [reported] = combineEvents(plannerRepository.calendarEvents(), []);
+  assert.match(eventStatusLabel(reported), /^已存在/);
+  assert.equal(reported.status, 'export_launched');
+  assert.equal(eventStatusLabel(combineEvents([reported], imported)[0]), '已匹配 iCloud');
+  callback.searchParams.set('result', 'synced');
+  assert.equal(readShortcutResult(callback.searchParams), null);
 });
 
 test('Worker verifies signed Access tokens, isolates source and planner, caches feed safely and replaces deleted events', async t => {

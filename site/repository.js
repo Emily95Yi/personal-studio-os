@@ -135,6 +135,12 @@ export const plannerRepository = {
     changed();
     return { review: { ...review }, event: event && { ...event } };
   },
+  markDeviceResult(id, result) {
+    const event = calendarEvents.find(row => row.id === id);
+    if (event?.status !== 'export_launched' || !['added', 'existing'].includes(result)) return;
+    event.deviceResult = result;
+    changed();
+  },
   markEvent(id, status) {
     if (!['export_pending', 'export_launched', 'sync_error'].includes(status)) return;
     const event = calendarEvents.find(row => row.id === id);

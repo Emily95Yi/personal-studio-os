@@ -4,6 +4,26 @@ const tokyo = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo', year: '
 const timeLabel = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const tokyoMoment = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d$/;
 const maxLaunchLength = 6000;
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const shortcutChannel = 'yistudio-shortcut-results';
+export const shortcutAttemptKey = 'yistudio-shortcut-attempt';
+export const shortcutReceiptKey = 'yistudio-shortcut-receipt';
+
+export function readShortcutResult(params) {
+  if (params.get('status') !== 'success') return null;
+  const eventId = params.get('event');
+  const attempt = params.get('attempt');
+  const result = params.get('result');
+  if (!uuid.test(eventId ?? '') || !uuid.test(attempt ?? '') || !['added', 'existing'].includes(result)) return null;
+  return { eventId, attempt, result };
+}
+
+export function eventStatusLabel(event) {
+  if (['synced', 'sync_error'].includes(event.status)) return eventStatus[event.status];
+  if (event.deviceResult === 'added') return '已添加 · 待 iCloud 核对';
+  if (event.deviceResult === 'existing') return '已存在 · 待 iCloud 核对';
+  return eventStatus[event.status];
+}
 
 export const eventStatus = {
   draft: '待确认', confirmed: '已确认', export_pending: '待加入 Apple 日历',
@@ -56,11 +76,12 @@ export function exportPayload(event) {
   };
 }
 
-export function shortcutUrl(event, origin) {
+export function shortcutUrl(event, origin, attempt = crypto.randomUUID()) {
   const payload = encodeURIComponent(JSON.stringify(exportPayload(event)));
   const url = 'shortcuts://x-callback-url/run-shortcut?name=YiStudioAddEvent&input=text&text=' + payload;
   const callbacks = ['success', 'cancel', 'error'].map(status => '&x-' + status + '=' +
-    encodeURIComponent(origin + '/apple-shortcut-return.html?status=' + status)).join('');
+    encodeURIComponent(origin + '/apple-shortcut-return.html?status=' + status +
+      (status === 'success' ? '&event=' + encodeURIComponent(event.id) + '&attempt=' + attempt : ''))).join('');
   return url.length + callbacks.length <= maxLaunchLength ? url + callbacks : null;
 }
 

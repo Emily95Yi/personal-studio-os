@@ -66,3 +66,18 @@ Worker 只请求匹配 Apple 主机和 `/published/2/` 路径的 HTTPS 订阅，
 - [ ] 用 .ics 回退导入一项，核对 UID、全天语义及是否在重新读取后配对。
 
 自动化已覆盖本地 Worker 逻辑、模拟签名 Access JWT、数据库隔离和冲突、订阅失败及缓存、时区和重复例外、.ics 和快捷指令参数、精确匹配及冲突。生产 Cloudflare、真实 iCloud 读取、设备快捷指令和跨设备写入属于待验收项。当前使用单订阅、访问时刷新和按用户版本控制的计划快照。需要在无人访问时同步、多订阅或多人同时编辑时，再增加定时任务和逐条记录的存储接口。
+
+## 自动查重版快捷指令
+
+用 Python 运行 scripts/build-apple-shortcut.py 并指定输出文件，再用 macOS 的 shortcuts sign 签名。
+
+1. 导入并保留名称 **YiStudioAddEvent**。在设备上把「添加新日程」动作的日历设为目标可写 iCloud 日历，或者确认设备的默认日历就是它。自动版使用设备设置，忽略网页表单的可选日历名称。
+2. 首次运行时根据系统提示授权。快捷指令读取设备可访问的日历，用备注里的奕Studio Event ID 查找。找到就输出 existing，停止新增。手工创建且没有标记的同名日程不会被判定为同一个事件。要改期请打开 Apple 日历中的原事件。
+3. 没找到匹配时，添加动作直接保存到已配置的日历并输出 added。仅从自己的奕Studio页面启动。快捷指令的 URL 输入本身不携带可信网页来源，设备的系统权限和打开提示仍适用。
+4. 返回页显示「已存在」或「已添加」。原工作台能收到匹配的本次回调时，会更新事件标签。若系统跳到另一浏览器，先在返回页看结果，再从工作台刷新订阅。只有读回 iCloud 的唯一匹配会显示「已匹配 iCloud」。
+
+自动版先在专用测试日历验证。使用同一测试日程点两次，第一次应添加，第二次应停止。分别验证定时和全天记录，并确认目标日历中每项只出现一条。手动确认版可作为设备兼容回退。
+
+## 无自有域名时的私有预览
+
+Cloudflare 支持用 Access 保护单个 Worker 的 workers.dev 地址。先启用 Zero Trust，然后建立只允许本人登录的规则。使用部署专用配置启用该 Worker 的 workers_dev，继续禁用公开预览地址，并将 STUDIO_ORIGIN 配成该 Worker 的完整 HTTPS 地址。确认匿名请求被 Access 拒绝、登录后 API 可用，再粘贴真实订阅。默认仓库配置仍关闭 workers.dev。见 [Cloudflare Access 与 Workers](https://developers.cloudflare.com/workers/configuration/cloudflare-access/)。

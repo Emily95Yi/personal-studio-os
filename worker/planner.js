@@ -34,6 +34,7 @@ function validEvent(row, reviews) {
   const validTime = row.allDay === true ? day : row.allDay === false ? dateTime : () => false;
   return review?.action === 'calendar' && review.taskId === row.taskId &&
     row.timeZone === 'Asia/Tokyo' && statuses.includes(row.status) &&
+    optional(row.deviceResult, value => ['added', 'existing'].includes(value)) &&
     text(row.title, 120) && text(row.notes, 700) && text(row.location, 200) && text(row.targetCalendar, 80) &&
     validTime(row.start) && validTime(row.end) && row.start < row.end;
 }

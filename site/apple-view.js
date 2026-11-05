@@ -1,5 +1,5 @@
 import { addDays, dateKey, parseDate } from './calendar.js';
-import { combineEvents, eventStatus, eventTimeLabel, eventTimes, shortcutUrl } from './calendar-events.js';
+import { combineEvents, eventStatusLabel, eventTimeLabel, eventTimes, shortcutUrl } from './calendar-events.js';
 import { escapeHtml } from './html.js';
 import { connection } from './private-api.js';
 import { plannerRepository } from './repository.js';
@@ -135,27 +135,29 @@ export function showEvent(app, event) {
   const studio = event.source === 'studio';
   const retry = event.status === 'export_launched' || event.status === 'sync_error';
   const saved = connection.mode === 'preview' || connection.save === 'idle';
-  const exportable = studio && event.status !== 'synced' && !event.mismatch && saved;
+  const exportable = studio && event.status !== 'synced' && !event.mismatch && !event.deviceResult && saved;
   const appleDevice = /iPhone|iPad|iPod|Mac/.test(navigator.userAgent);
-  const link = exportable && appleDevice ? shortcutUrl(event, location.origin) : null;
-  const launch = link ? '<a class="action-button" data-shortcut-launch href="' + escapeHtml(link) +
+  const attempt = crypto.randomUUID();
+  const link = exportable && appleDevice ? shortcutUrl(event, location.origin, attempt) : null;
+  const launch = link ? '<a class="action-button" data-shortcut-launch="' + attempt + '" href="' + escapeHtml(link) +
     '">' + (retry ? '再次加入 Apple 日历' : '加入 Apple 日历') + '</a>' : '';
   const download = exportable ? '<button type="button" class="action-button secondary" data-ics-download>下载 .ics</button>' : '';
-  const flag = studio && event.status === 'export_launched' && !event.mismatch ?
+  const flag = studio && event.status === 'export_launched' && !event.mismatch && !event.deviceResult ?
     '<button type="button" class="text-action" data-event-error>标记需核对</button>' : '';
   const feedback = studio && !saved ? '请等工作台完成保存后再导出。' : event.mismatch ? 'iCloud 有同一来源 ID 的多个记录或日期不一致，请先在 Apple 日历核对。' :
+    event.deviceResult && event.status !== 'synced' ? '刷新订阅后可核对 iCloud 同步。若需改期，请在 Apple 日历打开原日程。' :
     retry ? '若快捷指令未打开，请检查 YiStudioAddEvent 是否已安装，或下载 .ics。重试前请核对 Apple 日历。' :
     exportable && appleDevice && !link ? '快捷指令参数过长，请下载 .ics 手动导入。' :
     exportable ? '下载 .ics 后需要手动导入。' : '';
   const row = [...app.querySelectorAll('[data-apple-event]')].find(button => button.dataset.appleEvent === event.id);
-  if (row && studio) row.querySelector('[data-event-status]').textContent = eventStatus[event.status];
+  if (row && studio) row.querySelector('[data-event-status]').textContent = eventStatusLabel(event);
   dialog.dataset.eventId = event.id;
   dialog.querySelector('[data-event-body]').innerHTML =
     '<h2 id="apple-event-title">' + escapeHtml(event.title) + '</h2>' +
     '<p>' + escapeHtml(eventTimeLabel(event)) + (event.allDay ? '' : ' · 东京时间') + '</p>' +
     (event.location ? '<p>' + escapeHtml(event.location) + '</p>' : '') +
     (studio && event.notes ? '<p class="prose">' + escapeHtml(event.notes) + '</p>' : '') +
-    '<p>' + (studio ? eventStatus[event.status] : '来自 iCloud') + '</p>' +
+    '<p>' + (studio ? eventStatusLabel(event) : '来自 iCloud') + '</p>' +
     (feedback ? '<p>' + feedback + '</p>' : '') +
     (launch || download || flag ? '<div class="widget-actions">' + launch + download + flag + '</div>' : '');
   if (!dialog.open) dialog.showModal();

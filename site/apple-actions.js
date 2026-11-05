@@ -1,6 +1,6 @@
-import { eventIcs } from './calendar-events.js';
+import { eventIcs, shortcutAttemptKey, shortcutChannel, shortcutReceiptKey } from './calendar-events.js';
 import { allCalendarEvents, canEdit, openReview, readReview, showEvent, updateReview } from './apple-view.js';
-import { loadFeed, loadPlanner, saveChanges, setSource } from './private-api.js';
+import { connection, loadFeed, loadPlanner, onPrivateChange, saveChanges, setSource } from './private-api.js';
 import { plannerRepository } from './repository.js';
 
 function currentEvent(app) {
@@ -34,6 +34,34 @@ async function changeSource(app, url, render) {
 }
 
 export function initAppleActions(app, render) {
+  const attempts = new Map();
+  if ('BroadcastChannel' in window) {
+    const channel = new BroadcastChannel(shortcutChannel);
+    channel.addEventListener('message', ({ data }) => {
+      const attempt = attempts.get(data?.eventId);
+      if (!attempt || attempt !== data.attempt || !['added', 'existing'].includes(data.result)) return;
+      attempts.delete(data.eventId);
+      plannerRepository.markDeviceResult(data.eventId, data.result);
+      const dialog = app.querySelector('[data-event-dialog][open]');
+      const item = dialog && currentEvent(app);
+      if (item?.id === data.eventId) showEvent(app, item);
+      else if (location.hash.startsWith('#/calendar') && !app.querySelector('dialog[open]')) render();
+    });
+  }
+  onPrivateChange(() => {
+    if (connection.mode !== 'private') return;
+    let receipt;
+    try {
+      const raw = sessionStorage.getItem(shortcutReceiptKey);
+      if (!raw) return;
+      sessionStorage.removeItem(shortcutReceiptKey);
+      receipt = JSON.parse(raw);
+      if (sessionStorage.getItem(shortcutAttemptKey) !== receipt.eventId + ':' + receipt.attempt) return;
+      sessionStorage.removeItem(shortcutAttemptKey);
+    } catch { return; }
+    plannerRepository.markDeviceResult(receipt.eventId, receipt.result);
+    render();
+  });
   app.addEventListener('click', async event => {
     const launch = event.target.closest('[data-shortcut-launch]');
     if (launch) {
@@ -45,6 +73,8 @@ export function initAppleActions(app, render) {
       }
       event.preventDefault();
       const destination = launch.href;
+      attempts.set(item.id, launch.dataset.shortcutLaunch);
+      try { sessionStorage.setItem(shortcutAttemptKey, item.id + ':' + launch.dataset.shortcutLaunch); } catch {}
       plannerRepository.markEvent(item.id, 'export_launched');
       // Launch synchronously inside the original user gesture.
       try {
