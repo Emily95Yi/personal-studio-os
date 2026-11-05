@@ -21,7 +21,6 @@
   --home-sky: #e6effb;
   --home-ridge: #d4e4f8;
   --home-haze: #edf4fd;
-  --home-frame-shadow: 0 18px 56px #365b8320;
   --home-card: rgb(255 255 255 / 56%);
   --serif: Georgia, "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
   background: var(--paper);
@@ -51,39 +50,33 @@ svg { flex: none; vertical-align: middle; }
 .page-note { color: var(--muted); margin-bottom: 14px; }
 
 #app[data-page=home] {
-  --frame-inset: clamp(14px, 3vw, 48px);
-  width: min(1440px, calc(100% - 2 * var(--frame-inset)));
-  min-height: calc(100vh - 2 * var(--frame-inset));
-  margin: var(--frame-inset) auto;
-  border: 1px solid var(--line);
-  border-radius: clamp(18px, 2vw, 28px);
+  min-height: 100svh;
   background:
     linear-gradient(to bottom, transparent 120px, var(--paper) min(70%, 570px)),
     radial-gradient(ellipse 90% 36% at 87% 70%, var(--home-haze) 98%, transparent),
     radial-gradient(ellipse 75% 39% at 76% 69%, var(--home-ridge) 98%, transparent),
     radial-gradient(ellipse 57% 26% at 6% 54%, var(--home-haze) 98%, transparent),
     linear-gradient(118deg, var(--paper) 10%, var(--home-sky) 77%, var(--home-haze));
-  box-shadow: var(--home-frame-shadow);
 }
-[data-page=home] .studio-top { border-radius: inherit; border-end-start-radius: 0; border-end-end-radius: 0; background: var(--home-card); }
-[data-page=home] :is(.masthead, .page-main) { width: 100%; padding-inline: clamp(16px, 3.6vw, 54px); }
-[data-page=home] .masthead { justify-content: space-between; min-height: clamp(62px, 6.5vw, 88px); }
+[data-page=home] .studio-top { border: 0; background: var(--home-card); }
+[data-page=home] :is(.masthead, .page-main) { width: min(100%, 1440px); padding-inline: clamp(16px, 3.6vw, 54px); }
+[data-page=home] .masthead { justify-content: space-between; min-height: clamp(60px, min(6.5vw, 12svh), 88px); }
 [data-page=home] .home-brand { font-size: clamp(22px, 2.4vw, 34px); font-weight: 450; }
-[data-page=home] .page-main { padding-block: clamp(80px, 12vw, 174px) clamp(28px, 5vw, 64px); }
+[data-page=home] .page-main { padding-block: clamp(28px, 10svh, 92px) clamp(16px, 4svh, 36px); }
 .workspace-entries {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-auto-rows: 1fr;
-  gap: clamp(20px, 2.4vw, 36px) clamp(12px, 1.6vw, 24px);
+  gap: clamp(20px, min(2.4vw, 5.5svh), 36px) clamp(12px, 1.6vw, 24px);
 }
 .workspace-entry {
   display: grid;
   align-content: center;
   justify-items: start;
   gap: clamp(12px, 1.4vw, 20px);
-  min-height: clamp(140px, 14vw, 204px);
+  min-height: clamp(124px, min(14vw, 30svh), 204px);
   padding: clamp(16px, 3.1vw, 48px);
-  padding-block: clamp(16px, 2.2vw, 34px);
+  padding-block: clamp(12px, min(2.2vw, 3svh), 34px);
   border: 1px solid var(--line);
   border-radius: clamp(16px, 1.6vw, 20px);
   background: var(--home-card);
@@ -93,7 +86,7 @@ svg { flex: none; vertical-align: middle; }
 .entry-icon {
   display: grid;
   place-items: center;
-  width: clamp(46px, 5vw, 68px);
+  width: clamp(46px, min(5vw, 12svh), 68px);
   aspect-ratio: 1;
   border: 1px solid var(--line);
   border-radius: 50%;
@@ -102,7 +95,7 @@ svg { flex: none; vertical-align: middle; }
 }
 .entry-icon svg { width: clamp(24px, 2.2vw, 30px); height: auto; }
 .entry-label {
-  font-size: clamp(19px, 2.35vw, 34px);
+  font-size: clamp(19px, min(2.35vw, 6svh), 34px);
   font-weight: 450;
   line-height: 1.18;
   letter-spacing: -.025em;
@@ -134,10 +127,10 @@ svg { flex: none; vertical-align: middle; }
 }
 @media (max-width: 500px) {
   .page-main { padding-top: 16px; }
-  [data-page=home] .page-main { padding-top: 62px; }
+  [data-page=home] .page-main { padding-top: clamp(18px, 5svh, 38px); }
   .workspace-entries { grid-template-columns: 1fr; grid-auto-rows: auto; row-gap: 12px; }
   .workspace-entry:not([href^="#/public/"]) + .workspace-entry[href^="#/public/"] { margin-top: 8px; }
-  .workspace-entry { min-height: 120px; }
+  .workspace-entry { min-height: clamp(98px, 17svh, 120px); gap: 9px; padding-block: 10px; }
 }
 
 .detail-stack { display: grid; gap: 12px; max-width: 680px; }
