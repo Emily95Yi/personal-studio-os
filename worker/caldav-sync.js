@@ -10,6 +10,7 @@ const statusLimit = 500;
 const retryDelay = 5 * 60 * 1000;
 export const caldavEnabled = env => env.CALDAV_ENABLED === 'true' &&
   /^[A-Za-z0-9+/]{43}=$/.test(env.CALDAV_ENCRYPTION_KEY ?? '');
+const allowedCalendar = (env, name) => !env.CALDAV_TEST_CALENDAR || name === env.CALDAV_TEST_CALENDAR;
 const readLease = 120_000;
 const asDate = date => Temporal.PlainDate.from(date).toZonedDateTime(zone).epochMilliseconds;
 const stmt = (db, sql, ...args) => db.prepare(sql).bind(...args);
@@ -56,7 +57,7 @@ export function createCalDavService({ provider = newCalDavClient, download = fet
 
   async function view(env, owner) {
     const row = await connect(env.DB, owner);
-    if (!row) return { enabled: true, configured: false, events: [], statuses: [] };
+    if (!row || !allowedCalendar(env, row.name)) return { enabled: true, configured: false, events: [], statuses: [] };
     const { results } = await stmt(env.DB, 'SELECT * FROM caldav_events WHERE owner = ? AND connection_id = ? LIMIT ?',
       owner, row.id, statusLimit).all();
     return {
@@ -75,9 +76,11 @@ export function createCalDavService({ provider = newCalDavClient, download = fet
     }
     try {
       const credentials = { email, password };
-      const calendars = (await provider(credentials).discover()).filter(row => row.writable !== false)
+      const calendars = (await provider(credentials).discover()).filter(row => row.writable !== false && allowedCalendar(env, row.name))
         .map(row => ({ ...row, id: crypto.randomUUID() }));
-      if (!calendars.length) return { error: 'no_writable_calendar', status: 422 };
+      if (!calendars.length || (env.CALDAV_TEST_CALENDAR && calendars.length !== 1)) {
+        return { error: 'no_writable_calendar', status: 422 };
+      }
       const sealed = await sealSource(env.CALDAV_ENCRYPTION_KEY, owner, JSON.stringify({ credentials, calendars }));
       await stmt(env.DB, 'INSERT OR REPLACE INTO caldav_setup VALUES (?, ?, ?)', owner, sealed, Date.now() + 600_000).run();
       return { calendars: calendars.map(({ id, name }) => ({ id, name })) };
@@ -92,7 +95,7 @@ export function createCalDavService({ provider = newCalDavClient, download = fet
     if (!setup) return { error: 'setup_expired', status: 409 };
     const { credentials, calendars } = await decrypt(env, owner, setup);
     const selected = calendars.find(row => row.id === id);
-    if (!selected) return { error: 'invalid_calendar', status: 400 };
+    if (!selected || !allowedCalendar(env, selected.name)) return { error: 'invalid_calendar', status: 400 };
     const fingerprint = await collectionKey(selected.href);
     const prior = await connect(db, owner);
     if (prior?.sealed) return { error: 'already_connected', status: 409 };
@@ -120,7 +123,7 @@ export function createCalDavService({ provider = newCalDavClient, download = fet
 
   async function enqueue(env, owner, events) {
     const row = await connect(env.DB, owner);
-    if (!row?.sealed) return;
+    if (!row?.sealed || !allowedCalendar(env, row.name)) return;
     // Only an explicit, new server-managed review is automatically queued.
     const entries = events.filter(event => event.syncMode === 'caldav');
     const db = env.DB;
@@ -146,7 +149,7 @@ export function createCalDavService({ provider = newCalDavClient, download = fet
     const db = env.DB;
     const row = await stmt(db, 'SELECT * FROM caldav_events WHERE owner = ? AND event_id = ?', owner, id).first();
     const config = await connect(db, owner);
-    if (!row || !config?.sealed || row.connection_id !== config.id) return { error: 'not_found', status: 404 };
+    if (!row || !config?.sealed || !allowedCalendar(env, config.name) || row.connection_id !== config.id) return { error: 'not_found', status: 404 };
     if (input?.version !== row.updated_at) return { error: 'event_changed', status: 409 };
     let next, reason;
     if (input?.action === 'stop' && ['pending', 'error'].includes(row.state)) {
@@ -267,7 +270,7 @@ export function createCalDavService({ provider = newCalDavClient, download = fet
   async function run(env, owner, { manual = false } = {}) {
     const db = env.DB;
     const row = await connect(db, owner);
-    if (!row?.sealed) return;
+    if (!row?.sealed || !allowedCalendar(env, row.name)) return;
     const now = Date.now();
     const queued = await stmt(db, "SELECT event_id FROM caldav_events WHERE owner = ? AND connection_id = ? AND state IN ('queued','delete_queued') LIMIT 1",
       owner, row.id).first();

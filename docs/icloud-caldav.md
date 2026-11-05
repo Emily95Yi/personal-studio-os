@@ -5,6 +5,7 @@
 先在隔离的 Access Worker 和新 D1 数据库中验收。沿用 Cloudflare Access JWT 校验，并设置不同于现网的 HTTPS 地址。应用 0001 和 0002 迁移，在测试 Worker 配置以下变量：
 
 - CALDAV_ENABLED 设置为字符串 true。
+- 在测试 Worker 设置 CALDAV_TEST_CALENDAR 为专用测试日历的准确名称。只有名称匹配的唯一可写日历可被选中。现网不需要此限制。
 - CALDAV_ENCRYPTION_KEY 设置为独立的 32 字节 Base64 Worker secret。ICS 订阅继续使用 ICAL_ENCRYPTION_KEY。
 - 如需在关闭浏览器后继续处理排队项目和清理过期的连接草稿，可为测试 Worker 配置每分钟 Cron。已有页面访问和保存请求也会触发处理。
 

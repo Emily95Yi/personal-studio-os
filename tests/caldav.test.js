@@ -137,10 +137,14 @@ test('private API queues, blocks overlapping calendars, retries, detects externa
   const prefix = 'calendar/caldav';
   const current = async id => (await service.view(env, 'alice')).statuses.find(row => row.id === id);
   const expire = () => sqlite.exec('UPDATE caldav_connections SET cache_at = 0, refresh_after = 0');
+  const restricted = { ...env, CALDAV_TEST_CALENDAR: 'Other fixture' };
+  assert.equal((await request(prefix + '/discover', 'POST', fakeCreds, 'alice', restricted)).status, 422);
   const config = await request(prefix + '/discover', 'POST', fakeCreds);
   assert.deepEqual(config.calendars.map(row => row.name), ['Studio Fixture']);
   assert.equal(JSON.stringify(config).includes(fakeCreds.password), false);
-  const selected = await request(prefix + '/select', 'POST', { id: config.calendars[0].id });
+  const calendarSelection = { id: config.calendars[0].id };
+  assert.equal((await request(prefix + '/select', 'POST', calendarSelection, 'alice', restricted)).status, 400);
+  const selected = await request(prefix + '/select', 'POST', calendarSelection, 'alice', { ...env, CALDAV_TEST_CALENDAR: 'Studio Fixture' });
   assert.equal(selected.configured, true);
   await flush();
   assert.equal((await request(prefix, 'GET', undefined, 'bob')).configured, false);
