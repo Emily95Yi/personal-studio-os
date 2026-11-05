@@ -8,7 +8,7 @@ const privateHeaders = {
   'Cache-Control': 'private, no-store',
   'Referrer-Policy': 'no-referrer',
   'X-Content-Type-Options': 'nosniff',
-  'Content-Security-Policy': "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'",
+  'Content-Security-Policy': "default-src 'self'; img-src 'self' data: https:; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'",
   'X-Robots-Tag': 'noindex',
 };
 

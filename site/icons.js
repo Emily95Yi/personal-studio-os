@@ -7,6 +7,11 @@ const paths = {
   globe: '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/>',
   back: '<path d="M20 12H5m5 5-5-5 5-5"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/>',
+  add: '<path d="M12 5v14M5 12h14"/>',
+  edit: '<path d="m14 6 4 4M4 20l4-1 12-12-4-4L4 15v5Z"/>',
+  remove: '<path d="M6 6l12 12M18 6 6 18"/>',
+  link: '<path d="M10 13a4 4 0 0 0 6 1l3-3a4 4 0 0 0-6-6l-2 2m2 4a4 4 0 0 0-6-1l-3 3a4 4 0 0 0 6 6l2-2"/>',
+  import: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/>',
   arrow: '<path d="M4 12h15m-5-5 5 5-5 5"/>',
 };
 

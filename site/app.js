@@ -1,7 +1,6 @@
 import { href, publicHref, readRoute } from './pages.js';
 import {
-  collectionView, contentDetail, eventDetail, landing, missingView, projectOverview,
-  projectSection, publicView, searchView, workshopGallery, workspaceOverview,
+  collectionView, contentDetail, landing, missingView, publicView, searchView, workspaceOverview,
 } from './views.js';
 import { icon } from './icons.js';
 import { escapeHtml } from './html.js';
@@ -12,9 +11,14 @@ import { calendarView, taskDialog } from './planner-view.js';
 import { allCalendarEvents, canEdit, eventDialog, reviewDialog, settingsView, showEvent, statusBanner } from './apple-view.js';
 import { connection, loadCalDav, loadFeed, loadPlanner, onPrivateChange } from './private-api.js';
 import { initAppleActions } from './apple-actions.js';
+import { eventDetail, projectOverview, workshopGallery } from './workshop-view.js';
+import { initWorkshopActions } from './workshop-actions.js';
+import { initStudioImport, studioImportView } from './studio-import-view.js';
+import { studioStore } from './studio-data.js';
 
 const app = document.querySelector('#app');
 let period = 'week';
+let studioStorageError = false;
 
 function pageContext(route) {
   const ancestors = [[href(), '首页']];
@@ -23,14 +27,13 @@ function pageContext(route) {
     ancestors.push([href(route.workspaceId, route.collectionId), route.collection.label]);
   }
   if (route.projectPath) ancestors.push([href(...route.projectPath), route.projectLabel]);
-  if (route.sectionPath && route.type !== 'event') ancestors.push([href(...route.sectionPath), route.section.label]);
   if (route.brand) ancestors.push([publicHref(route.brandId), route.brand.label]);
 
-  const isAncestorTitle = ['overview', 'workshop-gallery', 'collection', 'project', 'project-section'].includes(route.type) ||
+  const isAncestorTitle = ['overview', 'workshop-gallery', 'collection', 'project'].includes(route.type) ||
     (route.type === 'public' && route.pageId === 'home');
   const title = isAncestorTitle ? ancestors.pop()[1] :
     route.eventLabel ?? route.record?.title ?? route.page?.label ??
-    { home: '奕Studio', calendar: 'Calendar', settings: 'Settings', search: 'Search', missing: '页面未找到' }[route.type];
+    { home: '奕Studio', calendar: 'Calendar', settings: 'Settings', search: 'Search', 'workshop-import': '数据迁移', missing: '页面未找到' }[route.type];
   return { title, ancestors };
 }
 
@@ -69,7 +72,7 @@ const views = {
   settings: settingsView,
   collection: collectionView,
   project: projectOverview,
-  'project-section': projectSection,
+  'workshop-import': studioImportView,
   event: eventDetail,
   public: publicView,
   search: searchView,
@@ -90,13 +93,25 @@ function render({ focus = false } = {}) {
   document.title = context.title;
   app.dataset.page = route.type;
   app.dataset.space = route.type === 'public' ? 'public' : 'private';
+  const workshop = route.workspaceId === 'workshop';
+  const workshopBreadcrumb = workshop && (route.projectPath || route.type === 'workshop-import')
+    ? '<nav class="work-breadcrumb" aria-label="面包屑">' + context.ancestors.map(([address, label]) =>
+      '<a href="' + address + '">' + escapeHtml(label) + '</a>').join('<span aria-hidden="true">/</span>') + '</nav>' : '';
+  const storageWarning = studioStorageError && (workshop || route.collectionId === 'discover')
+    ? '<p class="work-error" role="alert">无法读取此浏览器的 Studio 数据。</p>' : '';
   app.innerHTML = '<a class="skip" href="#main">跳到内容</a>' + header(route, context) +
     '<main id="main" class="page-main" tabindex="-1"' +
     (route.type === 'home' ? '' : ' aria-label="' + escapeHtml(context.title) + '"') + '>' + publicNav(route) +
     (isPlannerPage ? '<div data-private-status>' + statusBanner() + '</div>' : '') +
-    views[route.type]({ ...route, period }) + '</main>' +
+    workshopBreadcrumb + storageWarning + views[route.type]({ ...route, period }) + '</main>' +
     (canEditTasks ? taskDialog() + reviewDialog() + eventDialog() : '') + (canEditPlans ? planDialog() : '');
-  if (focus) app.querySelector('main').focus({ preventScroll: true });
+  if (focus || route.documentId) {
+    const target = app.querySelector('[data-work-selected] > summary');
+    if (target) {
+      target.scrollIntoView({ block: 'nearest' });
+      target.focus({ preventScroll: true });
+    } else if (focus) app.querySelector('main').focus({ preventScroll: true });
+  }
 }
 
 app.addEventListener('click', event => {
@@ -338,7 +353,8 @@ onPrivateChange(() => {
   if (route.type === 'public') return;
   const status = app.querySelector('[data-private-status]');
   if (status) status.innerHTML = statusBanner();
-  if (modeChanged || (route.type === 'settings' && setupChanged)) {
+  if ((modeChanged && route.workspaceId !== 'workshop' && route.collectionId !== 'discover') ||
+      (route.type === 'settings' && setupChanged)) {
     render();
     return;
   }
@@ -363,6 +379,8 @@ function pollVisibleFeed() {
 }
 
 initAppleActions(app, render);
+initWorkshopActions(app, render);
+initStudioImport(app);
 window.addEventListener('hashchange', () => {
   window.scrollTo(0, 0);
   render({ focus: true });
@@ -370,5 +388,10 @@ window.addEventListener('hashchange', () => {
 });
 document.addEventListener('visibilitychange', pollVisibleFeed);
 setInterval(pollVisibleFeed, 30_000);
+try {
+  await studioStore.load();
+} catch {
+  studioStorageError = true;
+}
 render();
 enterPrivateSurface();

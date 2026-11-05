@@ -4,7 +4,7 @@ Home 页眉显示品牌及紧凑周历，下方分为 Private Workspace 和 Publ
 
 | 空间 | 入口 | 下一级 |
 |---|---|---|
-| Workshop | `/#/workshop` | Project Gallery → `/#/workshop/projects/:projectId`（Events Poster Gallery 和 Related Resources）→ `/#/workshop/projects/:projectId/events/:eventId` |
+| Workshop | `/#/workshop` | Project Gallery → `/#/workshop/projects/:projectId`（Events / 共通内容）→ `/#/workshop/projects/:projectId/events/:eventId` |
 | Career | `/#/career` | Exams & Practice、Resume & Experience |
 | Self-Board | `/#/self-board` | Discover、Experience、Reflect & Create、Auto |
 | Auto | `/#/self-board/auto` | `/#/self-board/auto/:planId`（计划、具体安排、完成记录、原始资源） |
@@ -27,11 +27,17 @@ Auto 负责规则，Calendar 负责日期。二者共用 `plannerRepository`：
 
 Home 默认展示东京当前周，周一至周日；可切换周并回到本周。点击日期打开当天，展开进入完整 Calendar。`/#/calendar?view=week&date=YYYY-MM-DD` 支持直接访问。视图或日期切换更新当前 URL，不增加历史记录。日期选择与比较基于东京民用日期，跨月跨年不依赖浏览器所在时区。Calendar 可从现有 Workshop 事件数据读取日期，并保留习惯打卡的读取接口。
 
-本机演示数据只存在当前标签页内存中，刷新后清除。配置私有 Worker 后，按 Access 用户持久化计划、Review 和日程。项目、活动和原始内容集合仍为空。Workshop 的预览卡只展示页面结构。
+本机 Auto 和 Calendar 演示数据存在当前标签页内存中。配置私有 Worker 后，按 Access 用户持久化计划、Review 和日程。
+
+## Workshop 与 Discover
+
+Project 可包含多个 Event。两层各自拥有 Markdown Session 和附件。Event 采用共通文档时记录 Project Session 和版本 ID，并保存当次快照。编辑产生新版本，Event Review 存在对应 Event 下。
+
+Discover 沿用 Self-Board 内容 ID、视图和卡片。通用 Relation 存储一条有类型的边，两个方向都可查看和编辑。Project 的 Event 派生关联只在读取时计算。Workshop 和 Discover 当前保存到浏览器 IndexedDB。导入使用本地预览及事务，见 [Workshop 数据迁移](workshop-migration.md)。
 
 ## 接入真实数据
 
 1. 在受控 API 中分别保存计划、日期安排和完成记录；分配稳定 ID，完成写入支持幂等，为单次编辑校验版本。
-2. Auto 和 Workshop 都按内容 ID 关联原始资料。项目资源模块保存稳定 ID、名称和顺序；活动引用可保存不可变版本或快照。
+2. Auto 按内容 ID 关联原始资料。Workshop 的资料关联与文档版本分别保存。
 3. 私人接口在服务端鉴权。公开网站只读取批准后的发布投影。内容类型、标签、关联、可见性及创作状态各自独立。
 4. Apple Calendar 使用服务端 ICS 读取及设备 Shortcut 写入。私有部署、确认状态及操作步骤见 [Apple Calendar 集成](apple-calendar-integration.md)。

@@ -9,13 +9,14 @@ npm run dev
 打开 http://127.0.0.1:4181。
 
 - Home 页眉的日历图标进入 Calendar。Calendar 按东京时区显示，默认 Week，可在同页切换 Day / Week / Month。
-- Workshop → Project Gallery → Events Poster Gallery → Event Detail。Related Resources 与海报在同一个 Project 页面。
+- Workshop → Project Gallery → Events / 共通内容 → Event Detail。共通文档可按版本采用，素材与 Wiki 在 Discover。
 - Self-Board 包含 Discover、Experience、Reflect & Create、Auto 四个 Widget。
 - Auto 支持单次计划、重复规则和周期次数目标。计划可以手动排到某天；从 Calendar 改期时只会改动该次安排。两处共用同一 Repository。
 
-Workshop 预览卡只用于展示结构。本机静态预览的 Auto 和 Calendar 编辑仅保存在当前页面内存。私有 Worker 配置完成后可保存计划并读取 iCloud 订阅。
+Workshop 和 Discover 保存到当前浏览器的 IndexedDB。可从 Workshop 的数据迁移入口加载测试数据。本机静态预览的 Auto 和 Calendar 编辑仅保存在当前页面内存。私有 Worker 配置完成后可保存计划并读取 iCloud 订阅。
 
 - [信息架构、旧链接兼容与数据边界](docs/architecture.md)
+- [Workshop 数据迁移](docs/workshop-migration.md)
 - [后续 Roadmap](docs/roadmap.md)
 
 Apple Calendar 的使用、私有部署和设备验收见 [集成指南](docs/apple-calendar-integration.md)。使用 Node.js 22.13 或更新版本执行 `npm ci` 和 `npm test`。

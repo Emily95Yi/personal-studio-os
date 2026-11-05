@@ -6,8 +6,7 @@ export const workspaces = {
     description: '围绕可重复使用的活动形式，积累实践与设计素材。',
     collections: {
       projects: {
-        label: 'Projects', zh: '活动形式与系列', empty: '还没有活动系列',
-        description: '每个 Project 代表一种可长期演进的活动形式，并可包含多个不同主题的 Event。',
+        label: 'Projects', zh: '活动形式与系列',
       },
     },
   },
@@ -46,36 +45,6 @@ export const workspaces = {
   },
 };
 
-// These entries configure the read-only structure preview. They are not stored records.
-export const workshopStructure = {
-  previewId: 'preview',
-  sections: {
-    events: {
-      label: 'Events', zh: '活动场次',
-      empty: '还没有 Event', description: '这里将列出实际举办或计划举办的活动。每个 Event 都有独立的主题、日期和历史。',
-    },
-    resources: {
-      label: 'Resources', zh: '设计素材与引用',
-      description: '这里收纳项目专属素材，也可以引用 Self-Board / Discover 的原始资料。资源模块按项目配置。',
-    },
-  },
-  eventSections: [
-    { label: 'Overview', zh: '基本信息', fields: [
-      { key: 'theme', label: '主题' }, { key: 'date', label: '日期' }, { key: 'location', label: '地点' },
-      { key: 'attendeeCount', label: '人数' }, { key: 'status', label: '状态' },
-    ] },
-    { label: 'Flow', zh: '活动流程', empty: '还没有流程记录。' },
-    { label: 'Poster & Media', zh: '海报与媒体', empty: '还没有海报或媒体。' },
-    { label: 'Reflection', zh: '总结与复盘', empty: '还没有复盘记录。' },
-  ],
-  defaultResourceModules: [
-    { id: 'guiding-questions', label: 'Guiding Questions', zh: '引导问题' },
-    { id: 'cards', label: 'Cards', zh: '卡牌及应用方法' },
-    { id: 'goals', label: 'Goals & Expected Outcomes', zh: '活动目的与预期效果' },
-    { id: 'references', label: 'References', zh: '理论、资料与外部链接' },
-  ],
-};
-
 export const brands = {
   yiqiyihui: {
     label: '一期一会 in Tokyo', entryLabel: '一期一会 InTokyo', icon: 'globe',
@@ -101,30 +70,25 @@ function missing(parent, parentLabel) {
   return { type: 'missing', parent, parentLabel };
 }
 
-function readProjectRoute(collectionRoute, [projectId, sectionId, eventId, ...rest]) {
-  const { previewId, sections } = workshopStructure;
-  const collectionPath = ['workshop', 'projects'];
-  const preview = projectId === previewId;
-  const project = preview ? undefined : workshopRepository.getProject(projectId);
-  if (!preview && !project) return missing(href(...collectionPath), collectionRoute.collection.label);
+function readProjectRoute(collectionRoute, [projectId, section, eventId, ...rest], params) {
+  const project = workshopRepository.getProject(projectId);
+  if (!project) return missing(href('workshop'), 'Workshop');
 
-  const projectPath = [...collectionPath, projectId];
-  const projectLabel = project?.title ?? 'Project 结构预览';
-  const route = { ...collectionRoute, type: 'project', project, projectPath, projectLabel, preview };
-  if (!sectionId) return route;
-  if (!Object.hasOwn(sections, sectionId)) return missing(href(...projectPath), projectLabel);
+  const projectPath = ['workshop', 'projects', projectId];
+  const projectLabel = project.title;
+  const route = { ...collectionRoute, type: 'project', project, projectPath, projectLabel };
+  if (!section) return route;
+  if (rest.length || (eventId && section !== 'events')) return missing(href(...projectPath), projectLabel);
+  if (section === 'resources') return { redirect: href(...projectPath, 'common') };
+  if (section === 'common') return {
+    ...route, tab: 'common', documentId: params.get('document'), versionId: params.get('version'),
+  };
+  if (section !== 'events') return missing(href(...projectPath), projectLabel);
+  if (!eventId) return { redirect: href(...projectPath) };
 
-  const section = sections[sectionId];
-  const sectionPath = [...projectPath, sectionId];
-  const sectionRoute = { ...route, type: 'project-section', section, sectionId, sectionPath };
-  if (!eventId) {
-    return sectionId === 'events' ? { ...route, redirect: href(...projectPath) } : sectionRoute;
-  }
-  if (sectionId !== 'events' || rest.length) return missing(href(...sectionPath), section.label);
-
-  const event = preview ? undefined : workshopRepository.getEvent(projectId, eventId);
-  if (preview ? eventId !== previewId : !event) return missing(href(...sectionPath), section.label);
-  return { ...sectionRoute, type: 'event', event, eventLabel: event?.title ?? 'Event 结构预览' };
+  const event = workshopRepository.getEvent(projectId, eventId);
+  if (!event) return missing(href(...projectPath), projectLabel);
+  return { ...route, type: 'event', event, eventLabel: event.title };
 }
 
 export function readRoute(hash) {
@@ -152,6 +116,9 @@ export function readRoute(hash) {
   if (Object.hasOwn(workspaces, root)) {
     const workspace = workspaces[root];
     if (!section) return { type: root === 'workshop' ? 'workshop-gallery' : 'overview', workspaceId: root, workspace };
+    if (root === 'workshop' && section === 'import' && !pageId) {
+      return { type: 'workshop-import', workspaceId: root, workspace };
+    }
     if (root === 'self-board' && ['sop-habits', 'to-do'].includes(section)) {
       return { redirect: href('self-board', 'auto') };
     }
@@ -160,7 +127,7 @@ export function readRoute(hash) {
       const route = { type: 'collection', workspaceId: root, workspace, collectionId: section, collection };
       if (root === 'workshop' && section === 'projects') {
         if (segments.length === 2) return { type: 'workshop-gallery', workspaceId: root, workspace, redirect: href(root) };
-        return readProjectRoute(route, segments.slice(2));
+        return readProjectRoute(route, segments.slice(2), new URLSearchParams(query));
       }
       if (segments.length === 2) return route;
       if (root === 'self-board' && section === 'auto' && segments.length === 3) {
