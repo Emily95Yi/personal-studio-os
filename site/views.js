@@ -10,16 +10,14 @@ function emptyState(title, description) {
 }
 
 function entry(address, area) {
-  return '<a class="workspace-entry ' + area.tone + '" href="' + address + '"><span class="entry-icon">' +
-    icon(area.icon, 20) + '</span><span><strong>' + area.label + '</strong></span>' +
-    icon('arrow', 18) + '</a>';
+  return '<a class="workspace-entry" href="' + address + '"><span class="entry-icon">' +
+    icon(area.icon, 26) + '</span><span class="entry-label">' + escapeHtml(area.entryLabel ?? area.label) + '</span></a>';
 }
 
 export function landing() {
-  return '<section class="landing-section" aria-labelledby="private-label"><h2 id="private-label">Private Workspace</h2><div class="workspace-entries">' +
-    Object.entries(workspaces).map(([id, area]) => entry(href(id), area)).join('') + '</div></section>' +
-    '<section class="landing-section" aria-labelledby="public-label"><h2 id="public-label">Public Space</h2><div class="workspace-entries">' +
-    Object.entries(brands).map(([id, area]) => entry(publicHref(id), area)).join('') + '</div></section>';
+  return '<nav class="workspace-entries" aria-label="工作台入口">' +
+    Object.entries(workspaces).map(([id, area]) => entry(href(id), area)).join('') +
+    Object.entries(brands).map(([id, area]) => entry(publicHref(id), area)).join('') + '</nav>';
 }
 
 function contentWidget(id, collection, overview = true) {

@@ -7,15 +7,14 @@ import { icon } from './icons.js';
 import { escapeHtml } from './html.js';
 import { autoPlanView, autoWidget, originalSource, planDialog } from './auto-view.js';
 import { plannerRepository, studioRepository } from './repository.js';
-import { calendarHref, calendarSelection, dateKey, movePeriod, parseDate, todayDate } from './calendar.js';
-import { calendarView, homeWeekWidget, taskDialog } from './planner-view.js';
+import { calendarHref, calendarSelection, dateKey, parseDate, todayDate } from './calendar.js';
+import { calendarView, taskDialog } from './planner-view.js';
 import { allCalendarEvents, canEdit, eventDialog, reviewDialog, settingsView, showEvent, statusBanner } from './apple-view.js';
 import { connection, loadCalDav, loadFeed, loadPlanner, onPrivateChange } from './private-api.js';
 import { initAppleActions } from './apple-actions.js';
 
 const app = document.querySelector('#app');
 let period = 'week';
-let homeWeek = todayDate();
 
 function pageContext(route) {
   const ancestors = [[href(), '首页']];
@@ -36,11 +35,13 @@ function pageContext(route) {
 }
 
 function header(route, { title, ancestors }) {
+  if (route.type === 'home') {
+    return '<header class="studio-top"><div class="masthead"><h1 class="home-brand">奕<span lang="en">Studio</span></h1>' +
+      '<div class="header-actions"><a class="header-icon" href="' + href('calendar') +
+      '" aria-label="打开 Calendar" title="Calendar">' + icon('calendar', 24) + '</a></div></div></header>';
+  }
   const [address, label] = route.parent ? [route.parent, route.parentLabel] : ancestors.at(-1);
-  const home = route.type === 'home';
-  const start = home ? '<h1 class="home-brand" aria-label="奕Studio"><span lang="zh-Hans" class="brand-yi">奕</span>' +
-    '<span lang="en" class="brand-studio">Studio</span></h1>' :
-    '<a class="header-icon back-link" href="' + address + '" aria-label="返回 ' + escapeHtml(label) +
+  const start = '<a class="header-icon back-link" href="' + address + '" aria-label="返回 ' + escapeHtml(label) +
     '" title="返回 ' + escapeHtml(label) + '">' + icon('back', 19) + '</a><h1>' + escapeHtml(title) + '</h1>';
   const calendar = route.type === 'auto-plan' ? '<a class="header-icon" href="' +
     escapeHtml(calendarHref(todayDate(), 'week', 'auto')) +
@@ -48,7 +49,7 @@ function header(route, { title, ancestors }) {
   const search = route.type === 'search' ? '' : '<a class="header-icon" href="' + href('search') +
     '" aria-label="搜索" title="搜索">' + icon('search', 18) + '</a>';
   return '<header class="studio-top"><div class="masthead">' + start + '<div class="header-actions">' + calendar + search +
-    '</div></div>' + (home ? '<div class="home-week-shell">' + homeWeekWidget(homeWeek) + '</div>' : '') + '</header>';
+    '</div></div></header>';
 }
 
 function publicNav(route) {
@@ -87,6 +88,7 @@ function render({ focus = false } = {}) {
   const canEditPlans = route.collectionId === 'auto';
   const isPlannerPage = canEditTasks || route.type === 'home';
   document.title = context.title;
+  app.dataset.page = route.type;
   app.dataset.space = route.type === 'public' ? 'public' : 'private';
   app.innerHTML = '<a class="skip" href="#main">跳到内容</a>' + header(route, context) +
     '<main id="main" class="page-main" tabindex="-1"' +
@@ -116,12 +118,6 @@ app.addEventListener('click', event => {
   }
   const button = event.target.closest('button');
   if (!button) return;
-  if (button.dataset.homeWeek) {
-    const direction = button.dataset.homeWeek;
-    homeWeek = direction === 'today' ? todayDate() : movePeriod(homeWeek, 'week', direction === 'next' ? 1 : -1);
-    app.querySelector('.home-week').outerHTML = homeWeekWidget(homeWeek);
-    app.querySelector('[data-home-week="' + direction + '"]').focus({ preventScroll: true });
-  }
   if (button.dataset.period) {
     period = button.dataset.period;
     button.closest('.widget-auto').outerHTML = autoWidget(period);
@@ -311,7 +307,7 @@ let lastFeed = connection.feed;
 let lastCalDav = connection.caldav;
 let lastSave = connection.save;
 
-function isCalendarSurface(route) { return ['home', 'calendar', 'settings'].includes(route.type); }
+function isCalendarSurface(route) { return route.type === 'calendar' || route.type === 'settings'; }
 
 function enterPrivateSurface() {
   const route = readRoute(location.hash);
@@ -352,18 +348,14 @@ onPrivateChange(() => {
     if (event) showEvent(app, event);
     else dialog.close();
   }
-  if (!feedChanged || !isCalendarSurface(route) || route.type === 'settings') return;
-  if (route.type === 'home') {
-    app.querySelector('.home-week').outerHTML = homeWeekWidget(homeWeek);
-  } else {
-    const active = document.activeElement;
-    const focusedRefresh = active?.hasAttribute('data-feed-refresh');
-    const focusedLink = active?.closest('main') ? active.getAttribute('href') : null;
-    app.querySelector('main').innerHTML = '<div data-private-status>' + statusBanner() + '</div>' + calendarView(route);
-    const next = focusedRefresh ? app.querySelector('[data-feed-refresh]') :
-      focusedLink ? [...app.querySelectorAll('main a')].find(link => link.getAttribute('href') === focusedLink) : null;
-    if (!app.querySelector('dialog[open]')) next?.focus({ preventScroll: true });
-  }
+  if (!feedChanged || route.type !== 'calendar') return;
+  const active = document.activeElement;
+  const focusedRefresh = active?.hasAttribute('data-feed-refresh');
+  const focusedLink = active?.closest('main') ? active.getAttribute('href') : null;
+  app.querySelector('main').innerHTML = '<div data-private-status>' + statusBanner() + '</div>' + calendarView(route);
+  const next = focusedRefresh ? app.querySelector('[data-feed-refresh]') :
+    focusedLink ? [...app.querySelectorAll('main a')].find(link => link.getAttribute('href') === focusedLink) : null;
+  if (!app.querySelector('dialog[open]')) next?.focus({ preventScroll: true });
 });
 
 function pollVisibleFeed() {

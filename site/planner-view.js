@@ -96,32 +96,3 @@ export function taskDialog() {
     '<button type="button" class="action-button secondary" data-task-review hidden>Review</button>' +
     '<button type="submit" class="action-button">保存</button></div></form></dialog>';
 }
-
-export function homeWeekWidget(date = todayDate()) {
-  const days = calendarDays(date, 'week');
-  const start = dateKey(days[0]);
-  const end = dateKey(days.at(-1));
-  const tasks = calendarTasks(start, end);
-  const appointments = allCalendarEvents();
-  const events = workshopRepository.eventsBetween(start, end);
-  const checkIns = plannerRepository.checkInsBetween(start, end);
-  const links = days.map((day, index) => {
-    const key = dateKey(day);
-    const count = tasks.filter(item => item.date === key).length + events.filter(item => item.date === key).length +
-      appointments.filter(event => onDay(event, key)).length +
-      Number(checkIns.includes(key));
-    return '<a class="home-week-day" href="' + escapeHtml(calendarHref(day, 'day')) +
-      '" aria-label="' + formatDay(day) + (count ? '，' + count + ' 项安排' : '') + '"' +
-      (key === dateKey() ? ' aria-current="date"' : '') + '><small>周' + weekdays[index] + '</small><strong>' +
-      (day.getUTCMonth() + 1) + '/' + day.getUTCDate() + '</strong><span aria-hidden="true">' +
-      (count ? '• ' + count : '') + '</span></a>';
-  }).join('');
-  return '<section class="home-week" aria-label="周历"><div class="home-week-top"><div class="calendar-controls">' +
-    '<button type="button" data-home-week="previous" aria-label="前一周">‹</button>' +
-    '<button type="button" data-home-week="today">本周</button>' +
-    '<button type="button" data-home-week="next" aria-label="后一周">›</button></div>' +
-    '<span class="home-week-range">' + start + ' — ' + end + '</span>' +
-    '<a class="header-icon" href="' + escapeHtml(calendarHref(date)) + '" aria-label="展开 Calendar">' +
-    '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">' +
-    '<path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4"/></svg></a></div><div class="home-week-days">' + links + '</div></section>';
-}

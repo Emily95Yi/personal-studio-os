@@ -2,7 +2,7 @@ import { plannerRepository, selfBoardIncludes, studioRepository, workshopReposit
 
 export const workspaces = {
   workshop: {
-    label: 'Workshop', icon: 'workshop', tone: 'sage',
+    label: 'Workshop', icon: 'workshop',
     description: '围绕可重复使用的活动形式，积累实践与设计素材。',
     collections: {
       projects: {
@@ -12,7 +12,7 @@ export const workspaces = {
     },
   },
   career: {
-    label: 'Career', icon: 'career', tone: 'sand',
+    label: 'Career', icon: 'career',
     description: '为职业发展积累资格学习、工作经验和专业技能。',
     collections: {
       'exams-practice': {
@@ -26,7 +26,7 @@ export const workspaces = {
     },
   },
   'self-board': {
-    label: 'Self-Board', icon: 'self', tone: 'lilac',
+    label: 'Self-Board', icon: 'self',
     description: '积累兴趣、体验生活、记录创作，也照顾日常行动。',
     collections: {
       discover: {
@@ -78,7 +78,7 @@ export const workshopStructure = {
 
 export const brands = {
   yiqiyihui: {
-    label: '一期一会 in Tokyo', icon: 'globe', tone: 'clay',
+    label: '一期一会 in Tokyo', entryLabel: '一期一会 InTokyo', icon: 'globe',
     description: '东京线下活动与公开内容。',
     pages: {
       home: { label: 'Home', zh: '首页', empty: '还没有发布内容', description: '这里将展示品牌动态和新发布的内容。' },

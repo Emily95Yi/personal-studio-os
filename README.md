@@ -8,7 +8,7 @@ npm run dev
 
 打开 http://127.0.0.1:4181。
 
-- Home 页眉含品牌和东京时区周历。日期直达当天，展开按钮进入完整 Calendar。Calendar 默认 Week，可在同页切换 Day / Week / Month。
+- Home 页眉的日历图标进入 Calendar。Calendar 按东京时区显示，默认 Week，可在同页切换 Day / Week / Month。
 - Workshop → Project Gallery → Events Poster Gallery → Event Detail。Related Resources 与海报在同一个 Project 页面。
 - Self-Board 包含 Discover、Experience、Reflect & Create、Auto 四个 Widget。
 - Auto 支持单次计划、重复规则和周期次数目标。计划可以手动排到某天；从 Calendar 改期时只会改动该次安排。两处共用同一 Repository。
