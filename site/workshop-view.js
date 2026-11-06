@@ -1,17 +1,20 @@
 import { escapeHtml as esc, safeUrl } from './html.js';
 import { icon } from './icons.js';
-import { boardContentHref, href } from './pages.js';
+import { boardContentHref, collectionItemAddress, explorationAddress, href } from './pages.js';
 import { workshopRepository } from './repository.js';
 import { contentTitle, currentVersion, eventSections, imageTypes, objectFor, projectSections, relatedObjects,
   reusableFor, sessionsFor, studioStore } from './studio-data.js';
 
-export const objectLabels = { project: 'Project', event: 'Event', discover: 'Self-board' };
+export const objectLabels = { project: 'Project', event: 'Event', discover: 'Self-board', topic: 'Personal Explorations',
+  'collection-item': 'Collections' };
 export const eventFields = {
   theme: '本场主题', date: '日期', time: '时间', location: '地点', attendeeCount: '人数', fee: '费用',
 };
 
 export function objectHref(type, item) {
   if (type === 'discover') return boardContentHref(item.id);
+  if (type === 'topic') return explorationAddress(item.id);
+  if (type === 'collection-item') return collectionItemAddress(item.id);
   if (type === 'event') return href('workshop', 'projects', item.projectId, 'events', item.id);
   return href('workshop', 'projects', item.id);
 }
@@ -231,7 +234,7 @@ export function relatedPanel(type, id) {
     (edge.relationType === 'related' ? '' : ' · ' + esc(edge.relationType)) + '</small></div><div class="work-actions">' +
     smallAction('edit', '编辑关联', 'data-work-relation="' + esc(edge.id) + '"') +
     smallAction('remove', '移除关联', 'data-work-unlink="' + esc(edge.id) + '"') + '</div></li>');
-  const indirect = derived.map(({ item, via }) => '<li><div><a href="' + objectHref('discover', item) + '">' +
+  const indirect = derived.map(({ type: key, item, via }) => '<li><div><a href="' + objectHref(key, item) + '">' +
     esc(contentTitle(item)) + '</a><small>经由 ' + via.map(event => '<a href="' + objectHref('event', event) + '">' +
     esc(event.title) + '</a>').join('、') + '</small></div></li>');
   return '<section class="work-related"><div class="section-heading work-heading"><h2>' + label + '</h2>' +

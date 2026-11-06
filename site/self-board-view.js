@@ -6,6 +6,8 @@ import { boardContent, boardFolderPath, boardRecords, boardSection, canAddSubfol
   isPublished, isWriting, matchContent, pinnedBoardFolders, reflectionColors, relationTypes, resourceKey } from './self-board-data.js';
 import { contentTitle, isSelfBoard, objectFor, relatedObjects, studioStore } from './studio-data.js';
 import { attachments, imageUrl, markdown, objectHref, objectLabels, timestamp } from './workshop-view.js';
+import { itemsFor, libraryMatches, topicsFor } from './board-library-data.js';
+import { collectionDetail, collectionsView, discoverTabs, explorationsView, topicDetail } from './board-library-view.js';
 
 const state = () => studioStore.state;
 const date = item => (item.date || item.createdAt || item.updatedAt || '').slice(0, 10);
@@ -187,7 +189,7 @@ function relationObjects(filters) {
     if (!source || !target || source.deletedAt || target.deletedAt ||
         (filters.relation && filters.relation !== edge.relationType)) return [];
     const matches = (type, item) => matchContent(type === 'discover' ? boardContent(item) : {
-      ...item, type, body: [item.theme, item.description].filter(Boolean).join(' '), topics: item.tags ?? [],
+      ...item, type, body: [item.theme, item.description, item.notes, item.url].filter(Boolean).join(' '), topics: item.tags ?? [],
     }, filters);
     return matches(edge.sourceType, source) || matches(edge.targetType, target) ? [{ edge, source, target }] : [];
   });
@@ -242,6 +244,26 @@ function pinFolderIcon(folder) {
   });
 }
 
+function deleteFolderIcon(folder) {
+  return boardIcon('删除文件夹 ' + folder.title, 'trash', {
+    data: 'data-sb-delete-folder="' + esc(folder.id) + '"', className: 'sb-icon-plain',
+  });
+}
+
+export function wikiSearchResults(route, query) {
+  const text = query.trim();
+  if (!text) return '';
+  const category = route.params.get('category');
+  const folderId = route.params.get('folder');
+  const rows = boardRecords(state()).filter(item => boardSection(item) === 'discover' &&
+    (!category || discoverCategory(item) === category) &&
+    (!folderId || item.folderId === folderId ||
+      (state().boardFolders ?? []).some(folder => folder.id === item.folderId && folder.parentId === folderId)) &&
+    matchContent(item, { query: text }));
+  return rows.length ? '<p class="sb-results-count">' + rows.length + ' 条结果</p>' + rowList(rows, 'discover') :
+    empty('没有匹配的 Wiki 条目', '试试其他关键词，或回到全部知识条目。');
+}
+
 function discoverView(route, items) {
   const folders = state().boardFolders ?? [];
   const directory = discoverDirectory(items, folders);
@@ -274,15 +296,18 @@ function discoverView(route, items) {
       '<a href="' + esc(discoverAddress(current?.name === name ? '' : name)) + '"' +
       (current?.name === name ? ' aria-current="page"' : '') +
       '><strong>' + esc(name) + '</strong><span>' + esc(description) + '</span><small>' + count + ' 条</small></a>').join('') +
-    '</nav><div class="sb-list-heading sb-section-toolbar"><div class="sb-discover-location"><h3>' + title + '</h3>' +
+    '</nav><form class="work-filters library-filters library-wiki-search" data-sb-wiki-search role="search">' +
+    '<input type="search" name="query" placeholder="搜索 Workshop Wiki…" aria-label="搜索 Workshop Wiki"></form>' +
+    '<div data-sb-wiki-results aria-live="polite" hidden></div><div data-sb-wiki-directory>' +
+    '<div class="sb-list-heading sb-section-toolbar"><div class="sb-discover-location"><h3>' + title + '</h3>' +
     (folder ? pinFolderIcon(folder) : '') +
     '</div><div class="sb-view-actions">' + actions + '</div></div>' +
     (children.length ? '<ul class="sb-rows sb-folders">' + children.map(row => '<li><a class="sb-row" href="' +
       esc(discoverAddress(row.category, row.id)) + '"><span>' + icon('folder', 18) + ' ' + esc(row.title) + '</span>' +
       '<span class="sb-folder-arrow">' + icon('arrow', 14) + '</span></a>' +
-      pinFolderIcon(row) + renameFolderIcon(row, '重命名 ' + row.title) + '</li>').join('') + '</ul>' : '') +
+      pinFolderIcon(row) + renameFolderIcon(row, '重命名 ' + row.title) + deleteFolderIcon(row) + '</li>').join('') + '</ul>' : '') +
     (rows.length ? rowList(rows, 'discover') : children.length ? '' :
-      empty('这里还没有文件', '可以新建文件，或导入链接和附件。'));
+      empty('这里还没有文件', '可以新建文件，或导入链接和附件。')) + '</div>';
 }
 
 function heading(title, description, actions = '') {
@@ -315,8 +340,16 @@ function searchResults(query) {
     const item = { ...event, type: 'event', body: [event.theme, event.description, event.location].filter(Boolean).join(' · '), topics: event.tags ?? [] };
     if (matchContent(item, { query })) items.push(item);
   }
-  return items.length ? '<p class="sb-results-count">' + items.length + ' 条结果</p>' + groupedRows(items,
-    row => row.type === 'event' ? 'Workshop' : boardSections[boardSection(row)].label) :
+  const library = [
+    ['topic', topicsFor(state()).filter(row => libraryMatches(row, ['title', 'description'], query))],
+    ['collection-item', itemsFor(state()).filter(row => libraryMatches(row, ['title', 'description', 'notes', 'url'], query))],
+  ];
+  const total = items.length + library.reduce((count, [, rows]) => count + rows.length, 0);
+  return total ? '<p class="sb-results-count">' + total + ' 条结果</p>' + groupedRows(items,
+    row => row.type === 'event' ? 'Workshop' : boardSections[boardSection(row)].label) +
+    library.filter(([, rows]) => rows.length).map(([type, rows]) => '<section class="sb-group"><h3>' + objectLabels[type] +
+      '<small>' + rows.length + '</small></h3><ul class="sb-rows">' + rows.map(row => '<li><a class="sb-row" href="' +
+      esc(objectHref(type, row)) + '">' + titleOf(row) + '</a></li>').join('') + '</ul></section>').join('') :
     empty('没有匹配的内容', '换个关键词，或尝试用标题、标签或正文中的词来找。');
 }
 
@@ -341,7 +374,7 @@ export function boardView(route) {
     const label = writing ? '新建文章' : '新建文件';
     const category = writing ? null : params.get('category');
     const folder = category && (state().boardFolders ?? []).find(row => row.id === params.get('folder') && row.category === category);
-    return '<section class="sb"><article class="work-reading sb-reader" data-sb-create-editor>' +
+    return '<section class="sb">' + (writing ? '' : discoverTabs()) + '<article class="work-reading sb-reader" data-sb-create-editor>' +
       '<nav class="work-breadcrumb sb-breadcrumb" aria-label="面包屑"><a href="' + boardHref() +
       '">Self-Board</a>' + crumb + '<a href="' + boardHref(section) + '">' + boardSections[section].label + '</a>' +
       (category ? crumb + discoverTrail(category, folder) : '') +
@@ -356,8 +389,12 @@ export function boardView(route) {
     const rows = view === 'inbox' ? items.filter(row => row.status === 'inbox') :
       view === 'archived' ? boardRecords(state(), true).filter(row => row.status === 'archived') : items.slice(0, 5);
     const trash = state().content.filter(row => isSelfBoard(row) && row.deletedAt);
-    const trashList = trash.length ? '<ul class="sb-relations">' + trash.map(row =>
-      '<li><strong>' + titleOf(row) + '</strong>' + button('恢复记录', 'data-sb-recover="' + esc(row.id) + '"') + '</li>').join('') + '</ul>' :
+    const libraryTrash = [['topic', state().explorationTopics], ['collection-item', state().collectionItems]]
+      .flatMap(([type, records]) => records.filter(row => row.deletedAt).map(row =>
+        '<li><strong>' + titleOf(row) + '</strong>' + button('恢复记录', 'data-library="recover" data-type="' + type +
+          '" data-id="' + esc(row.id) + '"') + '</li>')).join('');
+    const trashList = trash.length || libraryTrash ? '<ul class="sb-relations">' + trash.map(row =>
+      '<li><strong>' + titleOf(row) + '</strong>' + button('恢复记录', 'data-sb-recover="' + esc(row.id) + '"') + '</li>').join('') + libraryTrash + '</ul>' :
       empty('回收站为空', '删除的记录可以在这里恢复。');
     content = '<div class="sb-list-heading"><h3>' + (archiveViews[view] ?? '最近更新') + '</h3>' + homeTools(view) + '</div>' +
       (view === 'trash' ? trashList : rows.length ? rowList(rows) : empty('这里还没有记录', '可以从 Quick Capture 开始。')) +
@@ -381,7 +418,10 @@ export function boardView(route) {
       orderControls() + create + '</div></div>' +
       (rows.length ? reflectionCards(rows) : empty('这里还没有记录', '可以先记下一句话。'));
   } else if (section === 'discover') {
-    content = discoverView(route, items.filter(item => boardSection(item) === section));
+    content = discoverTabs(route.tab) + (route.entity ? topicDetail(route.record, libraryRelations('topic', route.record)) :
+      route.tab === 'explorations' ? explorationsView() : discoverView(route, items.filter(item => boardSection(item) === section)));
+  } else if (section === 'collections') {
+    content = route.entity ? collectionDetail(route.record, libraryRelations('collection-item', route.record)) : collectionsView(route);
   } else if (section === 'connections') {
     content = heading('Network', '', boardIcon('新增关联', 'add', { data: 'data-sb-relation' })) +
       '<div class="sb-network-tools">' +
@@ -399,16 +439,25 @@ export function boardView(route) {
   return '<section class="sb" data-sb>' + utilities + '<section class="sb-content">' + content + '</section></section>';
 }
 
-function boardRelations(item) {
-  const rows = relatedTo(item.id);
-  return '<div class="sb-related-body">' + boardIcon('新增关联', 'add', { data: 'data-sb-relation data-sb-source="' + esc(item.id) + '"' }) +
+function boardRelations(item, ownerType = 'discover') {
+  const rows = relatedObjects(state(), ownerType, item.id).direct;
+  const refs = state().explorationEntries.filter(row => row.reference?.type === ownerType && row.reference.id === item.id);
+  const usedBy = [...new Set(refs.map(row => row.topicId))].map(id => objectFor(state(), 'topic', id)).filter(row => row && !row.deletedAt);
+  const backlinks = usedBy.length ? '<p class="work-meta">作为 Reference 被引用于：</p><ul class="work-relations">' +
+    usedBy.map(topic => '<li><a href="' + esc(objectHref('topic', topic)) + '">' + titleOf(topic) + '</a></li>').join('') + '</ul>' : '';
+  return '<div class="sb-related-body">' + boardIcon('新增关联', 'add', { data: 'data-sb-relation data-sb-source="' + esc(item.id) +
+    '" data-sb-source-type="' + ownerType + '"' }) +
     (rows.length ? '<ul class="work-relations" aria-label="直接关联">' + rows.map(({ edge, type, item: target }) => {
-      const outgoing = edge.sourceType === 'discover' && edge.sourceId === item.id;
+      const outgoing = edge.sourceType === ownerType && edge.sourceId === item.id;
       return '<li><div><a href="' + objectHref(type, target) + '">' + titleOf(target) +
         '</a><small>' + esc([relationName(edge.relationType, outgoing), labelFor(type, target)].join(' · ')) + '</small></div>' +
         '<div class="work-actions">' + relationActions(edge.id) + '</div></li>';
     }).join('') + '</ul>' :
-    '<p class="work-meta">还没有相关内容。</p>') + '</div>';
+    '<p class="work-meta">还没有直接关联。</p>') + backlinks + '</div>';
+}
+
+function libraryRelations(type, item) {
+  return '<details class="sb-related" open><summary>Related Content</summary>' + boardRelations(item, type) + '</details>';
 }
 
 function reviewPanel(item) {

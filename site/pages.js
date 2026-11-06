@@ -1,4 +1,4 @@
-import { contentTitle } from './studio-data.js';
+import { contentTitle, objectFor, studioStore } from './studio-data.js';
 import { plannerRepository, selfBoardIncludes, studioRepository, workshopRepository } from './repository.js';
 
 export const workspaces = {
@@ -51,7 +51,8 @@ export const workspaces = {
 export const boardSections = {
   writing: { label: 'Writing', zh: '文章与作品', icon: 'edit', description: '写作、编辑与版本审阅' },
   reflections: { label: 'Reflections', zh: '想法与灵感', icon: 'self', description: '随手记录，留一点空间给未完成的想法' },
-  discover: { label: 'Discover', zh: '个人知识库', icon: 'globe', description: '收录资料、方法与可以再用的经验' },
+  discover: { label: 'Discover', zh: '知识与探索', icon: 'globe', description: '浏览 Workshop Wiki，持续探索个人主题' },
+  collections: { label: 'Collections', zh: '生活收藏', icon: 'folder', description: '收好想读、想去、想体验的事物' },
 };
 
 const boardViews = {
@@ -64,6 +65,15 @@ const boardViews = {
 export const boardHref = (section, view) => href('self-board', ...(section ? [section] : [])) +
   (view ? '?view=' + encodeURIComponent(view) : '');
 export const boardContentHref = id => href('self-board', 'content', id);
+export const explorationAddress = id => id ? href('self-board', 'explorations', id) : boardHref('discover') + '?tab=explorations';
+export const collectionItemAddress = id => href('self-board', 'collections', id);
+export function collectionsAddress({ category = 'all', folder = '', mode = '' } = {}) {
+  const query = new URLSearchParams();
+  if (category !== 'all') query.set('category', category || 'inbox');
+  if (folder) query.set('folder', folder);
+  if (mode === 'list') query.set('mode', mode);
+  return boardHref('collections') + (query.size ? '?' + query : '');
+}
 
 export function discoverAddress(category, folderId, creating = false) {
   const query = new URLSearchParams(creating ? { view: 'new' } : undefined);
@@ -85,6 +95,19 @@ function boardRoute(workspace, section, id, params) {
     return { ...base, type: 'board', view: section, parent: boardSettingsParent(params), parentLabel: '上一页' };
   }
   if (section === 'writing' && id === 'new') return { ...base, type: 'board', view: 'new' };
+  if (section === 'discover' && !id && params.get('tab') === 'explorations') {
+    return { ...base, type: 'board', tab: 'explorations' };
+  }
+  if (section === 'collections' && !id) return { ...base, type: 'board' };
+  if (id && ['explorations', 'collections'].includes(section)) {
+    const topic = section === 'explorations';
+    const entity = topic ? 'topic' : 'collection-item';
+    const record = objectFor(studioStore.state, entity, id);
+    const parent = topic ? explorationAddress() : collectionsAddress({ category: record?.categoryId, folder: record?.folderId });
+    const parentLabel = topic ? 'Personal Explorations' : 'Collections';
+    return record && !record.deletedAt ? { ...base, section: topic ? 'discover' : section, type: 'board',
+      tab: topic ? 'explorations' : undefined, entity, record, parent, parentLabel } : missing(parent, parentLabel);
+  }
   if (section === 'discover' && !id && params.get('view') === 'new') {
     return { ...base, type: 'board', view: 'new', parent: discoverAddress(params.get('category'), params.get('folder')),
       parentLabel: 'Discover' };

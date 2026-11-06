@@ -1,6 +1,8 @@
 import { canRelate, collections, currentVersion, eventSections, imageTypes, isSelfBoard, maxAssetBytes,
   objectFor, projectSections, relationKey, validImage } from './studio-data.js';
-import { canAddSubfolder, contentTypes, discoverCategory, exerciseFields, isDiscoverType, reflectionColors, provenances, statuses, visibilities } from './self-board-data.js';
+import { boardRecords, boardSection, canAddSubfolder, contentTypes, discoverCategory, exerciseFields, isDiscoverType,
+  reflectionColors, provenances, resourceKey, statuses, visibilities } from './self-board-data.js';
+import { categoryFor, categoryList, entryTypes, isDefaultCategory, resourceTypes, validEntryTarget } from './board-library-data.js';
 import { safeUrl } from './html.js';
 
 export const transferFormat = 'yistudio-transfer-v1';
@@ -107,6 +109,63 @@ function optionalFields(row, fields, label) {
 
 function optionalList(row, key, label) {
   require(row[key] == null || (Array.isArray(row[key]) && row[key].every(nonempty)), label + ' 的 ' + key + ' 须为文字列表。');
+}
+
+function validateLibrary(state) {
+  const title = (row, length) => require(nonempty(row.title) && row.title.length <= length, '名称无效：' + row.id);
+  const rank = row => require(Number.isSafeInteger(row.order) && row.order >= 0, '排序无效：' + row.id);
+  const categoryNames = new Set(['inbox']);
+  for (const row of state.collectionCategories) {
+    title(row, 100);
+    rank(row);
+    require(row.id !== 'all' && row.id !== 'inbox' && typeof row.hidden === 'boolean' &&
+      (row.removed == null || (row.removed === true && isDefaultCategory(row.id))) &&
+      Array.isArray(row.statuses) && row.statuses.every(value => nonempty(value) && value.length <= 60),
+    '收藏分类或状态无效：' + row.title);
+  }
+  for (const row of categoryList(state)) {
+    const name = row.title.trim().toLowerCase();
+    require(!categoryNames.has(name), '有同名的收藏分类：' + row.title);
+    categoryNames.add(name);
+  }
+  const folders = new Map();
+  for (const row of state.collectionFolders) {
+    title(row, 100);
+    optionalFields(row, ['createdAt', 'updatedAt'], row.title);
+    require(nonempty(row.categoryId) && categoryFor(state, row.categoryId), '收藏文件夹缺少所属分类：' + row.title);
+    folders.set(row.id, row);
+  }
+  const urls = new Set(boardRecords(state, true).filter(row => boardSection(row) === 'discover')
+    .map(row => resourceKey(row.sourceUrl)).filter(Boolean));
+  for (const row of state.collectionItems) {
+    title(row, 200);
+    optionalFields(row, ['description', 'notes', 'coverUrl', 'url', 'status', 'folderId', 'createdAt', 'updatedAt', 'deletedAt'], row.title);
+    optionalList(row, 'tags', row.title);
+    require(Array.isArray(row.tags) && typeof row.categoryId === 'string' && categoryFor(state, row.categoryId) &&
+      (!row.folderId || folders.get(row.folderId)?.categoryId === row.categoryId) && has(resourceTypes, row.resourceType) &&
+      (!row.coverUrl || resourceKey(row.coverUrl).startsWith('https:')), '收藏的分类、文件夹、封面或资源类型无效：' + row.title);
+    if (row.url) {
+      const key = resourceKey(row.url);
+      require(key && (row.deletedAt || !urls.has(key)), '收藏链接无效或已存在：' + row.title);
+      if (!row.deletedAt) urls.add(key);
+    }
+  }
+  for (const row of state.explorationTopics) {
+    title(row, 200);
+    optionalFields(row, ['description', 'icon', 'coverUrl', 'createdAt', 'updatedAt', 'deletedAt'], row.title);
+    optionalList(row, 'tags', row.title);
+    require(Array.isArray(row.tags) && (!row.icon || row.icon.length <= 16) &&
+      (!row.coverUrl || resourceKey(row.coverUrl).startsWith('https:')), '探索主题的标签、图标或封面无效：' + row.title);
+  }
+  for (const row of state.explorationEntries) {
+    title(row, 200);
+    rank(row);
+    optionalFields(row, ['body', 'url', 'createdAt', 'updatedAt'], row.title);
+    require(objectFor(state, 'topic', row.topicId) && has(entryTypes, row.type) &&
+      (!row.url || (row.type === 'reference' && resourceKey(row.url))) &&
+      (!row.reference || (row.type === 'reference' && plain(row.reference) && validEntryTarget(state, row.topicId, row.reference))),
+    '探索条目的主题、类型或引用无效：' + row.title);
+  }
 }
 
 function validateRecords(state) {
@@ -233,6 +292,7 @@ function validateRecords(state) {
     require(!edges.has(pair), '同一对对象有重复关联：' + edge.id);
     edges.add(pair);
   }
+  validateLibrary(state);
 }
 
 export function previewMigration(state, transfer, retained = []) {
@@ -271,7 +331,8 @@ export function previewMigration(state, transfer, retained = []) {
   if (!conflicts.length) validateRecords(next);
   return { next, counts, additions, conflicts, retained, integrity: {
     images: next.assets.filter(asset => imageTypes.includes(asset.mime)).length,
-    covers: [...next.projects, ...next.events, ...next.content].filter(row => row.coverAssetId || row.coverUrl || row.posterUrl).length,
+    covers: [...next.projects, ...next.events, ...next.content, ...next.collectionItems, ...next.explorationTopics]
+      .filter(row => row.coverAssetId || row.coverUrl || row.posterUrl).length,
     versions: next.sessions.reduce((total, session) => total + (session.versions?.length ?? 0), 0),
     relations: next.relations.length,
   } };

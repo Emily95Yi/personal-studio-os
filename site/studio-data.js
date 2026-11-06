@@ -26,8 +26,11 @@ export const eventSections = {
 };
 
 export const reusableSections = ['flow', 'facilitation', 'questions', 'visual', 'playbook', 'session'];
-export const collections = ['projects', 'events', 'content', 'sessions', 'relations', 'assets', 'boardFolders', 'reflectionLabels'];
-const objectCollections = { project: 'projects', event: 'events', discover: 'content' };
+export const collections = ['projects', 'events', 'content', 'sessions', 'relations', 'assets', 'boardFolders', 'reflectionLabels',
+  'collectionCategories', 'collectionFolders', 'collectionItems', 'explorationTopics', 'explorationEntries'];
+export const relationObjectTypes = ['discover', 'topic', 'collection-item', 'project', 'event'];
+const objectCollections = { project: 'projects', event: 'events', discover: 'content',
+  topic: 'explorationTopics', 'collection-item': 'collectionItems' };
 export const maxAssetBytes = 12 * 1024 * 1024;
 export const imageTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'];
 
@@ -41,8 +44,12 @@ const fail = message => { throw new Error(message); };
 const find = (rows, id) => rows.find(item => item.id === id);
 
 export function objectFor(state, type, id) {
-  return Object.hasOwn(objectCollections, type) ? find(state[objectCollections[type]], id) : undefined;
+  return Object.hasOwn(objectCollections, type) ? find(state[objectCollections[type]] ?? [], id) : undefined;
 }
+
+const boardObjectTypes = relationObjectTypes.slice(0, 3);
+const selfBoardObject = (type, item) => type === 'discover' ? isSelfBoard(item) : boardObjectTypes.includes(type);
+export const relationTargetTypes = type => boardObjectTypes.includes(type) ? relationObjectTypes : boardObjectTypes;
 
 export function isSelfBoard(item) {
   return Boolean(item && (item.primaryWorkspace === 'Self-Board' || (Array.isArray(item.domains) && item.domains.includes('Self-Board'))));
@@ -82,7 +89,7 @@ export function addAsset(state, input) {
   return asset.id;
 }
 
-function saveRecord(rows, input) {
+export function saveRecord(rows, input) {
   const existing = input.id ? find(rows, input.id) : null;
   if (input.id && !existing) fail('这条记录已不可用。');
   const title = input.title.trim();
@@ -186,7 +193,7 @@ export function canRelate(state, aType, aId, bType, bId) {
   if (aType === bType && aId === bId) return false;
   const a = objectFor(state, aType, aId);
   const b = objectFor(state, bType, bId);
-  return Boolean(a && b && (aType === 'discover' || bType === 'discover') &&
+  return Boolean(a && b && (selfBoardObject(aType, a) || selfBoardObject(bType, b)) &&
     (aType !== 'discover' || isSelfBoard(a)) && (bType !== 'discover' || isSelfBoard(b)));
 }
 
@@ -228,12 +235,14 @@ export function relatedObjects(state, type, id) {
   const direct = directRelations(state, type, id);
   const derived = new Map();
   if (type === 'project') {
-    const directIds = new Set(direct.map(row => row.item.id));
+    const keyFor = (type, item) => JSON.stringify([type, item.id]);
+    const directIds = new Set(direct.map(row => keyFor(row.type, row.item)));
     for (const event of state.events.filter(row => row.projectId === id)) {
-      for (const { item } of directRelations(state, 'event', event.id)) {
-        if (!directIds.has(item.id)) {
-          if (!derived.has(item.id)) derived.set(item.id, { item, type: 'discover', via: [] });
-          derived.get(item.id).via.push(event);
+      for (const { type: targetType, item } of directRelations(state, 'event', event.id)) {
+        const key = keyFor(targetType, item);
+        if (!directIds.has(key)) {
+          if (!derived.has(key)) derived.set(key, { item, type: targetType, via: [] });
+          derived.get(key).via.push(event);
         }
       }
     }
@@ -241,16 +250,15 @@ export function relatedObjects(state, type, id) {
   return { direct, derived: [...derived.values()] };
 }
 
-export function relationCandidates(state, ownerType, ownerId, { type, query = '', tag = '', edgeId } = {}) {
-  const types = ownerType === 'discover' ? ['discover', 'project', 'event'] : ['discover'];
+export function relationCandidates(state, ownerType, ownerId, { type, query = '', tag = '', edgeId, includeLinked = false } = {}) {
+  const types = relationTargetTypes(ownerType);
   const blocked = new Set(directRelations(state, ownerType, ownerId).filter(row => row.edge.id !== edgeId)
     .map(row => JSON.stringify([row.type, row.item.id])));
   const needle = query.trim().toLocaleLowerCase();
-  return types.filter(key => !type || key === type).flatMap(key => state[objectCollections[key]]
-    .filter(item => !item.deletedAt && (key !== ownerType || item.id !== ownerId) &&
-      (key !== 'discover' || isSelfBoard(item)) &&
-      !blocked.has(JSON.stringify([key, item.id])) && (!tag || (item.topics ?? item.tags)?.includes(tag)) &&
-      [item.title, item.body, item.summary, item.description, item.theme, item.type, item.contentType, ...(item.topics ?? item.tags ?? [])].join(' ').toLocaleLowerCase().includes(needle))
+  return types.filter(key => !type || key === type).flatMap(key => (state[objectCollections[key]] ?? [])
+    .filter(item => !item.deletedAt && canRelate(state, ownerType, ownerId, key, item.id) &&
+      (includeLinked || !blocked.has(JSON.stringify([key, item.id]))) && (!tag || (item.topics ?? item.tags)?.includes(tag)) &&
+      [item.title, item.body, item.summary, item.description, item.theme, item.type, item.contentType, item.notes, item.url, ...(item.topics ?? item.tags ?? [])].join(' ').toLocaleLowerCase().includes(needle))
     .map(item => ({ type: key, item })));
 }
 
@@ -263,6 +271,8 @@ function database() {
   });
 }
 
+const normalizeStudio = data => ({ ...emptyStudio(), ...data });
+
 export function createStudioStore(open = database) {
   let db;
   let state = emptyStudio();
@@ -274,7 +284,7 @@ export function createStudioStore(open = database) {
         db ??= await open();
         state = await new Promise((resolve, reject) => {
           const request = db.transaction('studio').objectStore('studio').get('data');
-          request.onsuccess = () => resolve(request.result ?? emptyStudio());
+          request.onsuccess = () => resolve(normalizeStudio(request.result));
           request.onerror = () => reject(request.error);
         });
       })().catch(error => { pending = undefined; throw error; });
@@ -295,7 +305,7 @@ export function createStudioStore(open = database) {
             if (saved.revision !== state.revision) {
               fail('另一标签页已保存修改。请刷新页面后重试。');
             }
-            next = structuredClone(saved);
+            next = structuredClone(normalizeStudio(saved));
             result = update(next);
             next.revision += 1;
             store.put(next, 'data');

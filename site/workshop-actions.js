@@ -158,7 +158,7 @@ export function initWorkshopActions(app, render) {
   function editRelation(id, { type, item }, reopen) {
     const current = relatedObjects(studioStore.state, type, item.id).direct.find(row => row.edge.id === id);
     const options = relationCandidates(studioStore.state, type, item.id, { edgeId: id });
-    const typeKeys = type === 'discover' ? ['project', 'event', 'discover'] : ['discover'];
+    const typeKeys = [...new Set(options.map(row => row.type))];
     const tags = [...new Set(options.flatMap(row => row.item.tags ?? []))].sort();
     const fields = '<div class="work-filters">' +
       '<input name="query" type="search" aria-label="搜索对象" placeholder="搜索对象" autofocus>' +

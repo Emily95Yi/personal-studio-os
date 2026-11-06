@@ -35,9 +35,9 @@ export const resourcesCategory = 'Resources';
 
 export const initialDiscoverCategories = [
   [toolsCategory, '工具与方法', 'exercise'],
-  [resourcesCategory, '资料与摘录', 'resource'],
   ['Prompts & Facilitation', '引导与提问', 'note'],
   ['Concepts & Principles', '概念与原则', 'knowledge'],
+  [resourcesCategory, '资料与摘录', 'resource'],
 ];
 
 export function discoverCategory(item) {
@@ -132,6 +132,26 @@ export function toggleBoardFolderPin(state, id) {
   return folder;
 }
 
+export function removeBoardFolder(state, id) {
+  const folders = state.boardFolders ?? [];
+  const folder = folders.find(row => row.id === id);
+  if (!folder) throw new Error('这个文件夹已不可用。');
+  const children = folders.filter(row => row.parentId === id);
+  if (children.some(child => folders.some(row => row.category === child.category && row.id !== id &&
+      !row.parentId && row.title.toLowerCase() === child.title.toLowerCase()))) {
+    throw new Error('分类根目录有同名文件夹。请先重命名子文件夹。');
+  }
+  for (const child of children) delete child.parentId;
+  for (const row of state.content) {
+    if (row.folderId === id && isSelfBoard(row)) {
+      row.folderId = folder.parentId || '';
+      row.updatedAt = new Date().toISOString();
+    }
+  }
+  state.boardFolders = folders.filter(row => row.id !== id);
+  return folder;
+}
+
 export function pinnedBoardFolders(state, currentId) {
   return (state.boardFolders ?? []).filter(folder => folder.pinned && folder.id !== currentId);
 }
@@ -188,6 +208,11 @@ export function existingResource(state, sourceUrl, exceptId) {
   return key && boardRecords(state, true).find(row => row.id !== exceptId && row.type === 'resource' && resourceKey(row.sourceUrl) === key);
 }
 
+export function existingCollectionUrl(state, sourceUrl) {
+  const key = resourceKey(sourceUrl);
+  return key && state.collectionItems?.find(row => !row.deletedAt && resourceKey(row.url) === key);
+}
+
 export function saveBoardContent(state, input) {
   const stored = input.id && objectFor(state, 'discover', input.id);
   if (input.id && (!isSelfBoard(stored) || stored.deletedAt)) throw new Error('这条记录已不可用。');
@@ -217,6 +242,9 @@ export function saveBoardContent(state, input) {
   if (record.sourceUrl && urlChanged && !resourceKey(record.sourceUrl)) throw new Error('请输入有效的 HTTP 或 HTTPS 来源链接。');
   if (record.type === 'resource' && urlChanged && existingResource(state, record.sourceUrl, record.id)) {
     throw new Error('已有资料使用这个链接，可从搜索打开后直接引用。');
+  }
+  if (isDiscoverType(record.type) && urlChanged && existingCollectionUrl(state, record.sourceUrl)) {
+    throw new Error('Collections 已保存这个链接，可从搜索打开后直接引用。');
   }
   if (record.type === 'draft' && record.parentContentId && record.parentContentId !== previous?.parentContentId) {
     const parent = objectFor(state, 'discover', record.parentContentId);
@@ -259,7 +287,12 @@ export function markBoardContent(state, id, action) {
   if (!isSelfBoard(row) || (row.deletedAt && action !== 'recover')) throw new Error('这条记录已不可用。');
   const stamp = new Date().toISOString();
   if (action === 'delete') row.deletedAt = stamp;
-  else if (action === 'recover') delete row.deletedAt;
+  else if (action === 'recover') {
+    if (boardSection(boardContent(row)) === 'discover' && existingCollectionUrl(state, row.sourceUrl)) {
+      throw new Error('Collections 已保存这个链接，无法恢复重复资料。');
+    }
+    delete row.deletedAt;
+  }
   else if (action === 'pin') {
     row.pinned = !row.pinned;
     return row;

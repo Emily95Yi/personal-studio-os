@@ -1,4 +1,4 @@
-import { boardContentHref, boardHref, href, publicHref, readRoute } from './pages.js';
+import { boardContentHref, boardHref, boardSections, href, publicHref, readRoute } from './pages.js';
 import {
   collectionView, landing, missingView, publicView, searchView, workspaceOverview,
 } from './views.js';
@@ -16,12 +16,14 @@ import { initWorkshopActions } from './workshop-actions.js';
 import { initStudioImport, studioImportView } from './studio-import-view.js';
 import { boardDetail, boardView } from './self-board-view.js';
 import { initBoardActions } from './self-board-actions.js';
+import { initLibraryActions } from './board-library-actions.js';
 import { contentTitle, isSelfBoard, studioStore } from './studio-data.js';
 
 const app = document.querySelector('#app');
 let period = 'week';
 let studioStorageError = false;
 let mountBoardEditor;
+let mountLibrary;
 
 function pageContext(route) {
   const ancestors = [[href(), '首页']];
@@ -34,7 +36,8 @@ function pageContext(route) {
 
   if (route.type === 'board' || route.type === 'content-detail') {
     if (route.type === 'board' && !route.section && !route.params.has('view')) ancestors.pop();
-    return { title: route.recordTitle ?? route.workspace.label, ancestors };
+    const title = route.entity ? contentTitle(route.record) : boardSections[route.section]?.label;
+    return { title: route.recordTitle ?? title ?? route.workspace.label, ancestors };
   }
   const isAncestorTitle = ['overview', 'workshop-gallery', 'collection', 'project'].includes(route.type) ||
     (route.type === 'public' && route.pageId === 'home');
@@ -51,11 +54,12 @@ function header(route, { title, ancestors }) {
       '" aria-label="打开 Calendar" title="Calendar">' + icon('calendar', 24) + '</a></div></div></header>';
   }
   const [address, label] = route.parent ? [route.parent, route.parentLabel] : ancestors.at(-1);
-  const article = route.type === 'content-detail';
+  const article = route.type === 'content-detail' || route.entity;
   const backLabel = route.section === 'settings' ? '返回上一页' : '返回 ' + label;
   const start = '<a class="header-icon back-link" href="' + escapeHtml(address) + '" aria-label="' + escapeHtml(backLabel) +
     '" title="' + escapeHtml(backLabel) + '">' + icon('back', 19) + '</a>' +
-    (article ? '<a class="sb-header-title" href="' + boardHref() + '">Self-Board</a>' : '<h1>' + escapeHtml(title) + '</h1>');
+    (article ? '<a class="sb-header-title" href="' + boardHref(route.entity ? route.section : undefined) + '">' +
+      (route.entity ? boardSections[route.section].label : 'Self-Board') + '</a>' : '<h1>' + escapeHtml(title) + '</h1>');
   const calendar = route.type === 'auto-plan' ? '<a class="header-icon" href="' +
     escapeHtml(calendarHref(todayDate(), 'week', 'auto')) +
     '" aria-label="打开 Calendar" title="Calendar">' + icon('calendar', 18) + '</a>' : '';
@@ -129,6 +133,7 @@ function render({ focus = false } = {}) {
     } else if (focus) app.querySelector('main').focus({ preventScroll: true });
   }
   mountBoardEditor?.(route);
+  mountLibrary?.(route);
 }
 
 app.addEventListener('click', event => {
@@ -410,6 +415,7 @@ function pollVisibleFeed() {
 initAppleActions(app, render);
 initWorkshopActions(app, render);
 mountBoardEditor = initBoardActions(app, render);
+mountLibrary = initLibraryActions(app, render);
 initStudioImport(app);
 window.addEventListener('hashchange', () => {
   window.scrollTo(0, 0);

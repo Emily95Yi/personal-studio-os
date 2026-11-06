@@ -6,7 +6,7 @@ Home 页眉显示品牌及紧凑周历，下方分为 Private Workspace 和 Publ
 |---|---|---|
 | Workshop | `/#/workshop` | Project Gallery → `/#/workshop/projects/:projectId`（Events / 共通内容）→ `/#/workshop/projects/:projectId/events/:eventId` |
 | Career | `/#/career` | Exams & Practice、Resume & Experience |
-| Self-Board | `/#/self-board` | Writing、Reflections、Discover；页眉提供 Network 和设置，工具栏提供全局搜索 |
+| Self-Board | `/#/self-board` | Writing、Reflections、Discover、Collections；页眉提供 Network 和设置，工具栏提供全局搜索 |
 | Auto | `/#/self-board/auto` | `/#/self-board/auto/:planId`（计划、具体安排、完成记录、原始资源） |
 | Calendar | `/#/calendar` | Day、Week、Month，默认 Week。日历设置位于 `/#/settings`。 |
 | 一期一会 in Tokyo | `/#/public/yiqiyihui` | Home、Activities、Stories、About |
@@ -35,19 +35,31 @@ Home 默认展示东京当前周，周一至周日；可切换周并回到本周
 |---|---|---|
 | Writing | `/writing` | 用状态图标筛选未发布或已发布。新建和编辑均在页面内，可在正文位置审阅两个版本的文字差异。 |
 | Reflections | `/reflections` | 卡片直接打开详情。可置顶、按颜色排列或随机排列。通过页眉设置维护标签和卡片上缘颜色。 |
-| Discover | `/discover` | 再次点选当前分类可取消筛选。文件在独立编辑页创建，可直接保存到分类或其文件夹。Tools & Methods 可在第一层文件夹内再建一层。目录可置顶，条目可移动到任一置顶目录。 |
+| Discover · Workshop Wiki | `/discover` | 保留 Tools & Methods、Prompts & Facilitation、Concepts & Principles、Resources 及已有分类和文件夹。条目可搜索、导入、编辑、移动；未保存的新建表单切换标签后可在当前页面会话恢复。 |
+| Discover · Personal Explorations | `/discover?tab=explorations`、`/explorations/:id` | 按最近更新浏览，可搜索与按标签筛选。详情内添加、编辑、排序或删除 Question、Note、Insight、Reference；支持外部链接与站内引用。 |
+| Collections | `/collections`、`/collections/:id` | All Collections / Inbox / 自定义分类，可选一级文件夹，搜索及状态、标签筛选，Card / List。Quick Add 只需标题或链接。 |
 | Network | `/connections` | 仅从页眉图标进入。关系列表可编辑，内容详情默认折叠相关内容。 |
 
 Writing 的筛选使用 `?view=`，新文章使用 `/writing/new`，Discover 分类和文件夹使用 `?category=` 与 `folder=`，内容详情使用 `/content/:id`，全局搜索使用 `/search?q=…`。旧详情链接仍可打开原 ID。Writing 的 In Progress 旧入口显示未发布文章，Unused Fragments 旧入口转到 Reflections。旧归档仍可通过原地址访问。
 
-Quick Capture 的文字进入 Reflections，可选颜色标签。链接默认进入 Discover 的 Resources，可选文件夹。文件仅接受 `.md`，正文可以导入 Writing、Reflections 或 Discover，选择 Discover 时可指定分类和文件夹。快速添加的内容均可从 Inbox 找到。Writing 支持将本地 Markdown 和纯文本导入为未发布文章，Discover 支持导入链接和本地文件。内容默认标记为 Private，Writing 的发布标记仅在私有工作区内使用。
+Quick Capture 的文字进入 Reflections，可选颜色标签。普通链接默认进入 Collections 的 Inbox，可选分类；通过 Workshop Wiki 的导入入口仍可将工作坊资料保存到原分类或文件夹。文件仅接受 `.md`，正文可以导入 Writing、Reflections 或 Discover，选择 Discover 时可指定分类和文件夹。快速添加的内容可从对应的 Inbox 找到。Writing 支持将本地 Markdown 和纯文本导入为未发布文章，Discover 支持导入链接和本地文件。内容默认标记为 Private，Writing 的发布标记仅在私有工作区内使用。
 
-- 所有内容继续使用 `yistudio-content` IndexedDB 的 `content` 集合。记录新增类型、可选状态、主题、来源及可见性。旧数据按需读取并显示在相应视图，编辑时才写入统一字段，同时保留旧 ID、封面、附件及其他旧字段。
+- Writing、Reflections 和 Workshop Wiki 继续使用 `yistudio-content` IndexedDB 快照的 `content` 集合。记录新增类型、可选状态、主题、来源及可见性。旧数据按需读取并显示在相应视图，编辑时才写入统一字段，同时保留旧 ID、封面、附件及其他旧字段。
 - 保留旧记录的 `parentContentId`、`revisionGroupId`，文章详情通过显式关联展示相关内容。正文、标题、摘要、来源和附件变化时保留修订快照。回收站以时间戳标记删除，恢复后沿用原 ID 和原关系。
 - 链接保存在对应 Resource 内，新记录按规范 URL 去重。文件复用 Studio 的附件集合，每个文件上限 12 MB，浏览器可用空间取决于当前存储配额。
 - Discover 文件夹和 Reflections 标签分别保存在 `boardFolders` 与 `reflectionLabels`，内容按稳定 ID 引用。卡片排列方式保存在当前浏览器的视图偏好中。
-- 有类型的关系保存在现有 `relations` 集合。端点沿用类型和 ID 的组合，其中旧的 `discover` 类型代表所有 Self-Board 内容。两端都可以查看和编辑；Project 可从其 Event 读取派生关系。
+- 有类型的关系保存在现有 `relations` 集合。端点沿用类型和 ID 的组合，其中旧的 `discover` 端点继续代表原有 Self-Board 内容，新端点为 `topic` 与 `collection-item`。两端都可以查看和编辑；Project 可从其 Event 读取派生关系。
 - Project 和 Event 继续各自保存 Markdown Session 和附件，Event 采用共通文档时保留 Project Session 版本和当次快照。
+
+探索和收藏沿用同一个 IndexedDB 快照和事务。读取旧快照时，仅补齐下列缺省集合，不改变数据库版本、旧记录、ID、文件夹或关系。用户已有的 Wiki 资料保留原位。
+
+| 集合 | 记录与兼容 |
+|---|---|
+| `explorationTopics`、`explorationEntries` | Topic 保存名称、简介、标签、封面／图标与时间。Entry 使用 `topicId`、类型和顺序，可保存正文、外链或由类型和 ID 组成的引用。 |
+| `collectionCategories`、`collectionFolders`、`collectionItems` | 默认分类有稳定 ID；分类配置、顺序、隐藏和默认分类删除标记以覆盖记录保存。Inbox 由空分类 ID 表示。文件夹单独引用分类。收藏的资源类型独立于分类；分类删除会把收藏移到选择的目标，移除文件夹只解除归属。超出当前配置的原状态继续可见且可筛选。 |
+| `relations` | 沿用一条边供两端读取，Project 也能查看 Event 的派生关联。收藏被关联或被 Reference 引用时不能删除。Topic 和收藏移入回收站后可恢复。 |
+
+已保存的链接在 Wiki 与 Collections 之间按规范化 HTTP(S) 地址去重；同一个对象可以被多个主题引用。仍沿用浏览器存储范围，同一浏览器、同一站点重新打开时可读取；不同浏览器、不同站点、不同设备之间不自动同步。生产环境继续使用现有 Cloudflare Access；此次不需要 D1 migration 或新的 Worker 配置。
 
 现有迁移包支持统一内容、版本、附件及关系的预览、冲突检查、验证和原子导入。既有 Notion 来源字段随记录保留。后续批量迁移应先导出当前快照并在隔离环境预览，记录本批新增 ID，再制定批次撤销方案。
 
