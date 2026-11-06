@@ -43,10 +43,9 @@ function appleFixture() {
       ]);
     }
     if (request.method === 'REPORT') {
-      const uid = /<C:text-match[^>]*>([^<]+)<\/C:text-match>/.exec(request.body)?.[1];
+      if (request.body.includes('<C:prop-filter name="UID">')) return new Response(null, { status: 412 });
       if (url === privateB && controls.bStatus) return new Response(null, { status: controls.bStatus });
-      return xml([...events].filter(([href, row]) => href.startsWith(url) &&
-        (!uid || row.ics.includes('UID:' + uid + '\r\n'))).map(([href, row]) =>
+      return xml([...events].filter(([href]) => href.startsWith(url)).map(([href, row]) =>
         property(new URL(href).pathname, '<d:getetag>' + row.etag +
           '</d:getetag><c:calendar-data><![CDATA[' + row.ics + ']]></c:calendar-data>')));
     }
@@ -450,4 +449,21 @@ test('discovery skips unrelated links without sending credentials outside Apple 
   }).discover();
   assert.deepEqual(found.map(row => row.href), [home + 'selected/']);
   assert.deepEqual(calls, ['https://caldav.icloud.com/', apple + '/100/principal/', home]);
+});
+
+test('UID recovery works when iCloud rejects UID filters and Apple changes the resource URL', async () => {
+  const { events, send } = appleFixture();
+  const client = newCalDavClient(fakeCreds, send);
+  const id = crypto.randomUUID();
+  const day = dateKey();
+  const fields = { id, ...eventTimes(false, day + 'T15:00', day + 'T15:30'), title: 'Moved', location: '', notes: '' };
+  const moved = collection + 'apple-renamed.ics';
+  events.set(moved, { ics: eventIcs(fields), etag: '"renamed"' });
+  const unrelated = { ...fields, id: crypto.randomUUID(), notes: 'refers to ' + id + '@yi-studio' };
+  events.set(collection + 'unrelated.ics', { ics: eventIcs(unrelated), etag: '"other"' });
+  const resource = await client.locate(collection, fields);
+  assert.equal(resource.href, moved);
+  assert.equal(resource.etag, '"renamed"');
+  events.delete(moved);
+  assert.equal(await client.locate(collection, fields), null);
 });

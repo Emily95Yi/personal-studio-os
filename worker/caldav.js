@@ -230,14 +230,13 @@ export function newCalDavClient(credentials, send = fetch) {
     });
   }
 
-  async function query(collection, window, uid) {
-    const [start, end] = uid ? [] : timeRange(window);
-    const range = uid ? '<C:prop-filter name="UID"><C:text-match collation="i;octet">' +
-      xmlEscape(uid) + '</C:text-match></C:prop-filter>' :
-      '<C:time-range start="' + start + '" end="' + end + '"/>';
+  async function query(collection, window) {
+    const [start, end] = window ? timeRange(window) : [];
+    const filter = window ? '<C:comp-filter name="VEVENT"><C:time-range start="' + start +
+      '" end="' + end + '"/></C:comp-filter>' : '<C:comp-filter name="VEVENT"/>';
     const payload = '<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">' +
       '<D:prop><D:getetag/><C:calendar-data/></D:prop><C:filter><C:comp-filter name="VCALENDAR">' +
-      '<C:comp-filter name="VEVENT">' + range + '</C:comp-filter></C:comp-filter></C:filter></C:calendar-query>';
+      filter + '</C:comp-filter></C:filter></C:calendar-query>';
     const result = await report(collection, 'REPORT', payload, '1');
     if (result.items.length > 1000) throw new Error('Too many CalDAV resources');
     return result.items.map(row => {
@@ -268,7 +267,11 @@ export function newCalDavClient(credentials, send = fetch) {
     const direct = knownHref || collectionResource(collection, event.id + '.ics').href;
     const resource = await getOwned(collection, direct, uid);
     if (resource?.owned) return resource;
-    const candidates = await query(collection, null, uid);
+    // iCloud rejects calendar-query UID filters. Only a complete collection
+    // scan can distinguish a renamed resource from a deletion.
+    const candidates = (await query(collection)).filter(({ ics }) =>
+      new ICAL.Component(ICAL.parse(ics)).getAllSubcomponents('vevent')
+        .some(item => item.getFirstPropertyValue('uid') === uid));
     if (candidates.length > 1) return { owned: false };
     if (!candidates.length) return resource;
     // Apple may move or rename the resource; the UID survives notes and path changes.

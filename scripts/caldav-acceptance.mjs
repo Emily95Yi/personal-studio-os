@@ -6,6 +6,8 @@ import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
 import { DatabaseSync } from 'node:sqlite';
 import { createHandler } from '../worker/index.js';
+import { newCalDavClient } from '../worker/caldav.js';
+import { createCalDavService } from '../worker/caldav-sync.js';
 
 const [testA = 'YiStudio CalDAV Test A', testB = 'YiStudio CalDAV Test B'] = process.argv.slice(2);
 if (!testA.trim() || !testB.trim() || testA === testB) throw new Error('Select two different dedicated iCloud test calendars');
@@ -43,7 +45,16 @@ const env = {
     },
   },
 };
-const handler = createHandler(() => 'isolated-acceptance');
+const caldav = createCalDavService({
+  provider: credentials => newCalDavClient(credentials, async (url, options) => {
+    const response = await fetch(url, options);
+    if (['PUT', 'DELETE'].includes(options.method) || (options.method === 'REPORT' && response.status !== 207)) {
+      console.log('CalDAV request:', options.method, response.status);
+    }
+    return response;
+  }),
+});
+const handler = createHandler(() => 'isolated-acceptance', caldav);
 const server = createServer(async (incoming, outgoing) => {
   const host = new URL(localOrigin).host;
   if (incoming.headers.host !== host) { outgoing.writeHead(403).end(); return; }
