@@ -6,7 +6,7 @@ import { boardContent, boardFolderPath, boardRecords, boardSection, canAddSubfol
   isPublished, isWriting, matchContent, pinnedBoardFolders, reflectionColors, relationTypes, resourceKey } from './self-board-data.js';
 import { contentTitle, isSelfBoard, objectFor, relatedObjects, studioStore } from './studio-data.js';
 import { attachments, imageUrl, markdown, objectHref, objectLabels, timestamp } from './workshop-view.js';
-import { itemsFor, libraryMatches, topicsFor } from './board-library-data.js';
+import { entriesFor, itemsFor, libraryMatches, topicsFor } from './board-library-data.js';
 import { collectionDetail, collectionsView, discoverTabs, explorationsView, topicDetail } from './board-library-view.js';
 
 const state = () => studioStore.state;
@@ -322,11 +322,10 @@ function homeTools(view) {
 
 function shortcuts() {
   return '<nav class="sb-shortcuts" aria-label="其他入口">' +
-    '<a href="' + boardHref('auto') + '">Auto ↗</a><a href="' + href('calendar') + '?from=self-board">Calendar ↗</a>' +
-    '<a href="' + boardHref('experience') + '">Experience ↗</a><a href="' + boardHref('reflect-create') + '">Reflect &amp; Create ↗</a></nav>';
+    '<a href="' + boardHref('auto') + '">Auto ↗</a><a href="' + href('calendar') + '?from=self-board">Calendar ↗</a></nav>';
 }
 
-function searchResults(query) {
+export function searchResults(query) {
   if (!query.trim()) return empty('查找文章、灵感或资料', '也可以搜索与 Self-Board 相关的 Workshop 活动。');
   const items = boardRecords(state(), true).filter(row => matchContent(row, { query }));
   const relatedEvents = new Map();
@@ -339,7 +338,8 @@ function searchResults(query) {
     if (matchContent(item, { query })) items.push(item);
   }
   const library = [
-    ['topic', topicsFor(state()).filter(row => libraryMatches(row, ['title', 'description'], query))],
+    ['topic', topicsFor(state()).filter(row => libraryMatches(row, ['title', 'description'], query) ||
+      entriesFor(state(), row.id).some(entry => libraryMatches(entry, ['title', 'body', 'url'], query)))],
     ['collection-item', itemsFor(state()).filter(row => libraryMatches(row, ['title', 'description', 'notes', 'url'], query))],
   ];
   const total = items.length + library.reduce((count, [, rows]) => count + rows.length, 0);

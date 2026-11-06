@@ -10,7 +10,7 @@ npm run dev
 
 - Home 页眉的日历图标进入 Calendar。Calendar 按东京时区显示，默认 Week，可在同页切换 Day / Week / Month。
 - Workshop → Project Gallery → Events / 共通内容 → Event Detail。共通文档可按版本采用，素材与 Wiki 在 Discover。
-- Self-Board 的主入口是 Writing、Reflections、Discover、Collections。Discover 分为 Workshop Wiki 和 Personal Explorations，Collections 用于快速保存与整理生活收藏。页眉图标打开全局搜索、Quick Capture、Network 和设置，总览保留 Inbox、Auto、Calendar 和旧视图入口。
+- Self-Board 的主入口是 Writing、Reflections、Discover、Collections。Discover 分为 Workshop Wiki 和 Personal Explorations，Collections 用于快速保存与整理生活收藏。页眉图标打开浮动搜索、Quick Capture、Network 和设置。总览包含 Inbox、Auto 和 Calendar。
 - Auto 支持单次计划、重复规则和周期次数目标。计划可以手动排到某天；从 Calendar 改期时只会改动该次安排。两处共用同一 Repository。
 
 Workshop 和 Self-Board（包括探索与收藏）保存到当前站点、当前浏览器的 IndexedDB。可从 Workshop 的数据迁移入口加载测试数据。本机静态预览的 Auto 和 Calendar 编辑仅保存在当前页面内存。私有 Worker 配置完成后可保存计划并读取 iCloud 订阅。

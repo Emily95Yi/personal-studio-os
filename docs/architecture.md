@@ -13,7 +13,7 @@ Home 页眉显示品牌及紧凑周历，下方分为 Private Workspace 和 Publ
 
 旧 Workshop 集合链接仍由原路由兼容。旧 Self-Board 的 SOP & Habits 和 To-Do 链接会替换为 Auto 地址。Calendar 可从 Home 周历、Self-Board 的 Auto Widget 和 Auto 进入；`from` 参数保留来源空间的返回路径。
 
-总览保留 Experience、Reflect & Create、Auto 和 Calendar 的入口。Auto 的摘要仍可切换本周／本月，完成勾选与查看或编辑分开。
+总览提供 Auto 和 Calendar 的入口。Auto 的摘要仍可切换本周／本月，完成勾选与查看或编辑分开。
 
 ## Auto 与 Calendar
 
@@ -40,9 +40,9 @@ Home 默认展示东京当前周，周一至周日；可切换周并回到本周
 | Collections | `/collections`、`/collections/:id` | 分类从浮动菜单打开，收藏统一以列表显示。分类可重命名、排序、隐藏或删除，可选一级文件夹。使用页眉的快速添加输入标题或链接。 |
 | Network | `/connections` | 仅从页眉图标进入。关系列表可编辑，内容详情默认折叠相关内容。 |
 
-Writing 的筛选使用 `?view=`，新文章使用 `/writing/new`，Discover 分类和文件夹使用 `?category=` 与 `folder=`，内容详情使用 `/content/:id`，全局搜索使用 `/search?q=…`。旧详情链接仍可打开原 ID。Writing 的 In Progress 旧入口显示未发布文章，Unused Fragments 旧入口转到 Reflections。旧归档仍可通过原地址访问。
+Writing 的筛选使用 `?view=`，新文章使用 `/writing/new`，Discover 分类和文件夹使用 `?category=` 与 `folder=`，内容详情使用 `/content/:id`，页眉搜索在当前页展开浮层，旧搜索地址 `/search?q=…` 仍可打开。旧详情链接仍可打开原 ID。Writing 的 In Progress 旧入口显示未发布文章，Unused Fragments 旧入口转到 Reflections。旧归档仍可通过原地址访问。
 
-Quick Capture 的文字进入 Reflections，可选颜色标签。普通链接默认进入 Collections 的 Inbox，可选分类；通过 Workshop Wiki 的导入入口仍可将工作坊资料保存到原分类或文件夹。文件仅接受 `.md`，正文可以导入 Writing、Reflections 或 Discover，选择 Discover 时可指定分类和文件夹。快速添加的内容可从对应的 Inbox 找到。Writing 支持将本地 Markdown 和纯文本导入为未发布文章，Discover 支持导入链接和本地文件。内容默认标记为 Private，Writing 的发布标记仅在私有工作区内使用。
+Quick Capture 的 Text 可保存到 Reflections 或 Collections。Link 可保存到 Workshop Wiki 的 Resources、Personal Explorations 的主题（作为 Reference）或 Collections。文件仅接受 `.md`，正文可以导入 Writing、Reflections 或 Discover，选择 Discover 时可指定分类和文件夹。Collections 的未分类条目会和其他条目一起显示在默认列表中。Writing 支持将本地 Markdown 和纯文本导入为未发布文章，Discover 支持导入链接和本地文件。内容默认标记为 Private，Writing 的发布标记仅在私有工作区内使用。
 
 - Writing、Reflections 和 Workshop Wiki 继续使用 `yistudio-content` IndexedDB 快照的 `content` 集合。记录新增类型、可选状态、主题、来源及可见性。旧数据按需读取并显示在相应视图，编辑时才写入统一字段，同时保留旧 ID、封面、附件及其他旧字段。
 - 保留旧记录的 `parentContentId`、`revisionGroupId`，文章详情通过显式关联展示相关内容。正文、标题、摘要、来源和附件变化时保留修订快照。回收站以时间戳标记删除，恢复后沿用原 ID 和原关系。

@@ -655,6 +655,19 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
   .sb-modules { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .sb-header-button { border: 0; background: transparent; padding: 0; cursor: pointer; }
+.sb-masthead .header-actions { position: relative; }
+.sb-header-search summary { list-style: none; cursor: pointer; }
+.sb-header-search summary::-webkit-details-marker { display: none; }
+.sb-header-search[open] summary { background: var(--tint); }
+.sb-header-search summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.sb-search-panel {
+  position: absolute; z-index: 5; inset-inline-end: 0; top: calc(100% + 4px);
+  width: min(430px, calc(100vw - 40px)); padding: 9px;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--surface); box-shadow: var(--card-hover-shadow);
+}
+.sb-search-results { max-height: min(55vh, 380px); overflow: auto; overflow-wrap: anywhere; }
+.sb-search-results:not(:empty) { margin-top: 8px; }
+.sb-search-results .sb-row { padding-block: 7px; }
 .sb-title-switcher { position: relative; flex: none; }
 .sb-title-switcher summary {
   display: flex; align-items: center; min-height: 38px; list-style: none; cursor: pointer;
@@ -710,7 +723,7 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .library-links a { color: var(--accent); text-decoration: underline; }
 .library-list .sb-row-copy { display: grid; gap: 2px; }
 .library-list .library-meta { justify-content: flex-end; }
-.library-category-bar { margin-bottom: 10px; }
+.library-category-bar { display: flex; align-items: center; gap: 4px; margin-bottom: 10px; }
 .library-sidebar { position: relative; width: fit-content; max-width: 100%; }
 .library-sidebar summary {
   display: flex; align-items: center; gap: 6px; list-style: none; width: fit-content;
@@ -722,8 +735,7 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
   max-width: min(300px, calc(100vw - 40px)); max-height: 65vh; overflow: auto; padding: 8px;
   border: 1px solid var(--line); border-radius: 9px; background: var(--surface); box-shadow: var(--card-hover-shadow);
 }
-.library-sidebar nav, .library-category-list { display: grid; gap: 2px; }
-.library-category-list { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--line); }
+.library-sidebar nav { display: grid; gap: 2px; }
 .library-sidebar nav a { padding: 6px 8px; font-size: 13px; border-radius: 6px; overflow-wrap: anywhere; }
 .library-sidebar a:is(:hover, [aria-current]), .library-folder-list a:is(:hover, [aria-current]) { background: var(--selected); }
 .library-sidebar-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }

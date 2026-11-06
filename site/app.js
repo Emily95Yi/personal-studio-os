@@ -66,8 +66,8 @@ function header(route, { title, ancestors }) {
   const calendar = route.type === 'auto-plan' ? '<a class="header-icon" href="' +
     escapeHtml(calendarHref(todayDate(), 'week', 'auto')) +
     '" aria-label="打开 Calendar" title="Calendar">' + icon('calendar', 18) + '</a>' : '';
-  const search = route.type === 'search' || route.section === 'search' ? '' : '<a class="header-icon" href="' + (inBoard ? boardHref('search') : href('search')) +
-    '" aria-label="搜索" title="搜索">' + icon('search', 18) + '</a>';
+  const search = inBoard ? boardHeaderSearch() : route.type === 'search' ? '' :
+    '<a class="header-icon" href="' + href('search') + '" aria-label="搜索" title="搜索">' + icon('search', 18) + '</a>';
   return '<header class="studio-top"><div class="masthead' + (inBoard ? ' sb-masthead' : '') + '">' + start +
     '<div class="header-actions">' + calendar + search + (inBoard ?
       '<button type="button" class="header-icon sb-header-button" data-sb-capture aria-label="快速添加" title="快速添加">' + icon('add', 19) + '</button>' +
@@ -76,6 +76,15 @@ function header(route, { title, ancestors }) {
         escapeHtml(new URLSearchParams({ from: location.hash || boardHref() }).toString()) +
         '" aria-label="Self-Board 设置" title="Self-Board 设置">' + icon('settings', 19) + '</a>') : '') +
     '</div></div></header>';
+}
+
+function boardHeaderSearch() {
+  return '<details class="sb-header-search" data-sb-disclosure data-sb-header-search>' +
+    '<summary class="header-icon" aria-label="搜索" title="搜索">' + icon('search', 18) + '</summary>' +
+    '<div class="sb-search-panel"><form data-sb-floating-search role="search" aria-label="Self-Board 搜索">' +
+    '<label class="sb-search">' + icon('search', 17) +
+    '<input type="search" name="query" aria-label="全局搜索" placeholder="搜索文章、灵感、资料或活动…"></label></form>' +
+    '<div class="sb-search-results" data-sb-search-results aria-live="polite"></div></div></details>';
 }
 
 function boardTitleMenu(section, title, article) {

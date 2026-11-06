@@ -1,7 +1,7 @@
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
 import { collectionsAddress, collectionItemAddress, discoverAddress, explorationAddress } from './pages.js';
-import { categoryFor, categoryList, entriesFor, entryTypes, filterCollections, foldersFor, itemsFor, libraryMatches,
+import { categoryFor, categoryList, entriesFor, entryTypes, filterCollections, foldersFor, libraryMatches,
   resourceTypes, topicsFor } from './board-library-data.js';
 import { contentTitle, objectFor, studioStore } from './studio-data.js';
 import { resourceKey } from './self-board-data.js';
@@ -117,7 +117,7 @@ function iconButton(label, action, id, glyph, disabled = false) {
 
 function collectionRows(location) {
   const rows = filterCollections(state(), location);
-  if (!rows.length) return empty('这里还没有收藏', '点页眉的加号，输入标题或粘贴链接。');
+  if (!rows.length) return empty('这里还没有收藏', '点页眉的加号，记录文字或粘贴链接。');
   return '<ul class="sb-rows library-list">' + rows.map(row => {
     const category = categoryFor(state(), row.categoryId)?.title;
     const status = statusLabel(row);
@@ -133,10 +133,7 @@ export function collectionsView(route) {
   const location = collectionLocation(route);
   const { category, folder } = location;
   const categories = categoryList(state());
-  const items = itemsFor(state());
   const selected = category === 'all' ? null : categoryFor(state(), category);
-  const sideLink = (id, label) => link(collectionsAddress({ category: id }),
-    label + ' · ' + (id === 'all' ? items.length : items.filter(row => row.categoryId === id).length), category === id);
   const folders = foldersFor(state(), category);
   const manager = '<details class="library-manager" data-library-manager><summary>管理分类</summary>' +
     '<ul class="library-folder-list">' + categories.map((row, i) => '<li><span>' + esc(row.title) +
@@ -157,11 +154,12 @@ export function collectionsView(route) {
     '</div>' : '';
   return '<div class="library-category-bar"><details class="library-sidebar" data-library-sidebar data-sb-disclosure>' +
     '<summary>' + icon('folder', 16) + '<span>' + esc(selected?.title ?? '分类导航') + '</span>' + icon('down', 13) + '</summary>' +
-    '<div class="library-category-menu"><nav aria-label="收藏分类">' + sideLink('all', '全部收藏') + sideLink('', 'Inbox') +
-    '<div class="library-category-list">' + categories.filter(row => !row.hidden || row.id === category).map(row =>
-      sideLink(row.id, row.title)).join('') + '</div></nav>' +
+    '<div class="library-category-menu"><nav aria-label="收藏分类">' + categories.filter(row => !row.hidden || row.id === category)
+      .map(row => link(collectionsAddress({ category: row.id }), row.title, category === row.id)).join('') + '</nav>' +
     '<div class="library-sidebar-actions">' + libButton('新建分类', 'category', '', { glyph: 'add' }) +
-    libButton('管理分类', 'categories', '', { glyph: 'settings' }) + '</div></div></details></div>' +
+    libButton('管理分类', 'categories', '', { glyph: 'settings' }) + '</div></div></details>' +
+    (selected ? '<a class="sb-icon sb-icon-plain library-icon" href="' + collectionsAddress() +
+      '" aria-label="清除分类筛选" title="清除分类筛选">' + icon('remove', 16) + '</a>' : '') + '</div>' +
     manager + folderNav + collectionRows(location);
 }
 
