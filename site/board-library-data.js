@@ -45,18 +45,18 @@ function writeCategory(state, row) {
   return row;
 }
 
-export function saveCollectionCategory(state, { id, title, statuses = [], hidden = false }) {
+export function saveCollectionCategory(state, { id, title, statuses, hidden }) {
   title = clean(title);
-  statuses = distinct(statuses);
   const categories = categoryList(state);
   const current = id && find(categories, id);
+  statuses = distinct(statuses ?? current?.statuses ?? []);
   if (!title || title.length > 100 || statuses.some(status => status.length > 60) || (id && !current)) {
     fail('请输入有效的分类名称与状态。');
   }
   if (sameName(title, inbox.title) || categories.some(row => row.id !== id && sameName(row.title, title))) {
     fail('已经有同名分类。');
   }
-  return writeCategory(state, { id: id || crypto.randomUUID(), title, statuses, hidden: Boolean(hidden),
+  return writeCategory(state, { id: id || crypto.randomUUID(), title, statuses, hidden: Boolean(hidden ?? current?.hidden),
     order: current?.order ?? ((categories.at(-1)?.order ?? -1) + 1) });
 }
 

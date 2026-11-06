@@ -10,6 +10,7 @@ import { contentTitle, maxAssetBytes, objectFor, relationCandidates, removeRelat
 import { studioDialog } from './studio-dialog.js';
 import { attachmentInputs, retainedFiles, withAssets } from './workshop-actions.js';
 import { categoryList, resourceAtUrl, saveCollectionItem, topicsFor, itemsFor } from './board-library-data.js';
+import { collectionLocation } from './board-library-view.js';
 import { objectHref, objectLabels } from './workshop-view.js';
 
 const field = (name, label, value = '', attributes = '') => '<label>' + label + '<input name="' + name + '" value="' +
@@ -76,15 +77,15 @@ function captureOptions(name, label, choices, selected) {
     '</div></div></fieldset>';
 }
 
-function captureFields(mode, { importing, labels }) {
+function captureFields(mode, { importing, labels, collectionCategory }) {
   if (mode === 'text') return text('body', '文字', '', 5, 'required autofocus placeholder="先记下一句话…"') +
     select('reflectionLabelId', '标签（可选）', reflectionLabelOptions(labels));
-  if (mode === 'link') {
-    return field('sourceUrl', '链接', '', 'type="url" required placeholder="https://"') +
-      (importing ? '' : select('categoryId', '收藏分类（可选）', { '': 'Collections Inbox',
-        ...Object.fromEntries(categoryList(studioStore.state).filter(row => !row.hidden).map(row => [row.id, row.title])) })) +
-      text('personalNotes', '个人备注（可选）');
-  }
+  if (mode === 'collection') return field('capture', '标题或链接', '', 'autofocus required placeholder="想读的书，或 https://"') +
+    select('categoryId', '收藏分类（可选）', { '': 'Collections Inbox',
+      ...Object.fromEntries(categoryList(studioStore.state).filter(row => !row.hidden || row.id === collectionCategory)
+        .map(row => [row.id, row.title])) }, collectionCategory) + text('personalNotes', '个人备注（可选）');
+  if (mode === 'link') return field('sourceUrl', '链接', '', 'type="url" required placeholder="https://"') +
+    text('personalNotes', '个人备注（可选）');
   if (importing) return '<label>文件<input type="file" name="attachments" required multiple></label>' + text('personalNotes', '文件说明（可选）');
   return '<label>Markdown 文件<input type="file" name="document" accept=".md" required></label>' +
     captureOptions('destination', '添加到', Object.fromEntries(Object.entries(boardSections).filter(([id]) => id !== 'collections')
@@ -116,14 +117,16 @@ export function initBoardActions(app, render) {
   }
   const dialog = (...args) => studioDialog(app, ...args);
 
-  function quickCapture({ importing = false, category = '', folderId = '' } = {}) {
-    let mode = importing ? 'link' : 'text';
+  function quickCapture({ importing = false, category = '', folderId = '', collection } = {}) {
+    let mode = importing ? 'link' : collection ? 'collection' : 'text';
     const folders = studioStore.state.boardFolders ?? [];
     const labels = studioStore.state.reflectionLabels ?? [];
-    const options = { importing, labels };
+    const collectionCategory = collection && collection.category !== 'all' ? collection.category : '';
+    const options = { importing, labels, collectionCategory };
+    const modes = importing ? { link: 'Link', file: 'File' } : { text: 'Text', collection: '收藏', file: 'File' };
     const form = dialog(importing ? '导入资料' : 'Quick Capture', '<div class="segmented sb-capture-modes" aria-label="记录方式">' +
-      (importing ? ['Link', 'File'] : ['Text', 'Link', 'File']).map(label => '<button type="button" data-capture-mode="' + label.toLowerCase() +
-        '" aria-pressed="' + (label.toLowerCase() === mode) + '">' + label + '</button>').join('') + '</div>' +
+      Object.entries(modes).map(([key, label]) => '<button type="button" data-capture-mode="' + key +
+        '" aria-pressed="' + (key === mode) + '">' + label + '</button>').join('') + '</div>' +
       '<div class="work-form-fields" data-capture-fields>' + captureFields(mode, options) +
       '</div><a class="return-link" data-capture-duplicate hidden>打开已有资料 ↗</a>', async data => {
       const status = importing ? '' : 'inbox';
@@ -153,24 +156,30 @@ export function initBoardActions(app, render) {
       }
       const duplicate = form.querySelector('[data-capture-duplicate]');
       duplicate.hidden = true;
-      const sourceUrl = data.get('sourceUrl')?.trim() || '';
-      if (!resourceKey(sourceUrl)) throw new Error('请输入有效的 HTTP 或 HTTPS 链接。');
+      const capture = data.get('capture')?.trim() || '';
+      const sourceUrl = mode === 'collection' ? (/^https?:\/\//i.test(capture) ? capture : '') : data.get('sourceUrl').trim();
+      if ((mode === 'link' || sourceUrl) && !resourceKey(sourceUrl)) throw new Error('请输入有效的 HTTP 或 HTTPS 链接。');
       const existing = resourceAtUrl(studioStore.state, sourceUrl);
       if (existing) {
         duplicate.hidden = false;
         duplicate.href = objectHref(existing.type, existing.item);
         throw new Error('这个链接已收藏。可以打开已有记录补充备注。');
       }
-      if (!importing) return studioStore.change(snapshot => saveCollectionItem(snapshot, {
-        url: sourceUrl, categoryId: data.get('categoryId') || '', notes: personalNotes,
-      }));
+      if (mode === 'collection') {
+        const categoryId = data.get('categoryId') || '';
+        return studioStore.change(snapshot => saveCollectionItem(snapshot, {
+          title: sourceUrl ? '' : capture, url: sourceUrl, categoryId,
+          folderId: categoryId === collectionCategory ? collection?.folder ?? '' : '',
+          resourceType: sourceUrl ? 'link' : 'other', notes: personalNotes,
+        }));
+      }
       return save({
         type: 'resource', discoverCategory: category || resourcesCategory,
         folderId,
         title: new URL(sourceUrl).hostname, sourceUrl, sourceType: sourceType(sourceUrl), savedAt: new Date().toISOString(), personalNotes,
       });
     }, saved => {
-      if (!importing && mode === 'link') location.hash = collectionItemAddress(saved.id);
+      if (mode === 'collection') location.hash = collectionItemAddress(saved.id);
       else open(saved.id);
     }, importing ? '导入资料' : '保存', importing ? '' : 'sb-capture-dialog');
 
@@ -457,6 +466,34 @@ export function initBoardActions(app, render) {
     const query = new FormData(event.target).get('query').trim();
     location.hash = boardHref('search') + (query ? '?' + new URLSearchParams({ q: query }) : '');
   });
+  app.addEventListener('pointerover', event => {
+    const details = event.target.closest('[data-sb-title-switcher]');
+    if (event.pointerType === 'mouse' && details && !details.contains(event.relatedTarget)) details.open = true;
+  });
+  app.addEventListener('pointerout', event => {
+    const details = event.target.closest('[data-sb-title-switcher]');
+    if (event.pointerType === 'mouse' && details && !details.contains(event.relatedTarget) &&
+        !details.querySelector('nav :focus-visible')) details.open = false;
+  });
+  app.addEventListener('focusout', event => {
+    const details = event.target.closest('[data-sb-title-switcher][open]');
+    if (details && !details.contains(event.relatedTarget) && !details.matches(':hover')) details.open = false;
+  });
+  app.addEventListener('click', event => {
+    if (event.pointerType === 'mouse' && event.target.closest('[data-sb-title-switcher][open] > summary')) {
+      event.preventDefault();
+    }
+    for (const details of app.querySelectorAll('[data-sb-disclosure][open]')) {
+      if (!details.contains(event.target) || event.target.closest('a')) details.open = false;
+    }
+  });
+  app.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || app.querySelector('dialog[open]')) return;
+    const details = app.querySelector('[data-sb-disclosure][open]');
+    if (!details) return;
+    details.open = false;
+    details.querySelector('summary').focus();
+  });
   function updateReview(panel, record) {
     const output = panel.querySelector('[data-sb-review-diff]');
     if (!output) return;
@@ -477,7 +514,13 @@ export function initBoardActions(app, render) {
       sbCategory, sbFolder, sbImport, sbPin, sbReview, sbWritingFilter, sbOrder, sbLabel, sbRemoveLabel, sbMakeFolder, sbFolderPin, sbMovePinned } = button.dataset;
     const route = readRoute(location.hash);
     const host = button.closest('[data-sb-card]');
-    if (sbCapture === '') quickCapture();
+    if (sbCapture === '') {
+      let collection;
+      if (route.section === 'collections') {
+        collection = route.entity ? { category: route.record.categoryId, folder: route.record.folderId } : collectionLocation(route);
+      }
+      quickCapture({ collection });
+    }
     else if (sbCapture) editContent({ type: sbCapture });
     if (sbImport === 'article') importArticle();
     if (sbImport === 'resource') quickCapture({ importing: true, category: sbCategory, folderId: sbFolder });
@@ -542,6 +585,7 @@ export function initBoardActions(app, render) {
       () => studioStore.change(state => developThought(state, sbDevelop, 'article')), item => open(item.id), '创建文章');
   });
   return route => {
+    if (route.section === 'search') app.querySelector('[data-sb-search] input').focus({ preventScroll: true });
     if (route.section === 'discover' && route.tab === 'explorations') {
       const wikiTab = app.querySelector('.library-discover-tabs a');
       if (wikiTab) wikiTab.href = lastWiki;

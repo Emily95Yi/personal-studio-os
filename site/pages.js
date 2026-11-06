@@ -67,11 +67,10 @@ export const boardHref = (section, view) => href('self-board', ...(section ? [se
 export const boardContentHref = id => href('self-board', 'content', id);
 export const explorationAddress = id => id ? href('self-board', 'explorations', id) : boardHref('discover') + '?tab=explorations';
 export const collectionItemAddress = id => href('self-board', 'collections', id);
-export function collectionsAddress({ category = 'all', folder = '', mode = '' } = {}) {
+export function collectionsAddress({ category = 'all', folder = '' } = {}) {
   const query = new URLSearchParams();
   if (category !== 'all') query.set('category', category || 'inbox');
   if (folder) query.set('folder', folder);
-  if (mode === 'list') query.set('mode', mode);
   return boardHref('collections') + (query.size ? '?' + query : '');
 }
 

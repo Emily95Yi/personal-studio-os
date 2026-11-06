@@ -16,6 +16,7 @@ import { initWorkshopActions } from './workshop-actions.js';
 import { initStudioImport, studioImportView } from './studio-import-view.js';
 import { boardDetail, boardView } from './self-board-view.js';
 import { initBoardActions } from './self-board-actions.js';
+import { boardContent, boardSection } from './self-board-data.js';
 import { initLibraryActions } from './board-library-actions.js';
 import { contentTitle, isSelfBoard, studioStore } from './studio-data.js';
 
@@ -55,23 +56,34 @@ function header(route, { title, ancestors }) {
   }
   const [address, label] = route.parent ? [route.parent, route.parentLabel] : ancestors.at(-1);
   const article = route.type === 'content-detail' || route.entity;
+  const inBoard = route.workspaceId === 'self-board';
+  const section = route.type === 'content-detail' ? boardSection(boardContent(route.record)) : route.section;
+  const boardTitle = Object.hasOwn(boardSections, section) ? boardSections[section].label : '';
   const backLabel = route.section === 'settings' ? '返回上一页' : '返回 ' + label;
   const start = '<a class="header-icon back-link" href="' + escapeHtml(address) + '" aria-label="' + escapeHtml(backLabel) +
     '" title="' + escapeHtml(backLabel) + '">' + icon('back', 19) + '</a>' +
-    (article ? '<a class="sb-header-title" href="' + boardHref(route.entity ? route.section : undefined) + '">' +
-      (route.entity ? boardSections[route.section].label : 'Self-Board') + '</a>' : '<h1>' + escapeHtml(title) + '</h1>');
+    (boardTitle ? boardTitleMenu(section, boardTitle, article) : '<h1>' + escapeHtml(title) + '</h1>');
   const calendar = route.type === 'auto-plan' ? '<a class="header-icon" href="' +
     escapeHtml(calendarHref(todayDate(), 'week', 'auto')) +
     '" aria-label="打开 Calendar" title="Calendar">' + icon('calendar', 18) + '</a>' : '';
-  const search = ['search', 'board'].includes(route.type) ? '' : '<a class="header-icon" href="' + (route.workspaceId === 'self-board' ? boardHref('search') : href('search')) +
+  const search = route.type === 'search' || route.section === 'search' ? '' : '<a class="header-icon" href="' + (inBoard ? boardHref('search') : href('search')) +
     '" aria-label="搜索" title="搜索">' + icon('search', 18) + '</a>';
-  return '<header class="studio-top"><div class="masthead">' + start + '<div class="header-actions">' + calendar + search +
-    (route.workspaceId === 'self-board' ?
+  return '<header class="studio-top"><div class="masthead' + (inBoard ? ' sb-masthead' : '') + '">' + start +
+    '<div class="header-actions">' + calendar + search + (inBoard ?
+      '<button type="button" class="header-icon sb-header-button" data-sb-capture aria-label="快速添加" title="快速添加">' + icon('add', 19) + '</button>' +
       '<a class="header-icon" href="' + boardHref('connections') + '" aria-label="Network" title="Network">' + icon('network', 18) + '</a>' +
       (route.section === 'settings' ? '' : '<a class="header-icon" href="' + boardHref('settings') + '?' +
         escapeHtml(new URLSearchParams({ from: location.hash || boardHref() }).toString()) +
         '" aria-label="Self-Board 设置" title="Self-Board 设置">' + icon('settings', 19) + '</a>') : '') +
     '</div></div></header>';
+}
+
+function boardTitleMenu(section, title, article) {
+  const tag = article ? 'span' : 'h1';
+  return '<details class="sb-title-switcher" data-sb-disclosure data-sb-title-switcher><summary><' + tag + '>' + title +
+    '</' + tag + '></summary><nav class="sb-title-links" aria-label="切换 Self-Board 栏目">' +
+    Object.entries(boardSections).filter(([id]) => id !== section).map(([id, group]) =>
+      '<a href="' + boardHref(id) + '">' + group.label + '</a>').join('') + '</nav></details>';
 }
 
 function publicNav(route) {

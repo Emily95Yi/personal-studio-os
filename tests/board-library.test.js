@@ -14,6 +14,9 @@ test('category and folder removal retain item identities, status, links and rela
   const state = emptyStudio();
   const books = categoryList(state)[0];
   const custom = saveCollectionCategory(state, { title: 'Places to research', statuses: ['Exploring'], hidden: true });
+  const renamed = saveCollectionCategory(state, { id: custom.id, title: 'Places' });
+  assert.deepEqual(renamed.statuses, ['Exploring']);
+  assert.equal(renamed.hidden, true);
   moveCollectionCategory(state, custom.id, -1);
   assert.equal(categoryList(state).at(-2).id, custom.id);
   const folder = saveCollectionFolder(state, { categoryId: books.id, title: 'To keep' });

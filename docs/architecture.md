@@ -6,7 +6,7 @@ Home 页眉显示品牌及紧凑周历，下方分为 Private Workspace 和 Publ
 |---|---|---|
 | Workshop | `/#/workshop` | Project Gallery → `/#/workshop/projects/:projectId`（Events / 共通内容）→ `/#/workshop/projects/:projectId/events/:eventId` |
 | Career | `/#/career` | Exams & Practice、Resume & Experience |
-| Self-Board | `/#/self-board` | Writing、Reflections、Discover、Collections；页眉提供 Network 和设置，工具栏提供全局搜索 |
+| Self-Board | `/#/self-board` | Writing、Reflections、Discover、Collections；页眉提供栏目切换、全局搜索、快速添加、Network 和设置 |
 | Auto | `/#/self-board/auto` | `/#/self-board/auto/:planId`（计划、具体安排、完成记录、原始资源） |
 | Calendar | `/#/calendar` | Day、Week、Month，默认 Week。日历设置位于 `/#/settings`。 |
 | 一期一会 in Tokyo | `/#/public/yiqiyihui` | Home、Activities、Stories、About |
@@ -37,7 +37,7 @@ Home 默认展示东京当前周，周一至周日；可切换周并回到本周
 | Reflections | `/reflections` | 卡片直接打开详情。可置顶、按颜色排列或随机排列。通过页眉设置维护标签和卡片上缘颜色。 |
 | Discover · Workshop Wiki | `/discover` | 保留 Tools & Methods、Prompts & Facilitation、Concepts & Principles、Resources 及已有分类和文件夹。条目可搜索、导入、编辑、移动；未保存的新建表单切换标签后可在当前页面会话恢复。 |
 | Discover · Personal Explorations | `/discover?tab=explorations`、`/explorations/:id` | 按最近更新浏览，可搜索与按标签筛选。详情内添加、编辑、排序或删除 Question、Note、Insight、Reference；支持外部链接与站内引用。 |
-| Collections | `/collections`、`/collections/:id` | All Collections / Inbox / 自定义分类，可选一级文件夹，搜索及状态、标签筛选，Card / List。Quick Add 只需标题或链接。 |
+| Collections | `/collections`、`/collections/:id` | 分类从浮动菜单打开，收藏统一以列表显示。分类可重命名、排序、隐藏或删除，可选一级文件夹。使用页眉的快速添加输入标题或链接。 |
 | Network | `/connections` | 仅从页眉图标进入。关系列表可编辑，内容详情默认折叠相关内容。 |
 
 Writing 的筛选使用 `?view=`，新文章使用 `/writing/new`，Discover 分类和文件夹使用 `?category=` 与 `folder=`，内容详情使用 `/content/:id`，全局搜索使用 `/search?q=…`。旧详情链接仍可打开原 ID。Writing 的 In Progress 旧入口显示未发布文章，Unused Fragments 旧入口转到 Reflections。旧归档仍可通过原地址访问。

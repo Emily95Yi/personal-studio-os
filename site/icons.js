@@ -30,6 +30,10 @@ const paths = {
   published: '<circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.4 2.4 4.7-4.7"/>',
   unpublished: '<circle cx="12" cy="12" r="8"/><path d="M9 12h6"/>',
   arrow: '<path d="M4 12h15m-5-5 5 5-5 5"/>',
+  up: '<path d="m6 15 6-6 6 6"/>',
+  down: '<path d="m6 9 6 6 6-6"/>',
+  eye: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/>',
+  eyeOff: '<path d="M3 3l18 18M10 6.2a10 10 0 0 1 2-.2c6.5 0 10 6 10 6a14 14 0 0 1-2.5 3M6.3 7.7A14 14 0 0 0 2 12s3.5 6 10 6a11 11 0 0 0 4-.7"/>',
 };
 
 export function icon(name, size = 18) {

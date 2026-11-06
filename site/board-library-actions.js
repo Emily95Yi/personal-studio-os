@@ -1,9 +1,9 @@
 import { escapeHtml as esc } from './html.js';
-import { collectionsAddress, collectionItemAddress, explorationAddress, readRoute } from './pages.js';
+import { collectionsAddress, explorationAddress, readRoute } from './pages.js';
 import { categoryFor, categoryList, entriesFor, entryTypes, foldersFor, moveCollectionCategory, moveExplorationEntry,
   removeCollectionCategory, removeCollectionFolder, removeExplorationEntry, resourceAtUrl, resourceTypes, saveCollectionCategory,
   saveCollectionFolder, saveCollectionItem, saveExplorationEntry, saveExplorationTopic, setLibraryDeleted } from './board-library-data.js';
-import { collectionLocation, collectionResults, explorationResults, optionsHtml } from './board-library-view.js';
+import { collectionLocation, explorationResults, optionsHtml } from './board-library-view.js';
 import { contentTitle, objectFor, relationCandidates, studioStore, studioTags } from './studio-data.js';
 import { studioDialog } from './studio-dialog.js';
 import { objectHref, objectLabels } from './workshop-view.js';
@@ -17,8 +17,8 @@ const select = (name, label, choices, value, attrs = '') => '<label>' + label + 
 const pair = (...fields) => '<div class="work-form-pair">' + fields.join('') + '</div>';
 const state = () => studioStore.state;
 const save = callback => studioStore.change(callback);
-const categoryOptions = (current = '', includeHidden = false, except = '') => [['', 'Inbox'],
-  ...categoryList(state()).filter(row => row.id !== except && (includeHidden || !row.hidden || row.id === current))
+const categoryOptions = (except = '') => [['', 'Inbox'],
+  ...categoryList(state()).filter(row => row.id !== except)
     .map(row => [row.id, row.title + (row.hidden ? '（已隐藏）' : '')])];
 const duplicateLink = '<a data-library-duplicate class="return-link" hidden>打开已有条目 ↗</a>';
 
@@ -35,7 +35,7 @@ function checkDuplicate(form, url, item) {
 }
 
 export function initLibraryActions(app, render) {
-  const filterMemory = new Map();
+  let explorationFilters;
   const dialog = (...args) => studioDialog(app, ...args);
   const go = address => { location.hash = address; };
   function refresh(action, id) {
@@ -45,31 +45,15 @@ export function initLibraryActions(app, render) {
     if (keepManager && app.querySelector('[data-library-manager]')) app.querySelector('[data-library-manager]').open = true;
     if (keepRelations && app.querySelector('.library-reader .sb-related')) app.querySelector('.library-reader .sb-related').open = true;
     const matching = action && [...app.querySelectorAll('[data-library]')].find(button =>
-      button.dataset.library === action && button.dataset.id === (id || '') && !button.disabled);
-    (matching ?? app.querySelector('main')).focus({ preventScroll: true });
-  }
-
-  function quick(route) {
-    const { category, folder } = collectionLocation(route);
-    const categoryId = category === 'all' ? '' : category;
-    const form = dialog('Quick Add', '<p class="work-meta">输入标题或链接，分类可稍后补充。</p>' +
-      field('capture', '标题或链接', '', 'autofocus required placeholder="想读的书，或 https://"') +
-      select('categoryId', '分类（可选）', categoryOptions(categoryId), categoryId) + duplicateLink,
-    data => {
-      const capture = data.get('capture').trim();
-      const url = /^https?:\/\//i.test(capture) ? capture : '';
-      checkDuplicate(form, url);
-      const nextCategory = data.get('categoryId');
-      return save(snapshot => saveCollectionItem(snapshot, { title: url ? '' : capture, url,
-        categoryId: nextCategory, folderId: nextCategory === categoryId ? folder : '',
-        resourceType: url ? 'link' : 'other' }));
-    }, row => go(collectionItemAddress(row.id)), '保存收藏');
+      button.dataset.library === action && button.dataset.id === (id || '') && !button.disabled && button.getClientRects().length);
+    const summary = app.querySelector('[data-library-manager][open] > summary, [data-library-sidebar] > summary');
+    (matching || summary || app.querySelector('main')).focus({ preventScroll: true });
   }
 
   function editItem(item) {
     const form = dialog('编辑收藏', field('title', '标题', item.title, 'required maxlength="200" autofocus') +
       text('description', '简介', item.description) +
-      pair(select('categoryId', '分类', categoryOptions(item.categoryId, true), item.categoryId),
+      pair(select('categoryId', '分类', categoryOptions(), item.categoryId),
         select('folderId', '文件夹', [])) +
       pair(select('resourceType', '资源类型', Object.entries(resourceTypes), item.resourceType), select('status', '状态', [])) +
       '<p class="work-meta" data-status-note hidden>当前分类没有这个状态。可保留原值，也可以选择新状态或明确清空。</p>' +
@@ -98,12 +82,10 @@ export function initLibraryActions(app, render) {
 
   function editCategory(id) {
     const row = id ? categoryFor(state(), id) : null;
-    dialog(row ? '编辑分类与状态' : 'New Category',
-      field('title', '分类名称', row?.title, 'required maxlength="100" autofocus') +
-      text('statuses', '可选状态（每行一个）', row?.statuses.join('\n'), 5) +
-      '<label class="work-check"><input type="checkbox" name="hidden"' + (row?.hidden ? ' checked' : '') + '> 从侧栏隐藏此分类</label>',
+    dialog(row ? '重命名分类' : '新建分类',
+      field('title', '分类名称', row?.title, 'required maxlength="100" autofocus'),
     data => save(snapshot => saveCollectionCategory(snapshot, {
-      id, title: data.get('title'), statuses: data.get('statuses').split('\n'), hidden: data.has('hidden'),
+      id, title: data.get('title'),
     })), () => refresh(id ? 'category' : 'categories', id));
   }
 
@@ -111,10 +93,9 @@ export function initLibraryActions(app, render) {
     const row = categoryFor(state(), id);
     const count = state().collectionItems.filter(item => item.categoryId === id).length;
     dialog('删除分类', '<p>' + esc(row.title) + ' 的 ' + count + ' 条收藏将迁往选定分类的根目录。文件夹将移除，原状态与关联会保留。</p>' +
-      select('destination', '迁移到', categoryOptions('', true, id), ''), data =>
+      select('destination', '迁移到', categoryOptions(id), ''), data =>
       save(snapshot => removeCollectionCategory(snapshot, id, data.get('destination'))), () => {
-      const location = collectionLocation(route);
-      if (route.params.get('category') === id) go(collectionsAddress({ mode: location.mode }));
+      if (route.params.get('category') === id) go(collectionsAddress());
       else refresh('categories');
     }, '迁移并删除分类');
   }
@@ -191,18 +172,16 @@ export function initLibraryActions(app, render) {
     toggle();
   }
 
-  function applyFilters(form, route) {
-    const name = form.dataset.libraryFilter;
-    const filters = Object.fromEntries(new FormData(form));
-    filterMemory.set(name, filters);
-    app.querySelector('[data-library-results]').innerHTML = name === 'topics' ? explorationResults(filters) : collectionResults(route, filters);
+  function applyFilters(form) {
+    explorationFilters = Object.fromEntries(new FormData(form));
+    app.querySelector('[data-library-results]').innerHTML = explorationResults(explorationFilters);
   }
 
   for (const eventName of ['input', 'change', 'submit']) app.addEventListener(eventName, event => {
     const form = event.target.closest('[data-library-filter]');
     if (!form) return;
     if (event.type === 'submit') event.preventDefault();
-    applyFilters(form, readRoute(location.hash));
+    applyFilters(form);
   });
 
   app.addEventListener('click', async event => {
@@ -210,7 +189,6 @@ export function initLibraryActions(app, render) {
     if (!button) return;
     const { library: action, id } = button.dataset;
     const route = readRoute(location.hash);
-    if (action === 'quick') quick(route);
     if (action === 'item') editItem(route.record);
     if (action === 'topic') editTopic(id);
     if (action === 'entry') editEntry(route.record, id);
@@ -219,6 +197,7 @@ export function initLibraryActions(app, render) {
     if (action === 'delete-category') deleteCategory(id, route);
     if (action === 'delete-folder') deleteFolder(id, route);
     if (action === 'categories') {
+      app.querySelector('[data-library-sidebar]').open = false;
       const details = app.querySelector('[data-library-manager]');
       details.open = true;
       details.querySelector('summary').focus();
@@ -238,13 +217,19 @@ export function initLibraryActions(app, render) {
           go(deleting ? route.parent : objectHref(type, row));
         }, label);
     }
-    if (/^(category|entry)-(up|down)$/.test(action)) {
+    if (action === 'category-visibility' || /^(category|entry)-(up|down)$/.test(action)) {
       const step = action.endsWith('-up') ? -1 : 1;
       button.disabled = true;
       try {
-        await save(snapshot => action.startsWith('category-') ? moveCollectionCategory(snapshot, id, step) :
-          moveExplorationEntry(snapshot, route.record.id, id, step));
-        refresh(action.startsWith('category-') ? 'category' : 'entry', id);
+        await save(snapshot => {
+          if (action === 'category-visibility') {
+            const row = categoryFor(snapshot, id);
+            return saveCollectionCategory(snapshot, { id, title: row.title, hidden: !row.hidden });
+          }
+          if (action.startsWith('category-')) return moveCollectionCategory(snapshot, id, step);
+          return moveExplorationEntry(snapshot, route.record.id, id, step);
+        });
+        refresh(action === 'category-visibility' ? action : action.startsWith('category-') ? 'category' : 'entry', id);
       } catch (error) {
         const message = document.createElement('p');
         message.className = 'work-error';
@@ -256,17 +241,13 @@ export function initLibraryActions(app, render) {
     }
   });
 
-  return route => {
-    const sidebar = app.querySelector('[data-library-sidebar]');
-    if (sidebar) sidebar.open = !matchMedia('(max-width: 720px)').matches;
+  return () => {
     const form = app.querySelector('[data-library-filter]');
-    if (!form) return;
-    const previous = filterMemory.get(form.dataset.libraryFilter);
-    if (!previous) return;
-    for (const [key, value] of Object.entries(previous)) {
+    if (!form || !explorationFilters) return;
+    for (const [key, value] of Object.entries(explorationFilters)) {
       const field = form.elements[key];
       if (field && (field.tagName !== 'SELECT' || [...field.options].some(option => option.value === value))) field.value = value;
     }
-    applyFilters(form, route);
+    applyFilters(form);
   };
 }

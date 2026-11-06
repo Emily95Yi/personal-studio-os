@@ -70,22 +70,20 @@ function statusFilters(view) {
         '" aria-pressed="' + (view === key) + '"' })).join('') + '</div>';
 }
 
-function navigation(section, overview = false) {
-  return '<nav class="' + (overview ? 'sb-modules' : 'segmented sb-module-tabs') + '" aria-label="Self-Board 模块">' +
+function overviewNavigation() {
+  return '<nav class="sb-modules" aria-label="Self-Board 模块">' +
     Object.entries(boardSections).map(([id, group]) =>
-      '<a href="' + boardHref(id) + '"' + (section === id ? ' aria-current="page"' : '') + '>' +
-      (overview ? '<span class="sb-nav-icon">' + icon(group.icon, 22) + '</span><span class="sb-module-caption">' +
+      '<a href="' + boardHref(id) + '"><span class="sb-nav-icon">' + icon(group.icon, 22) + '</span><span class="sb-module-caption">' +
         '<strong>' + group.label + '</strong><span>' + group.zh + '</span><small>' + group.description +
-        '</small></span><span class="sb-module-arrow" aria-hidden="true">' + icon('arrow', 17) + '</span>' : group.label) + '</a>').join('') +
+        '</small></span><span class="sb-module-arrow" aria-hidden="true">' + icon('arrow', 17) + '</span></a>').join('') +
     '</nav>';
 }
 
-function toolbar(route) {
-  const searchPage = route.section === 'search';
-  return '<div class="sb-toolbar"><form class="sb-global-search" data-sb-search' + (searchPage ? ' data-sb-filter' : '') + ' role="search">' +
+function searchForm(query) {
+  return '<form class="sb-global-search" data-sb-search data-sb-filter role="search">' +
     '<label class="sb-search">' + icon('search', 17) + '<input type="search" name="query" aria-label="全局搜索" ' +
-    'placeholder="搜索文章、灵感、资料或活动…" value="' + esc(searchPage ? route.params.get('q') || '' : '') + '"></label><button type="submit" class="action-button secondary">搜索</button></form>' +
-    boardIcon('Quick Capture', 'add', { data: 'data-sb-capture' }) + '</div>';
+    'placeholder="搜索文章、灵感、资料或活动…" value="' + esc(query) + '"></label>' +
+    '<button type="submit" class="action-button secondary">搜索</button></form>';
 }
 
 function relatedTo(id) {
@@ -433,10 +431,11 @@ export function boardView(route) {
     content = boardSettings();
   } else {
     content = heading('全局搜索', '跨文章、灵感、资料与相关活动查找。') +
+      searchForm(params.get('q') || '') +
       '<div data-sb-results aria-live="polite">' + boardResults(route) + '</div>';
   }
-  const utilities = section === 'settings' || section === 'connections' ? '' : toolbar(route) + navigation(section, !section && !params.get('view'));
-  return '<section class="sb" data-sb>' + utilities + '<section class="sb-content">' + content + '</section></section>';
+  const navigation = !section && !params.get('view') ? overviewNavigation() : '';
+  return '<section class="sb" data-sb>' + navigation + '<section class="sb-content">' + content + '</section></section>';
 }
 
 function boardRelations(item, ownerType = 'discover') {

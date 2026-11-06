@@ -101,7 +101,7 @@ export function collectionLocation(route) {
   const input = route.params.get('category');
   const category = input === 'inbox' ? '' : input && categoryFor(state(), input) ? input : 'all';
   const folder = foldersFor(state(), category).find(row => row.id === route.params.get('folder'))?.id ?? '';
-  return { category, folder, mode: route.params.get('mode') === 'list' ? 'list' : 'card' };
+  return { category, folder };
 }
 
 function statusLabel(row) {
@@ -109,74 +109,60 @@ function statusLabel(row) {
   return categoryFor(state(), row.categoryId)?.statuses.includes(row.status) ? row.status : row.status + '（保留）';
 }
 
-function itemCard(row, mode) {
-  const category = categoryFor(state(), row.categoryId)?.title;
-  const subtitle = [category, resourceTypes[row.resourceType]].join(' · ');
-  return '<a class="library-card" href="' + esc(collectionItemAddress(row.id)) + '">' +
-    (mode === 'card' ? image(row, 'library-cover') : '') + '<div class="library-card-copy"><small>' + esc(subtitle) +
-    '</small><strong>' + esc(row.title) + '</strong>' +
-    (row.description ? '<p>' + esc(row.description) + '</p>' : '') + '<div class="library-meta">' +
-    (row.status ? '<span class="library-status">' + esc(statusLabel(row)) + '</span>' : '') + tagList(row.tags) +
-    '</div></div></a>';
+function iconButton(label, action, id, glyph, disabled = false) {
+  return '<button type="button" class="sb-icon sb-icon-plain library-icon" data-library="' + action + '" data-id="' +
+    esc(id) + '" aria-label="' + esc(label) + '" title="' + esc(label) + '"' + (disabled ? ' disabled' : '') +
+    '>' + icon(glyph, 16) + '</button>';
 }
 
-export function collectionResults(route, filters = {}) {
-  const location = collectionLocation(route);
-  const rows = filterCollections(state(), { ...location, ...filters });
-  if (!rows.length) return Object.values(filters).some(Boolean) ? empty('没有匹配的收藏', '试试其他关键词或筛选条件。') :
-    empty('这里还没有收藏', '点 Quick Add，输入标题或粘贴链接就可以保存。');
-  return '<p class="sb-results-count">' + rows.length + ' 条收藏</p><div class="' +
-    (location.mode === 'list' ? 'library-list' : 'library-grid') + '">' + rows.map(row => itemCard(row, location.mode)).join('') + '</div>';
+function collectionRows(location) {
+  const rows = filterCollections(state(), location);
+  if (!rows.length) return empty('这里还没有收藏', '点页眉的加号，输入标题或粘贴链接。');
+  return '<ul class="sb-rows library-list">' + rows.map(row => {
+    const category = categoryFor(state(), row.categoryId)?.title;
+    const status = statusLabel(row);
+    return '<li><a class="sb-row" href="' + esc(collectionItemAddress(row.id)) + '"><div class="sb-row-copy">' +
+      '<strong>' + esc(row.title) + '</strong><small>' + esc([category, resourceTypes[row.resourceType]].join(' · ')) + '</small>' +
+      (row.description ? '<p>' + esc(row.description) + '</p>' : '') +
+      '</div><div class="library-meta">' + (status ? '<span class="library-status">' + esc(status) + '</span>' : '') +
+      tagList(row.tags) + '</div></a></li>';
+  }).join('') + '</ul>';
 }
 
 export function collectionsView(route) {
   const location = collectionLocation(route);
-  const { category, folder, mode } = location;
+  const { category, folder } = location;
   const categories = categoryList(state());
-  const selected = category === 'all' ? null : categoryFor(state(), category);
   const items = itemsFor(state());
-  const scoped = items.filter(row => category === 'all' || row.categoryId === category);
-  const tags = unique(scoped.flatMap(row => row.tags));
-  const statuses = unique([...(selected?.statuses ?? categories.flatMap(row => row.statuses)), ...scoped.map(row => row.status)]);
-  const sideLink = (id, label) => link(collectionsAddress({ category: id, mode }),
+  const selected = category === 'all' ? null : categoryFor(state(), category);
+  const sideLink = (id, label) => link(collectionsAddress({ category: id }),
     label + ' · ' + (id === 'all' ? items.length : items.filter(row => row.categoryId === id).length), category === id);
   const folders = foldersFor(state(), category);
-  const manager = '<details class="library-manager" data-library-manager><summary>管理分类与状态</summary>' +
-    '<p class="work-meta">隐藏只影响侧栏；删除分类时会迁移收藏。已有状态值会保留，直到你在收藏里改掉它。</p>' +
+  const manager = '<details class="library-manager" data-library-manager><summary>管理分类</summary>' +
     '<ul class="library-folder-list">' + categories.map((row, i) => '<li><span>' + esc(row.title) +
       (row.hidden ? ' <small>（已隐藏）</small>' : '') + '</span><div class="sb-view-actions">' +
-      libButton('上移', 'category-up', row.id, { disabled: i === 0 }) +
-      libButton('下移', 'category-down', row.id, { disabled: i === categories.length - 1 }) +
-      libButton('编辑', 'category', row.id) + libButton('删除', 'delete-category', row.id) + '</div></li>').join('') +
-    '</ul>' + libButton('New Category', 'category', '', { glyph: 'add' }) + '</details>';
+      iconButton('上移 ' + row.title, 'category-up', row.id, 'up', i === 0) +
+      iconButton('下移 ' + row.title, 'category-down', row.id, 'down', i === categories.length - 1) +
+      iconButton('重命名 ' + row.title, 'category', row.id, 'edit') +
+      iconButton((row.hidden ? '显示 ' : '隐藏 ') + row.title, 'category-visibility', row.id, row.hidden ? 'eye' : 'eyeOff') +
+      iconButton('删除 ' + row.title, 'delete-category', row.id, 'trash') + '</div></li>').join('') +
+    '</ul>' + libButton('新建分类', 'category', '', { glyph: 'add' }) + '</details>';
   const folderNav = selected && category ? '<div class="library-folders"><div class="sb-list-heading"><h3>文件夹</h3>' +
     libButton('New Folder', 'folder', '', { glyph: 'folderAdd' }) + '</div>' +
     (folders.length ? '<ul class="library-folder-list"><li>' +
-      link(collectionsAddress({ category, mode }), '全部文件夹与收藏', !folder) + '</li>' +
-      folders.map(row => '<li>' + link(collectionsAddress({ category, folder: row.id, mode }), row.title, row.id === folder) +
-        '<div class="sb-view-actions"><button class="sb-icon sb-icon-plain" type="button" data-library="folder" data-id="' +
-        esc(row.id) + '" aria-label="重命名 ' + esc(row.title) + '">' + icon('edit', 15) + '</button>' +
-        '<button class="sb-icon sb-icon-plain" type="button" data-library="delete-folder" data-id="' +
-        esc(row.id) + '" aria-label="删除文件夹 ' + esc(row.title) + '">' + icon('trash', 15) + '</button></div></li>').join('') + '</ul>' : '') +
+      link(collectionsAddress({ category }), '全部文件夹与收藏', !folder) + '</li>' +
+      folders.map(row => '<li>' + link(collectionsAddress({ category, folder: row.id }), row.title, row.id === folder) +
+        '<div class="sb-view-actions">' + iconButton('重命名 ' + row.title, 'folder', row.id, 'edit') +
+        iconButton('删除文件夹 ' + row.title, 'delete-folder', row.id, 'trash') + '</div></li>').join('') + '</ul>' : '') +
     '</div>' : '';
-  return '<div class="library-shell"><aside class="library-sidebar"><details data-library-sidebar><summary>分类导航</summary>' +
-    '<nav aria-label="收藏分类">' + sideLink('all', 'All Collections') + sideLink('', 'Inbox') +
+  return '<div class="library-category-bar"><details class="library-sidebar" data-library-sidebar data-sb-disclosure>' +
+    '<summary>' + icon('folder', 16) + '<span>' + esc(selected?.title ?? '分类导航') + '</span>' + icon('down', 13) + '</summary>' +
+    '<div class="library-category-menu"><nav aria-label="收藏分类">' + sideLink('all', '全部收藏') + sideLink('', 'Inbox') +
     '<div class="library-category-list">' + categories.filter(row => !row.hidden || row.id === category).map(row =>
-      sideLink(row.id, row.title)).join('') + '</div>' +
-    '</nav><div class="library-sidebar-actions">' + libButton('New Category', 'category', '', { glyph: 'add' }) +
-    libButton('管理分类', 'categories', '', { glyph: 'settings' }) + '</div></details></aside>' +
-    '<div class="library-main">' + heading(selected?.title ?? 'All Collections',
-      category === '' ? '未分类的收藏，可以随时整理。' : '保存想读、想去、想体验的事物。',
-      libButton('Quick Add', 'quick', '', { primary: true, glyph: 'add' })) +
-    manager + folderNav + '<div class="library-controls"><form class="work-filters library-filters" data-library-filter="collections" role="search">' +
-    searchInput('搜索收藏') + '<select name="status" aria-label="收藏状态">' +
-    optionsHtml([['', '所有状态'], ['unset', '未设状态'], ...statuses.map(status => ['value:' + status, status])]) +
-    '</select><select name="tag" aria-label="收藏标签">' +
-    optionsHtml([['', '所有标签'], ...tags.map(tag => [tag, tag])]) + '</select></form>' +
-    '<nav class="segmented library-view-toggle" aria-label="收藏视图">' +
-    link(collectionsAddress({ category, folder }), 'Card', mode === 'card') +
-    link(collectionsAddress({ category, folder, mode: 'list' }), 'List', mode === 'list') + '</nav></div>' +
-    '<div data-library-results aria-live="polite">' + collectionResults(route) + '</div></div></div>';
+      sideLink(row.id, row.title)).join('') + '</div></nav>' +
+    '<div class="library-sidebar-actions">' + libButton('新建分类', 'category', '', { glyph: 'add' }) +
+    libButton('管理分类', 'categories', '', { glyph: 'settings' }) + '</div></div></details></div>' +
+    manager + folderNav + collectionRows(location);
 }
 
 export function collectionDetail(row, relations) {
