@@ -4,7 +4,6 @@ const tokyoDate = new Intl.DateTimeFormat('sv-SE', {
   timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
 });
 const dayLabel = new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', month: 'long', day: 'numeric', weekday: 'short' });
-const monthLabel = new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', year: 'numeric', month: 'long' });
 
 // UTC dates represent civil calendar days. Only converting an instant to "today" uses Tokyo time.
 export function dateKey(date) {
@@ -66,18 +65,9 @@ export function movePeriod(date, mode, direction) {
 
 export function formatDay(date) { return dayLabel.format(date); }
 
-export function formatPeriod(date, mode) {
-  if (mode === 'month') return monthLabel.format(date);
-  const [start, end] = periodBounds(date, mode);
-  if (mode === 'day') return formatDay(date);
-  const year = start.getUTCFullYear() === end.getUTCFullYear() ? '' : end.getUTCFullYear() + '年';
-  return start.getUTCFullYear() + '年' + formatDay(start) + ' 至 ' + year + formatDay(end);
-}
-
-export function calendarHref(date = todayDate(), mode = 'week', from, source) {
+export function calendarHref(date = todayDate(), mode = 'week', from) {
   return href('calendar') + '?view=' + mode + '&date=' + dateKey(date) +
-    (['self-board', 'auto'].includes(from) ? '&from=' + from : '') +
-    (source === 'A' || source === 'B' ? '&source=' + source : '');
+    (['self-board', 'auto'].includes(from) ? '&from=' + from : '');
 }
 
 export function calendarSelection(params) {

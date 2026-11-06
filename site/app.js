@@ -7,7 +7,7 @@ import { escapeHtml } from './html.js';
 import { autoPlanView, autoWidget, originalSource, planDialog } from './auto-view.js';
 import { plannerRepository, studioRepository } from './repository.js';
 import { calendarHref, calendarSelection, dateKey, parseDate, todayDate } from './calendar.js';
-import { calendarView, taskDialog } from './planner-view.js';
+import { calendarHeaderActions, calendarRefreshState, calendarView, taskDialog } from './planner-view.js';
 import { allCalendarEvents, canEdit, eventDialog, reviewDialog, settingsView, showEvent, statusBanner } from './apple-view.js';
 import { connection, loadCalDav, loadFeed, loadPlanner, onPrivateChange } from './private-api.js';
 import { initAppleActions } from './apple-actions.js';
@@ -60,16 +60,18 @@ function header(route, { title, ancestors }) {
   const section = route.type === 'content-detail' ? boardSection(boardContent(route.record)) : route.section;
   const boardTitle = Object.hasOwn(boardSections, section) ? boardSections[section].label : '';
   const backLabel = route.section === 'settings' ? '返回上一页' : '返回 ' + label;
+  const calendarYear = route.type === 'calendar'
+    ? ' <span class="calendar-year" data-calendar-year>' + calendarSelection(route.params).date.getUTCFullYear() + '年</span>' : '';
   const start = '<a class="header-icon back-link" href="' + escapeHtml(address) + '" aria-label="' + escapeHtml(backLabel) +
     '" title="' + escapeHtml(backLabel) + '">' + icon('back', 19) + '</a>' +
-    (boardTitle ? boardTitleMenu(section, boardTitle, article) : '<h1>' + escapeHtml(title) + '</h1>');
+    (boardTitle ? boardTitleMenu(section, boardTitle, article) : '<h1>' + escapeHtml(title) + calendarYear + '</h1>');
   const calendar = route.type === 'auto-plan' ? '<a class="header-icon" href="' +
     escapeHtml(calendarHref(todayDate(), 'week', 'auto')) +
     '" aria-label="打开 Calendar" title="Calendar">' + icon('calendar', 18) + '</a>' : '';
   const search = inBoard ? boardHeaderSearch() : route.type === 'search' ? '' :
     '<a class="header-icon" href="' + href('search') + '" aria-label="搜索" title="搜索">' + icon('search', 18) + '</a>';
   return '<header class="studio-top"><div class="masthead' + (inBoard ? ' sb-masthead' : '') + '">' + start +
-    '<div class="header-actions">' + calendar + search + (inBoard ?
+    '<div class="header-actions">' + calendar + search + (route.type === 'calendar' ? calendarHeaderActions() : '') + (inBoard ?
       '<button type="button" class="header-icon sb-header-button" data-sb-capture aria-label="快速添加" title="快速添加">' + icon('add', 19) + '</button>' +
       '<a class="header-icon" href="' + boardHref('connections') + '" aria-label="Network" title="Network">' + icon('network', 18) + '</a>' +
       (route.section === 'settings' ? '' : '<a class="header-icon" href="' + boardHref('settings') + '?' +
@@ -168,7 +170,9 @@ app.addEventListener('click', event => {
     event.preventDefault();
     const address = calendarLink.getAttribute('href');
     history.replaceState(history.state, '', address);
-    app.querySelector('main').innerHTML = '<div data-private-status>' + statusBanner() + '</div>' + calendarView(readRoute(location.hash));
+    const route = readRoute(location.hash);
+    app.querySelector('[data-calendar-year]').textContent = calendarSelection(route.params).date.getUTCFullYear() + '年';
+    app.querySelector('main').innerHTML = '<div data-private-status>' + statusBanner() + '</div>' + calendarView(route);
     const next = [...app.querySelectorAll('[data-calendar-nav]')].find(link => link.getAttribute('href') === address &&
       (link.getAttribute('aria-current') || link.getAttribute('aria-label') === calendarLink.getAttribute('aria-label')));
     (next ?? app.querySelector('main')).focus({ preventScroll: true });
@@ -334,7 +338,7 @@ app.addEventListener('submit', event => {
   if (route.type === 'calendar') {
     const { mode, date: selected } = calendarSelection(route.params);
     if (dateKey(selected) !== saved.date) {
-      history.replaceState(history.state, '', calendarHref(date, mode, route.params.get('from'), route.params.get('source')));
+      history.replaceState(history.state, '', calendarHref(date, mode, route.params.get('from')));
     }
   }
   render();
@@ -419,13 +423,20 @@ onPrivateChange(() => {
     if (event) showEvent(app, event);
     else dialog.close();
   }
-  if (!feedChanged || route.type !== 'calendar') return;
+  if (route.type !== 'calendar') return;
+  const refresh = app.querySelector('[data-feed-refresh]');
+  if (refresh) {
+    const { state, label, disabled } = calendarRefreshState();
+    refresh.dataset.refreshState = state;
+    refresh.setAttribute('aria-disabled', disabled);
+    refresh.setAttribute('aria-label', label);
+    refresh.title = label;
+  }
+  if (!feedChanged) return;
   const active = document.activeElement;
-  const focusedRefresh = active?.hasAttribute('data-feed-refresh');
   const focusedLink = active?.closest('main') ? active.getAttribute('href') : null;
   app.querySelector('main').innerHTML = '<div data-private-status>' + statusBanner() + '</div>' + calendarView(route);
-  const next = focusedRefresh ? app.querySelector('[data-feed-refresh]') :
-    focusedLink ? [...app.querySelectorAll('main a')].find(link => link.getAttribute('href') === focusedLink) : null;
+  const next = focusedLink ? [...app.querySelectorAll('main a')].find(link => link.getAttribute('href') === focusedLink) : null;
   if (!app.querySelector('dialog[open]')) next?.focus({ preventScroll: true });
 });
 

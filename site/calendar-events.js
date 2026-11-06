@@ -153,7 +153,8 @@ export function combineEvents(local, imported) {
     const matches = imported.filter(row => row.marker ? row.marker === event.id : row.uid === uid(event));
     if (matches.length === 1 && sameTime(event, matches[0])) {
       consumed.add(matches[0].id);
-      return { ...event, ...daySpan(event), source: 'studio', status: 'synced', appleUid: matches[0].uid };
+      const { uid: appleUid, sourceGroup, sourceLabel } = matches[0];
+      return { ...event, ...daySpan(event), source: 'studio', status: 'synced', appleUid, sourceGroup, sourceLabel };
     }
     return { ...event, ...daySpan(event), source: 'studio', status: matches.length ? 'sync_error' : event.status,
       mismatch: matches.length > 0 };

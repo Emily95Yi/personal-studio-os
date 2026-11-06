@@ -64,8 +64,9 @@ async function caldavApi(request, env, ctx, owner, path, service) {
     result = await service.select(env, owner, input?.id, input?.secondaryId);
     if (!result.error) syncLater(ctx, service.run(env, owner, { manual: true }));
   } else if (path === '/api/calendar/caldav/refresh' && method === 'POST') {
-    syncLater(ctx, service.run(env, owner, { manual: true }));
+    const busy = await service.run(env, owner, { manual: true }) === false;
     result = await service.view(env, owner);
+    if (busy) result.refreshPending = true;
   } else {
     const event = /^\/api\/calendar\/caldav\/event\/([\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12})$/.exec(path);
     if (!event || !['PUT', 'POST'].includes(method)) return json({ error: 'not_found' }, 404);

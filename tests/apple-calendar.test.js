@@ -10,7 +10,7 @@ import { combineEvents, eventIcs, eventStatusLabel, eventTimes, readShortcutResu
 import { plannerRepository } from '../site/repository.js';
 import { allCalendarEvents, showEvent } from '../site/apple-view.js';
 import { connection } from '../site/private-api.js';
-import { calendarView } from '../site/planner-view.js';
+import { calendarHeaderActions, calendarView } from '../site/planner-view.js';
 
 const fakeUrl = 'webcal://p1-caldav.icloud.com/published/2/fixture_not_a_real_credential';
 const ics = (...events) => ['BEGIN:VCALENDAR', 'VERSION:2.0', ...events.flatMap(properties =>
@@ -197,7 +197,7 @@ test('Worker verifies signed Access tokens, isolates source and planner, caches 
   assert.deepEqual(await (await send('calendar/feed', { auth: alice })).json(), { status: 'unconfigured', events: [] });
 });
 
-test('calendar views preserve source filters, deduplicate display and omit B mutation controls', t => {
+test('calendar views combine color-coded sources and omit iCloud mutation controls', t => {
   const old = { ...connection };
   t.after(() => Object.assign(connection, old));
   plannerRepository.restore(null);
@@ -205,9 +205,9 @@ test('calendar views preserve source filters, deduplicate display and omit B mut
   const fields = { title: 'Apple A original', id: 'original', uid: 'same-uid', recurrence: '',
     source: 'icloud', allDay: true, start: day, end: '2027-01-09', dayStart: day, dayEnd: '2027-01-09' };
   connection.mode = 'private';
-  connection.caldav = { enabled: true, configured: true, name: 'Test A', sourceId: 'source-a', statuses: [],
+  connection.caldav = { enabled: true, configured: true, name: 'Test A', sourceId: 'source-a', statuses: [], fetchedAt: 1,
     events: [{ ...fields, linkId: crypto.randomUUID(), version: '"1"' }],
-    secondary: { name: 'Test B', sourceId: 'source-b', events: [{ ...fields, title: 'Duplicate B' },
+    secondary: { name: 'Test B', sourceId: 'source-b', fetchedAt: 1, events: [{ ...fields, title: 'Duplicate B' },
       { ...fields, title: 'B only', uid: 'only-b', id: 'only-b' }] },
   };
   connection.feed = { status: 'ready', events: [{ ...fields, title: 'Old public B', uid: 'old-ics' }] };
@@ -216,9 +216,18 @@ test('calendar views preserve source filters, deduplicate display and omit B mut
   assert.notEqual(allCalendarEvents('A')[0].id, allCalendarEvents('B')[0].id);
   const params = new URLSearchParams({ source: 'B', date: day, view: 'day' });
   const html = calendarView({ params });
-  assert.match(html, /view=week[^"]*&amp;source=B/);
-  assert.match(html, /B only/);
-  assert.doesNotMatch(html, /Apple A original|data-caldav-new/);
+  assert.doesNotMatch(html, /source=B|日历来源|当天事项|Duplicate B/);
+  assert.match(html, /<h2>1月<\/h2>/);
+  assert.match(html, /<h2>1\.8<\/h2>/);
+  assert.match(html, /data-calendar-source="A"[^]*Apple A original/);
+  assert.match(html, /data-calendar-source="B"[^]*B only/);
+  assert.match(html, /data-caldav-new="2027-01-08"[^>]+aria-label="新建 YiStudio 日程"/);
+  assert.match(calendarHeaderActions(), /data-refresh-state="success"/);
+  connection.refreshing = true;
+  assert.match(calendarHeaderActions(), /data-refresh-state="pending"/);
+  connection.refreshing = false;
+  connection.caldav.secondary.stale = true;
+  assert.match(calendarHeaderActions(), /data-refresh-state="error"/);
   const body = { innerHTML: '' };
   const dialog = { dataset: {}, open: true, querySelector: () => body };
   const app = { querySelector: () => dialog, querySelectorAll: () => [] };

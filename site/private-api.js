@@ -1,6 +1,6 @@
 import { plannerRepository } from './repository.js';
 
-export const connection = { mode: 'loading', save: 'idle', feed: { status: 'unconfigured', events: [] }, caldav: { enabled: false, statuses: [], events: [] } };
+export const connection = { mode: 'loading', save: 'idle', refreshing: false, feed: { status: 'unconfigured', events: [] }, caldav: { enabled: false, statuses: [], events: [] } };
 let revision = 0;
 let changed = false;
 let writing;
@@ -14,10 +14,10 @@ const onChange = new EventTarget();
 export function onPrivateChange(handler) { onChange.addEventListener('change', handler); }
 function announce() { onChange.dispatchEvent(new Event('change')); }
 
-async function request(path, { method = 'GET', value, durable = true } = {}) {
+async function request(path, { method = 'GET', value, durable = true, timeout = 15_000 } = {}) {
   const body = value === undefined ? undefined : JSON.stringify(value);
   const response = await fetch('/api/' + path, {
-    method, body, cache: 'no-store', credentials: 'same-origin', redirect: 'error', signal: AbortSignal.timeout(15_000),
+    method, body, cache: 'no-store', credentials: 'same-origin', redirect: 'error', signal: AbortSignal.timeout(timeout),
     keepalive: durable && body !== undefined && new TextEncoder().encode(body).byteLength < 55_000,
     headers: { 'X-Studio-Request': '1', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
   });
@@ -78,11 +78,11 @@ export function saveChanges() {
 
 export async function loadFeed({ manual = false, force = false } = {}) {
   if (connection.mode !== 'private' || settingSource) return;
-  if (!manual && !force && Date.now() - lastFeedAttempt < 15_000) return;
+  if (!manual && (connection.refreshing || (!force && Date.now() - lastFeedAttempt < 15_000))) return;
   const attempt = ++feedRequest;
   lastFeedAttempt = Date.now();
-  if (connection.caldav.secondary) return loadCalDav({ manual });
-  void loadCalDav({ manual });
+  const caldav = loadCalDav({ manual: manual && connection.caldav.configured });
+  if (connection.caldav.secondary) return caldav;
   try {
     const feed = await request(manual ? 'calendar/refresh' : 'calendar/feed', { method: manual ? 'POST' : 'GET' });
     if (attempt !== feedRequest) return;
@@ -94,6 +94,19 @@ export async function loadFeed({ manual = false, force = false } = {}) {
     } else connection.feed = { ...connection.feed, status: connection.feed.events.length ? 'stale' : 'error' };
   }
   announce();
+  if (manual) await caldav;
+}
+
+export async function refreshCalendar() {
+  if (connection.refreshing) return;
+  connection.refreshing = true;
+  announce();
+  try {
+    await loadFeed({ manual: true });
+  } finally {
+    connection.refreshing = false;
+    announce();
+  }
 }
 
 export async function setSource(url) {
@@ -118,15 +131,27 @@ function updateCalDav(data) {
 }
 
 export async function loadCalDav({ manual = false } = {}) {
-  if (connection.mode !== 'private') return;
+  if (connection.mode !== 'private' || (!manual && connection.refreshing && connection.caldav.configured)) return;
   const attempt = ++caldavRequest;
   try {
-    const data = await request(manual ? 'calendar/caldav/refresh' : 'calendar/caldav', { method: manual ? 'POST' : 'GET' });
-    if (attempt === caldavRequest) updateCalDav(data);
-    if (manual && data.configured) pollCalDav();
+    if (!manual) {
+      const data = await request('calendar/caldav');
+      if (attempt === caldavRequest) updateCalDav(data);
+      return;
+    }
+    for (let retry = 0; retry <= 10; retry++) {
+      const { refreshPending, ...data } = await request('calendar/caldav/refresh', { method: 'POST', timeout: 30_000 });
+      if (attempt !== caldavRequest) return;
+      if (!refreshPending) {
+        updateCalDav(data);
+        return;
+      }
+      if (retry < 10) await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    throw new Error('Calendar refresh is busy');
   } catch (error) {
     if (attempt !== caldavRequest || !connection.caldav.enabled) return;
-    if ([401, 403].includes(error.status)) updateCalDav({ enabled: false });
+    if ([401, 403].includes(error.status)) updateCalDav({ enabled: false, stale: true });
     else updateCalDav({ ...connection.caldav, stale: true });
   }
 }

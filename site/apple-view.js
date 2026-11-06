@@ -4,6 +4,7 @@ import { escapeHtml } from './html.js';
 import { connection } from './private-api.js';
 import { plannerRepository } from './repository.js';
 
+export const calendarSourceLabels = { A: 'YiStudio', B: 'iCloud' };
 export const canEdit = () => ['private', 'preview'].includes(connection.mode);
 const labelTime = date => dateKey(addDays(parseDate(date), 1));
 export function allCalendarEvents(filter = 'all') {
@@ -24,18 +25,18 @@ export function allCalendarEvents(filter = 'all') {
     ...managed.filter(event => event.caldav?.state !== 'deleted').map(event => {
       const sync = event.caldav;
       const fields = (sync?.state === 'conflict' ? sync.remote ?? sync.local : sync?.local ?? sync?.remote) ?? event;
-      const merged = { ...event, ...fields, sourceGroup: 'A', sourceLabel: 'A · ' + (caldav.name ?? 'iCloud') };
+      const merged = { ...event, ...fields, sourceGroup: 'A', sourceLabel: calendarSourceLabels.A };
       return { ...merged, ...daySpan(merged) };
     }),
     ...caldav.events.filter(event => !ownedUids.has(event.uid)).map(event => ({
       ...event, id: event.linkId ?? caldav.sourceId + ':' + event.id, sourceGroup: 'A',
-      sourceLabel: 'A · ' + caldav.name, caldav: event.linkId ? { state: 'added', version: event.version } : null,
+      sourceLabel: calendarSourceLabels.A, caldav: event.linkId ? { state: 'added', version: event.version } : null,
     })),
   ];
   const readOnly = caldav.secondary?.events ?? feed.events;
   const b = readOnly.map(event => ({
     ...event, id: (caldav.secondary?.sourceId ?? 'B:ics') + ':' + event.id, sourceGroup: 'B',
-    sourceLabel: 'B · ' + (caldav.secondary?.name ?? 'iCloud 订阅'),
+    sourceLabel: calendarSourceLabels.B,
   }));
   if (filter === 'A') return a;
   if (filter === 'B') return b;
@@ -61,8 +62,8 @@ export function settingsView() {
   }
   const configured = connection.feed.status !== 'unconfigured';
   return caldavSettings() + '<section class="empty-state apple-settings"><h2>' +
-    (connection.caldav.enabled ? 'B · 公开 ICS 备用方式' : 'iCloud 订阅') + '</h2><p data-settings-status role="status">' +
-    (connection.caldav.secondary ? '已启用私人日历 B。当前不使用公开订阅。' : configured ? '订阅已配置。可替换或断开。' : '可选：没有配置私人日历 B 时，可以使用公开订阅。') + '</p>' +
+    (connection.caldav.enabled ? 'iCloud · 公开 ICS 备用方式' : 'iCloud 订阅') + '</h2><p data-settings-status role="status">' +
+    (connection.caldav.secondary ? '已连接私人 iCloud 日历。' : configured ? '订阅已配置。可替换或断开。' : '可选：未连接私人 iCloud 日历时，可以使用公开订阅。') + '</p>' +
     '<form data-apple-settings autocomplete="off"><label>iCloud 公开日历链接' +
     '<input type="password" name="source" maxlength="512" required autocomplete="off" spellcheck="false"></label>' +
     '<div class="widget-actions"><button class="action-button" type="submit">保存订阅</button>' +
@@ -75,41 +76,24 @@ function caldavSettings() {
   if (!config.enabled) return '';
   const connected = config.configured;
   return '<section class="empty-state apple-settings caldav-settings"><h2>Apple 私人日历</h2>' +
-    '<p data-caldav-message role="status">' + (connected ? 'A · 读写：' + escapeHtml(config.name) +
-      '；B · 只读：' + escapeHtml(config.secondary?.name ?? '未选择') :
-      '使用同一个 Apple 账号连接日历 A（读写）及日历 B（只读）。') + '</p>' +
-    (connected ? '<div class="widget-actions"><button class="action-button" type="button" data-caldav-discover-existing>选择只读日历 B</button>' +
+    '<p data-caldav-message role="status">' + (connected ? 'YiStudio · 读写：' + escapeHtml(config.name) +
+      '；iCloud · 只读：' + escapeHtml(config.secondary?.name ?? '未选择') :
+      '使用同一个 Apple 账号连接 YiStudio（读写）及 iCloud（只读）。') + '</p>' +
+    (connected ? '<div class="widget-actions"><button class="action-button" type="button" data-caldav-discover-existing>选择只读 iCloud 日历</button>' +
       '<button class="action-button secondary" type="button" data-caldav-disconnect>断开 Apple 连接</button></div>' :
       '<form data-caldav-discover autocomplete="off"><label>Apple 账号' +
       '<input name="email" type="email" required maxlength="254" autocomplete="off"></label>' +
       '<label>App 专用密码<input name="password" type="password" required maxlength="64" autocomplete="new-password"></label>' +
       '<div class="widget-actions"><button class="action-button" type="submit">查找日历</button></div></form>') +
-    '<form data-caldav-select hidden><label>A · 读写<select required name="calendarId"></select></label>' +
-    '<label>B · 只读（可选）<select name="secondaryId"></select></label>' +
+    '<form data-caldav-select hidden><label>YiStudio · 读写<select required name="calendarId"></select></label>' +
+    '<label>iCloud · 只读（可选）<select name="secondaryId"></select></label>' +
     '<div class="widget-actions"><button class="action-button" type="submit">保存日历选择</button></div></form></section>';
 }
 
-const syncTime = new Intl.DateTimeFormat('zh-CN', {
-  timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-});
-const lastSync = (at, stale, revoked) => (revoked ? '授权失效' : stale ? '读取失败' : at ? 'Synced' : 'Pending') +
-  (at ? ' · 上次成功 ' + syncTime.format(at) : '') + (stale && at ? '（缓存）' : '');
-
-export function feedStatus(date) {
-  const { caldav, feed } = connection;
-  if (connection.mode === 'preview') return '本机预览 · 刷新清除';
-  if (connection.mode === 'loading') return '正在载入工作台…';
-  if (connection.mode === 'unavailable') return '私有服务不可用';
-  const parts = [];
-  if (caldav.configured) parts.push('A · ' + lastSync(caldav.fetchedAt, caldav.stale, caldav.authorizationFailed));
-  if (caldav.secondary) {
-    const b = caldav.secondary;
-    parts.push('B · ' + lastSync(b.fetchedAt, b.stale, b.authorizationFailed));
-  } else if (feed.status !== 'unconfigured') {
-    const outside = date && feed.windowStart && (date < feed.windowStart || date >= feed.windowEnd);
-    parts.push('B · ICS · ' + (outside ? '超出显示范围' : lastSync(feed.fetchedAt, ['stale', 'error'].includes(feed.status))));
-  }
-  return parts.join('；') || '未连接 iCloud';
+export function agendaEventStatus(event) {
+  if (event.sourceGroup === 'B' || (event.source !== 'studio' && event.sourceGroup !== 'A')) return '';
+  const status = eventStatusLabel(event);
+  return status === 'Synced' ? '' : status ?? '';
 }
 
 export function statusBanner() {
@@ -187,7 +171,7 @@ export function openReview(app, task, event, date = task?.date ?? dateKey()) {
   form.querySelector('[data-caldav-rebase]').hidden = true;
   form.elements.action.disabled = direct;
   form.elements.action.closest('label').hidden = direct;
-  form.querySelector('h2').textContent = event ? '编辑 A 日程' : direct ? '新建 A 日程' : 'Review';
+  form.querySelector('h2').textContent = event ? '编辑 YiStudio 日程' : direct ? '新建 YiStudio 日程' : 'Review';
   form.elements.action.value = direct ? 'calendar' : plannerRepository.getReview(task.id)?.action ?? 'calendar';
   form.elements.startTime.value = date + 'T09:00';
   form.elements.endTime.value = date + 'T10:00';
@@ -214,7 +198,7 @@ export function openReview(app, task, event, date = task?.date ?? dateKey()) {
     form.elements.place.value = event.location;
     form.elements.notes.value = event.notes ?? '';
   }
-  form.querySelector('[data-review-link]').textContent = task?.title ?? 'A · ' + (connection.caldav.name ?? 'iCloud');
+  form.querySelector('[data-review-link]').textContent = task?.title ?? calendarSourceLabels.A;
   form.querySelector('[data-form-error]').hidden = true;
   updateReview(form);
   dialog.showModal();
@@ -261,7 +245,12 @@ export function showEvent(app, event) {
     exportable && appleDevice && !link ? '快捷指令参数过长，请下载 .ics 手动导入。' :
     exportable ? '下载 .ics 后需要手动导入。' : '';
   const row = [...app.querySelectorAll('[data-apple-event]')].find(button => button.dataset.appleEvent === event.id);
-  if (row && (studio || automatic)) row.querySelector('[data-event-status]').textContent = eventStatusLabel(event);
+  const agendaStatus = row?.querySelector('[data-event-status]');
+  if (agendaStatus) {
+    const status = agendaEventStatus(event);
+    agendaStatus.hidden = !status;
+    agendaStatus.textContent = status ? ' · ' + status : '';
+  }
   dialog.dataset.eventId = event.id;
   dialog.querySelector('[data-event-body]').innerHTML =
     '<h2 id="apple-event-title">' + escapeHtml(event.title) + '</h2>' +

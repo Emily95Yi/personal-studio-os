@@ -216,9 +216,9 @@ test('planner-linked events retain overlap safety, survive Apple deletion as tom
   const href = collection + first.id + '.ics';
   events.delete(href);
   expire();
-  await request(prefix + '/refresh', 'POST');
+  const refreshed = await request(prefix + '/refresh', 'POST');
+  assert.equal(refreshed.statuses.find(row => row.id === first.id).reason, 'removed_remotely');
   await flush();
-  assert.equal((await current(first.id)).reason, 'removed_remotely');
   await save();
   assert.equal(events.size, 0);
   assert.equal((await request(prefix + '/event/' + first.id, 'POST', { action: 'retry', version: (await current(first.id)).version })).status, 409);

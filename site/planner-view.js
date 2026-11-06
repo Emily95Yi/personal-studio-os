@@ -1,26 +1,27 @@
-import { calendarDays, calendarHref, calendarSelection, dateKey, formatDay, formatPeriod, movePeriod, todayDate } from './calendar.js';
+import { calendarDays, calendarHref, calendarSelection, dateKey, formatDay, movePeriod, todayDate } from './calendar.js';
 import { plannerRepository, workshopRepository } from './repository.js';
 import { href } from './pages.js';
 import { escapeHtml } from './html.js';
 import { taskSourceLink } from './auto-view.js';
-import { allCalendarEvents, calendarTasks, canEdit, feedStatus, onDay, reviewLabel } from './apple-view.js';
-import { eventStatus, eventStatusLabel, eventTimeLabel } from './calendar-events.js';
+import { allCalendarEvents, agendaEventStatus, calendarSourceLabels, calendarTasks, canEdit, onDay, reviewLabel } from './apple-view.js';
+import { icon } from './icons.js';
+import { eventStatus, eventTimeLabel } from './calendar-events.js';
 import { connection } from './private-api.js';
 
 const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
 const modes = [['day', 'Day'], ['week', 'Week'], ['month', 'Month']];
 
-function dateLink(date, mode, label, from, attributes = '', filter) {
-  return '<a data-calendar-nav href="' + escapeHtml(calendarHref(date, mode, from, filter)) + '"' + attributes + '>' + label + '</a>';
+function dateLink(date, mode, label, from, attributes = '') {
+  return '<a data-calendar-nav href="' + escapeHtml(calendarHref(date, mode, from)) + '"' + attributes + '>' + label + '</a>';
 }
 
-function calendarGrid(date, mode, from, filter) {
+function calendarGrid(date, mode, from) {
   if (mode === 'day') return '';
   const days = calendarDays(date, mode);
   const start = dateKey(days[0]);
   const end = dateKey(days.at(-1));
   const tasks = calendarTasks(start, end);
-  const appointments = allCalendarEvents(filter);
+  const appointments = allCalendarEvents();
   const checkIns = plannerRepository.checkInsBetween(start, end);
   const events = workshopRepository.eventsBetween(start, end);
   const cells = days.map(day => {
@@ -38,33 +39,40 @@ function calendarGrid(date, mode, from, filter) {
     const className = 'calendar-day' + (mode === 'month' && day.getUTCMonth() !== date.getUTCMonth() ? ' other-month' : '') +
       (today ? ' is-today' : '');
     return dateLink(day, mode, label, from, ' class="' + className + '" aria-label="' + formatDay(day) +
-      (details.length ? '，' + details.join('，') : '') + '"' + (selected ? ' aria-current="date"' : ''), filter);
+      (details.length ? '，' + details.join('，') : '') + '"' + (selected ? ' aria-current="date"' : ''));
   }).join('');
   return '<div class="calendar-grid ' + mode + '" aria-label="' + (mode === 'month' ? '月历' : '周历') + '">' +
     weekdays.map(day => '<span class="weekday">周' + day + '</span>').join('') + cells + '</div>';
 }
 
-function agenda(date, filter) {
+function agenda(date) {
   const key = dateKey(date);
   const tasks = calendarTasks(key, key);
-  const appointments = allCalendarEvents(filter).filter(event => onDay(event, key))
+  const appointments = allCalendarEvents().filter(event => onDay(event, key))
     .sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start));
   const checked = plannerRepository.checkInsBetween(key, key).length > 0;
   const events = workshopRepository.eventsBetween(key, key);
-  const appointmentRows = appointments.map(event => '<li><button type="button" data-apple-event="' + escapeHtml(event.id) +
-    '"><strong>' + escapeHtml(event.title) + '</strong><span>' + escapeHtml(eventTimeLabel(event)) +
-    ' · <span data-event-status>' + (event.sourceGroup === 'A' ? escapeHtml(event.sourceLabel) + ' · ' + eventStatusLabel(event) :
-      event.source === 'icloud' ? escapeHtml(event.sourceLabel || 'iCloud') : eventStatusLabel(event)) +
-    '</span></span></button></li>').join('');
+  const appointmentRows = appointments.map(event => {
+    const source = event.sourceGroup;
+    const label = calendarSourceLabels[source];
+    const status = agendaEventStatus(event);
+    return '<li class="agenda-appointment"' + (label ? ' data-calendar-source="' + source + '"' : '') +
+      '><button type="button" data-apple-event="' + escapeHtml(event.id) + '"><strong>' +
+      (label ? '<span class="visually-hidden">' + label + ' · </span>' : '') + escapeHtml(event.title) +
+      '</strong><span>' + escapeHtml(eventTimeLabel(event)) +
+      '<span data-event-status' + (status ? '' : ' hidden') + '> · ' + escapeHtml(status) + '</span></span></button></li>';
+  }).join('');
   const taskRows = tasks.map(task =>
     '<li><button type="button" data-task-edit="' + escapeHtml(task.id) + '"><strong>' + escapeHtml(task.title) +
     '</strong><span>' + (task.done ? '已完成' : reviewLabel(task) ? eventStatus.confirmed + ' · ' + reviewLabel(task) : eventStatus.draft) +
     '</span></button>' + taskSourceLink(task) + '</li>').join('');
-  return '<section class="calendar-agenda"><div class="section-heading"><h2>' + formatDay(date) + ' · 当天事项</h2>' +
-    '<div class="widget-actions">' +
-    (connection.mode === 'private' && connection.caldav.configured && filter !== 'B' ?
-      '<button type="button" class="action-button" data-caldav-new="' + key + '">新建 A 日程</button>' : '') +
-    (canEdit() ? '<button type="button" class="action-button secondary" data-task-new="' + key + '">新建待办</button>' : '') + '</div></div>' +
+  return '<section class="calendar-agenda"><div class="section-heading"><h2>' +
+    (date.getUTCMonth() + 1) + '.' + date.getUTCDate() + '</h2><div class="calendar-agenda-actions">' +
+    (connection.mode === 'private' && connection.caldav.configured ?
+      '<button type="button" class="header-icon calendar-icon" data-caldav-new="' + key +
+      '" aria-label="新建 YiStudio 日程" title="新建 YiStudio 日程">' + icon('calendarAdd', 19) + '</button>' : '') +
+    (canEdit() ? '<button type="button" class="header-icon calendar-icon" data-task-new="' + key +
+      '" aria-label="新建待办" title="新建待办">' + icon('taskAdd', 19) + '</button>' : '') + '</div></div>' +
     (appointmentRows || taskRows ? '<ul class="agenda-list">' + appointmentRows + taskRows + '</ul>' :
       (!checked && !events.length ? '<p>暂无安排。</p>' : '')) +
     (checked ? '<p class="habit-record">习惯 · 已打卡</p>' : '') +
@@ -73,25 +81,43 @@ function agenda(date, filter) {
       '</a><small>Workshop</small></li>').join('') + '</ul>' : '') + '</section>';
 }
 
+export function calendarRefreshState() {
+  const { mode, refreshing, caldav, feed } = connection;
+  const hasSource = caldav.configured || feed.status !== 'unconfigured';
+  if (refreshing) return { state: 'pending', label: '正在刷新日历', disabled: true };
+  if (mode !== 'private') return { state: 'idle', label: '刷新日历', disabled: true };
+
+  const secondary = caldav.secondary;
+  const secondaryFailed = secondary ? secondary.stale : ['stale', 'error'].includes(feed.status);
+  if (caldav.stale || secondaryFailed) return { state: 'error', label: '刷新日历：读取失败', disabled: !hasSource };
+  if (!hasSource) return { state: 'idle', label: '刷新日历', disabled: true };
+  const bothReady = caldav.configured && caldav.fetchedAt &&
+    (secondary ? secondary.fetchedAt : feed.status === 'ready' && feed.fetchedAt);
+  return bothReady ? { state: 'success', label: '刷新日历：YiStudio 和 iCloud 读取成功', disabled: false } :
+    { state: 'idle', label: '刷新日历', disabled: false };
+}
+
+export function calendarHeaderActions() {
+  const { state, label, disabled } = calendarRefreshState();
+  return '<button type="button" class="header-icon calendar-icon" data-feed-refresh data-refresh-state="' + state +
+    '" aria-disabled="' + disabled + '" aria-label="' + label + '" title="' + label + '">' + icon('refresh', 19) + '</button>' +
+    '<a class="header-icon calendar-icon" href="' + href('settings') +
+    '" aria-label="日历设置" title="日历设置">' + icon('settings', 19) + '</a>';
+}
+
 export function calendarView({ params }) {
   const { mode, date } = calendarSelection(params);
   const from = params.get('from');
-  const source = params.get('source');
-  const filter = source === 'A' || source === 'B' ? source : 'all';
-  const refresh = connection.mode === 'private' && (connection.feed.status !== 'unconfigured' || connection.caldav.configured);
-  return '<div class="calendar-source"><span role="status">' + feedStatus(dateKey(date)) + '</span>' +
-    (refresh ? '<button type="button" class="text-action" data-feed-refresh>刷新日历</button>' : '') +
-    '<a class="text-action" href="' + href('settings') + '">日历设置</a></div>' +
-    '<div class="calendar-toolbar"><div class="segmented" aria-label="日历来源">' +
-    [['all', '全部'], ['A', '日历 A'], ['B', '日历 B']].map(([key, label]) =>
-      dateLink(date, mode, label, from, filter === key ? ' aria-current="page"' : '', key)).join('') +
-    '</div><div class="segmented" aria-label="日历视图">' +
-    modes.map(([key, label]) => dateLink(date, key, label, from, mode === key ? ' aria-current="page"' : '', filter)).join('') +
+  const legend = Object.entries(calendarSourceLabels).map(([source, label]) =>
+    '<li data-calendar-source="' + source + '">' + label + '</li>').join('');
+  return '<div class="calendar-toolbar"><div class="segmented" aria-label="日历视图">' +
+    modes.map(([key, label]) => dateLink(date, key, label, from, mode === key ? ' aria-current="page"' : '')).join('') +
     '</div><div class="calendar-controls">' +
-    dateLink(movePeriod(date, mode, -1), mode, '‹', from, ' aria-label="上一时段"', filter) +
-    dateLink(todayDate(), mode, '今天', from, '', filter) + dateLink(movePeriod(date, mode, 1), mode, '›', from, ' aria-label="下一时段"', filter) +
-    '</div></div><h2 class="calendar-period">' + formatPeriod(date, mode) + '</h2>' +
-    calendarGrid(date, mode, from, filter) + agenda(date, filter);
+    dateLink(movePeriod(date, mode, -1), mode, '‹', from, ' aria-label="上一时段"') +
+    dateLink(todayDate(), mode, '今天', from) + dateLink(movePeriod(date, mode, 1), mode, '›', from, ' aria-label="下一时段"') +
+    '</div></div><div class="calendar-period"><h2>' + (date.getUTCMonth() + 1) + '月</h2>' +
+    '<ul class="calendar-legend" aria-label="日历颜色">' + legend + '</ul></div>' +
+    calendarGrid(date, mode, from) + agenda(date);
 }
 
 export function taskDialog() {

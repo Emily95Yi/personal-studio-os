@@ -1,7 +1,7 @@
 import { eventIcs, eventDateTimeLabel, shortcutAttemptKey, shortcutChannel, shortcutReceiptKey } from './calendar-events.js';
 import { allCalendarEvents, canEdit, openReview, readReview, showEvent, updateReview } from './apple-view.js';
-import { caldavCommand, connection, createCalDavEvent, disconnectCalDav, discoverCalDav, loadCalDav, loadFeed, loadPlanner, onPrivateChange, pollCalDav,
-  saveChanges, selectCalDav, setSource } from './private-api.js';
+import { caldavCommand, connection, createCalDavEvent, disconnectCalDav, discoverCalDav, loadCalDav, loadPlanner, onPrivateChange, pollCalDav,
+  refreshCalendar, saveChanges, selectCalDav, setSource } from './private-api.js';
 import { plannerRepository } from './repository.js';
 
 function currentEvent(app) {
@@ -36,7 +36,7 @@ async function changeSource(app, url, render) {
 
 const caldavErrors = {
   invalid_credentials: '请输入 Apple 账号和 App 专用密码。',
-  no_writable_calendar: '未找到指定的可写 iCloud 日历 A。请核对日历名称和权限。',
+  no_writable_calendar: '未找到可写的 YiStudio 日历。请核对日历名称和权限。',
   apple_connection_failed: 'Apple 连接失败。请核对 App 专用密码及账号。',
   apple_unauthorized: 'Apple 拒绝了授权。请确认账号是该 iCloud 日历的 Apple 账号，并使用新生成的 App 专用密码。',
   apple_unreachable: '暂时无法连接 Apple 日历服务器。请稍后重试。',
@@ -45,7 +45,7 @@ const caldavErrors = {
   setup_expired: '日历选择已过期，请重新查找。',
   already_connected: '已连接一个写入日历。',
   event_changed: 'Apple 或另一处 Studio 已更新日程。你的输入仍保留在此表单。',
-  invalid_calendar: '请选择不同的 A、B 日历，并确认 A 有写入权限。',
+  invalid_calendar: '请选择不同的日历，并确认 YiStudio 有写入权限。',
   invalid_event: '请检查标题、开始及结束时间。',
   sync_in_progress: '正在处理同步，请稍后断开。',
   different_calendar: '请重新连接原来的写入日历，以保留现有日程对应关系。',
@@ -69,7 +69,7 @@ function fillCalendars(section, calendars) {
   calendarId.disabled = Boolean(active);
   function updateSecondary() {
     const selected = secondaryId.value;
-    secondaryId.replaceChildren(new Option('暂不使用私人日历 B', ''));
+    secondaryId.replaceChildren(new Option('暂不使用私人 iCloud 日历', ''));
     for (const row of calendars.filter(row => row.id !== calendarId.value)) {
       secondaryId.add(new Option(row.name, row.id));
     }
@@ -236,13 +236,8 @@ export function initAppleActions(app, render) {
       }
     }
     if (button.hasAttribute('data-feed-refresh')) {
-      button.disabled = true;
-      button.textContent = '正在刷新…';
-      await loadFeed({ manual: true });
-      if (button.isConnected) {
-        button.textContent = '刷新日历';
-        button.disabled = false;
-      }
+      if (button.getAttribute('aria-disabled') !== 'true') await refreshCalendar();
+      return;
     }
     if (button.hasAttribute('data-source-remove') && window.confirm('断开 iCloud 订阅并清除缓存？')) {
       await changeSource(app, '', render);
@@ -275,7 +270,7 @@ export function initAppleActions(app, render) {
           const data = await discoverCalDav(email.value, value);
           if (!form.isConnected) return;
           fillCalendars(section, data.calendars);
-          status.textContent = '请选择读写日历 A，以及可选的私人只读日历 B。';
+          status.textContent = '请选择读写日历 YiStudio，以及可选的只读 iCloud 日历。';
         } else {
           status.textContent = '正在连接…';
           await selectCalDav(form.elements.calendarId.value, form.elements.secondaryId.value);

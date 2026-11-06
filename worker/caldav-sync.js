@@ -424,7 +424,7 @@ export function createCalDavService({ provider = newCalDavClient, download = fet
     const lease = crypto.randomUUID();
     const result = await stmt(db, 'UPDATE caldav_connections SET lease = ?, lease_until = ? WHERE owner = ? AND id = ? AND lease_until <= ? AND sealed = ?',
       lease, now + readLease, owner, row.id, now, row.sealed).run();
-    if (!result.meta.changes) return;
+    if (!result.meta.changes) return false;
     try {
       const { credentials, collection, secondary } = await decrypt(env, owner, row);
       const client = provider(credentials);
