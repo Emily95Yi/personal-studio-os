@@ -239,11 +239,19 @@ export function newCalDavClient(credentials, send = fetch) {
       filter + '</C:comp-filter></C:filter></C:calendar-query>';
     const result = await report(collection, 'REPORT', payload, '1');
     if (result.items.length > 1000) throw new Error('Too many CalDAV resources');
-    return result.items.map(row => {
+    const resources = [];
+    for (const row of result.items) {
       const data = prop(row, CAL, 'calendar-data')?.text;
-      if (!data || !row.href) throw new Error('Incomplete calendar data');
-      return { href: collectionResource(collection, row.href).href, ics: data, etag: prop(row, DAV, 'getetag')?.text.trim() };
-    });
+      if (!row.href) throw new Error('Incomplete calendar data');
+      const href = appleUrl(row.href, result.url);
+      // An iCloud collection scan can include a response for the calendar itself.
+      const isCalendar = href.href === collection || href.href + '/' === collection;
+      if (!data && isCalendar) continue;
+      if (!data) throw new Error('Incomplete calendar data');
+      resources.push({ href: collectionResource(collection, href.href).href, ics: data,
+        etag: prop(row, DAV, 'getetag')?.text.trim() });
+    }
+    return resources;
   }
 
   async function getOwned(collection, href, uid) {

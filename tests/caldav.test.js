@@ -45,9 +45,13 @@ function appleFixture() {
     if (request.method === 'REPORT') {
       if (request.body.includes('<C:prop-filter name="UID">')) return new Response(null, { status: 412 });
       if (url === privateB && controls.bStatus) return new Response(null, { status: controls.bStatus });
-      return xml([...events].filter(([href]) => href.startsWith(url)).map(([href, row]) =>
+      const results = [...events].filter(([href]) => href.startsWith(url)).map(([href, row]) =>
         property(new URL(href).pathname, '<d:getetag>' + row.etag +
-          '</d:getetag><c:calendar-data><![CDATA[' + row.ics + ']]></c:calendar-data>')));
+          '</d:getetag><c:calendar-data><![CDATA[' + row.ics + ']]></c:calendar-data>'));
+      if (!request.body.includes('time-range')) {
+        results.unshift(property(new URL(url).pathname, '<d:resourcetype><d:collection/></d:resourcetype>'));
+      }
+      return xml(results);
     }
     if (request.method === 'PUT') {
       assert.ok(url.startsWith(collection));
