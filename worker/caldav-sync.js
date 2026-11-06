@@ -115,8 +115,11 @@ export function createCalDavService({ provider = newCalDavClient, download = fet
         return { error: 'invalid_credentials', status: 400 };
       }
       return await setupCalendars(env, owner, { email, password });
-    } catch {
-      return { error: 'apple_connection_failed', status: 422 };
+    } catch (error) {
+      // Report only fixed codes; Apple responses can contain private paths and identifiers.
+      const code = ['apple_unauthorized', 'apple_unreachable'].includes(error?.code) ? error.code : 'apple_invalid_response';
+      const stage = ['principal', 'home', 'calendars'].includes(error?.stage) ? error.stage : undefined;
+      return { error: code, stage, status: 422 };
     }
   }
 

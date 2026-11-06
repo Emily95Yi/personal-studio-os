@@ -23,7 +23,7 @@ async function request(path, { method = 'GET', value, durable = true } = {}) {
   });
   if (!response.ok) {
     const failure = await response.json().catch(() => ({}));
-    throw Object.assign(new Error('Private API unavailable'), { status: response.status, code: failure.error });
+    throw Object.assign(new Error('Private API unavailable'), { status: response.status, code: failure.error, stage: failure.stage });
   }
   return response.json();
 }

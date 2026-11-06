@@ -65,7 +65,7 @@ const server = createServer(async (incoming, outgoing) => {
   }
 });
 let localOrigin;
-server.listen(0, '127.0.0.1', () => {
+server.listen(Number(process.env.CALDAV_ACCEPTANCE_PORT ?? 0), '127.0.0.1', () => {
   localOrigin = 'http://127.0.0.1:' + server.address().port;
   env.STUDIO_ORIGIN = 'https://calendar-acceptance.invalid';
   // createHandler keeps the HTTPS origin guard in production. The loopback bridge

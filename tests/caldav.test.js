@@ -409,3 +409,18 @@ test('an Apple-created single event in A can be edited in place without rewritin
   assert.equal(events.get(privateB + 'same-uid.ics').etag, '"b-1"');
   assert.deepEqual(calls.filter(call => call.method === 'PUT').map(call => [call.url, call.headers['If-Match']]), [[href, '"native-1"']]);
 });
+
+test('discovery distinguishes rejected Apple authorization from connection and response failures', async () => {
+  const env = fixtureEnv(database());
+  const owner = 'alice';
+  for (const [respond, expected] of [
+    [async () => new Response(null, { status: 401 }), 'apple_unauthorized'],
+    [async () => { throw new Error('private upstream details'); }, 'apple_unreachable'],
+    [async () => new Response('<invalid />', { status: 207 }), 'apple_invalid_response'],
+  ]) {
+    const service = createCalDavService({ provider: creds => newCalDavClient(creds, respond) });
+    const result = await service.discover(env, owner, fakeCreds);
+    assert.deepEqual(result, { error: expected, stage: 'principal', status: 422 });
+    assert.equal(JSON.stringify(result).includes(fakeCreds.password), false);
+  }
+});

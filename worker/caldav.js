@@ -147,14 +147,19 @@ export function newCalDavClient(credentials, send = fetch) {
   async function request(input, method, body, headers = {}, discovery = false) {
     let url = appleUrl(input);
     for (let hop = 0; hop < 4; hop++) {
-      const response = await send(url.href, {
-        method, body, redirect: 'manual', signal: AbortSignal.timeout(7000), cache: 'no-store',
-        headers: {
-          Authorization: 'Basic ' + basic,
-          ...(body && !headers['Content-Type'] ? { 'Content-Type': 'application/xml; charset=utf-8' } : {}),
-          ...headers,
-        },
-      });
+      let response;
+      try {
+        response = await send(url.href, {
+          method, body, redirect: 'manual', signal: AbortSignal.timeout(7000), cache: 'no-store',
+          headers: {
+            Authorization: 'Basic ' + basic,
+            ...(body && !headers['Content-Type'] ? { 'Content-Type': 'application/xml; charset=utf-8' } : {}),
+            ...headers,
+          },
+        });
+      } catch {
+        throw Object.assign(new Error('Could not reach Apple CalDAV'), { code: 'apple_unreachable' });
+      }
       if (response.status < 300 || response.status >= 400) return { url, response };
       const next = response.headers.get('Location');
       await response.body?.cancel();
@@ -179,18 +184,22 @@ export function newCalDavClient(credentials, send = fetch) {
     return { url: result.url, items };
   }
 
-  async function find(url, fields, depth = '0') {
-    return report(url, 'PROPFIND', envelope('propfind', '<D:prop>' + fields + '</D:prop>'), depth, true);
+  async function find(stage, url, fields, depth = '0') {
+    try {
+      return await report(url, 'PROPFIND', envelope('propfind', '<D:prop>' + fields + '</D:prop>'), depth, true);
+    } catch (error) {
+      throw Object.assign(error, { stage });
+    }
   }
 
   async function discover() {
-    const root = await find(BASE, '<D:current-user-principal/>');
+    const root = await find('principal', BASE, '<D:current-user-principal/>');
     const principal = value(prop(root.items[0], DAV, 'current-user-principal'), DAV, 'href');
-    if (!principal) throw new Error('Missing CalDAV principal');
-    const user = await find(appleUrl(principal, root.url).href, '<C:calendar-home-set/>');
+    if (!principal) throw Object.assign(new Error('Missing CalDAV principal'), { stage: 'principal' });
+    const user = await find('home', appleUrl(principal, root.url).href, '<C:calendar-home-set/>');
     const home = value(prop(user.items[0], CAL, 'calendar-home-set'), DAV, 'href');
-    if (!home) throw new Error('Missing calendar home');
-    const list = await find(appleUrl(home, user.url).href,
+    if (!home) throw Object.assign(new Error('Missing calendar home'), { stage: 'home' });
+    const list = await find('calendars', appleUrl(home, user.url).href,
       '<D:resourcetype/><D:displayname/><D:current-user-privilege-set/>', '1');
     return list.items.filter(row => row.href && supportedEventCalendar(row)).slice(0, 60).map(row => {
       const url = appleUrl(row.href, list.url);
