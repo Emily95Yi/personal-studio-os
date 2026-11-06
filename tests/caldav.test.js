@@ -376,3 +376,36 @@ test('private B uses the same authorization, retains its cache on failure and ne
   assert.equal((await service.view(env, owner)).secondary.events.length, 0);
   assert.equal(calls.some(call => ['PUT', 'DELETE'].includes(call.method) && call.url.startsWith(privateB)), false);
 });
+
+test('an Apple-created single event in A can be edited in place without rewriting alarms or touching B', async () => {
+  const env = fixtureEnv(database());
+  const { events, calls, send } = appleFixture();
+  const service = createCalDavService({ provider: creds => newCalDavClient(creds, send) });
+  const owner = 'alice';
+  const [a, b] = (await service.discover(env, owner, fakeCreds)).calendars;
+  await service.select(env, owner, a.id, b.id);
+  const day = dateKey();
+  const original = { id: crypto.randomUUID(), ...eventTimes(false, day + 'T16:00:15', day + 'T17:00:30'),
+    title: 'From Apple', notes: '', location: '' };
+  const href = collection + 'native-event.ics';
+  const ics = eventIcs(original).replace(/UID:[^\r]+/, 'UID:from-apple@example.invalid')
+    .replace('END:VEVENT', 'BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nDESCRIPTION:Reminder\r\nEND:VALARM\r\nEND:VEVENT');
+  events.set(href, { ics, etag: '"native-1"' });
+  events.set(privateB + 'same-uid.ics', { ics, etag: '"b-1"' });
+  await service.run(env, owner);
+  const event = (await service.view(env, owner)).events[0];
+  assert.equal(event.href, undefined);
+  assert.equal(event.start, day + 'T07:00:15Z');
+  await service.command(env, owner, event.linkId, {
+    action: 'edit', source: 'A', version: event.version, details: { ...event, location: '新宿' },
+  });
+  await service.run(env, owner);
+  const status = (await service.view(env, owner)).statuses.find(row => row.id === event.linkId);
+  assert.equal(status.state, 'added');
+  assert.equal(status.remote.location, '新宿');
+  assert.equal(status.remote.start, event.start);
+  assert.match(events.get(href).ics, /UID:from-apple@example\.invalid/);
+  assert.match(events.get(href).ics, /BEGIN:VALARM/);
+  assert.equal(events.get(privateB + 'same-uid.ics').etag, '"b-1"');
+  assert.deepEqual(calls.filter(call => call.method === 'PUT').map(call => [call.url, call.headers['If-Match']]), [[href, '"native-1"']]);
+});

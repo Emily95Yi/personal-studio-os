@@ -1,4 +1,4 @@
-import { eventIcs, eventTimeLabel, shortcutAttemptKey, shortcutChannel, shortcutReceiptKey } from './calendar-events.js';
+import { eventIcs, eventDateTimeLabel, shortcutAttemptKey, shortcutChannel, shortcutReceiptKey } from './calendar-events.js';
 import { allCalendarEvents, canEdit, openReview, readReview, showEvent, updateReview } from './apple-view.js';
 import { caldavCommand, connection, createCalDavEvent, disconnectCalDav, discoverCalDav, loadCalDav, loadFeed, loadPlanner, onPrivateChange, pollCalDav,
   saveChanges, selectCalDav, setSource } from './private-api.js';
@@ -177,7 +177,7 @@ export function initAppleActions(app, render) {
         message.textContent = '此日程已移除、正在同步或仍有冲突。当前输入没有被清除。';
         return;
       }
-      const details = [latest.title, eventTimeLabel(latest), latest.location, latest.notes].filter(Boolean).join('\n');
+      const details = [latest.title, eventDateTimeLabel(latest), latest.location, latest.notes].filter(Boolean).join('\n');
       if (!window.confirm('当前版本：\n' + details + '\n\n保留表单内容，改用此版本作为下次保存的基准？')) return;
       form.elements.eventVersion.value = JSON.stringify(latest.caldav.version);
       button.hidden = true;

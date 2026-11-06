@@ -1,5 +1,5 @@
 import { addDays, dateKey, parseDate } from './calendar.js';
-import { combineEvents, daySpan, eventStatusLabel, eventTimeLabel, eventTimes, shortcutUrl } from './calendar-events.js';
+import { combineEvents, daySpan, eventDateTimeLabel, eventStatusLabel, eventTimeLabel, eventTimes, shortcutUrl } from './calendar-events.js';
 import { escapeHtml } from './html.js';
 import { connection } from './private-api.js';
 import { plannerRepository } from './repository.js';
@@ -280,7 +280,7 @@ function caldavEventActions(event) {
   const conflicting = sync?.state === 'conflict';
   const blocked = !connection.caldav.configured || !sync || conflicting || ['queued', 'delete_queued'].includes(sync.state);
   const compare = (label, fields) => fields ? '<p><strong>' + label + '</strong> · ' + escapeHtml(fields.title) +
-    ' · ' + escapeHtml(eventTimeLabel(fields)) + (fields.location ? ' · ' + escapeHtml(fields.location) : '') +
+    ' · ' + escapeHtml(eventDateTimeLabel(fields)) + (fields.location ? ' · ' + escapeHtml(fields.location) : '') +
     (fields.notes ? '<br>' + escapeHtml(fields.notes) : '') + '</p>' : '';
   const list = sync?.conflicts?.length ? '<ul>' + sync.conflicts.map(row =>
     '<li>' + escapeHtml(row.title) + ' · ' + escapeHtml(eventTimeLabel(row)) + '</li>').join('') + '</ul>' : '';

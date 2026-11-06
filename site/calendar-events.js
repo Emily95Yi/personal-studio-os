@@ -83,6 +83,12 @@ export function eventTimeLabel(event) {
   return tokyo.format(start) + ' ' + timeLabel.format(start) + ' → ' + tokyo.format(end) + ' ' + timeLabel.format(end);
 }
 
+export function eventDateTimeLabel(event) {
+  const { dayStart } = event.dayStart ? event : daySpan(event);
+  const time = eventTimeLabel(event);
+  return time.startsWith(dayStart) ? time : dayStart + ' · ' + time;
+}
+
 function marker(id) { return 'YiStudio-Event-ID: ' + id; }
 
 export function exportPayload(event) {
