@@ -184,28 +184,49 @@ export function newCalDavClient(credentials, send = fetch) {
     return { url: result.url, items };
   }
 
-  async function find(stage, url, fields, depth = '0') {
+  async function discoveryStage(stage, action) {
     try {
-      return await report(url, 'PROPFIND', envelope('propfind', '<D:prop>' + fields + '</D:prop>'), depth, true);
+      return await action();
     } catch (error) {
       throw Object.assign(error, { stage });
     }
   }
 
+  const find = (url, fields, depth = '0') =>
+    report(url, 'PROPFIND', envelope('propfind', '<D:prop>' + fields + '</D:prop>'), depth, true);
+
+  function discoveryLink(result, ns, name) {
+    // A property can contain more than one href. Follow only links within our
+    // Apple HTTPS allowlist, and don't depend on the order of DAV responses.
+    for (const row of result.items) {
+      for (const link of children(prop(row, ns, name), DAV, 'href')) {
+        const href = link.text.trim();
+        if (!href) continue;
+        try { return appleUrl(href, result.url).href; } catch { /* Skip unsupported hrefs. */ }
+      }
+    }
+    throw new Error('Missing usable CalDAV discovery link');
+  }
+
   async function discover() {
-    const root = await find('principal', BASE, '<D:current-user-principal/>');
-    const principal = value(prop(root.items[0], DAV, 'current-user-principal'), DAV, 'href');
-    if (!principal) throw Object.assign(new Error('Missing CalDAV principal'), { stage: 'principal' });
-    const user = await find('home', appleUrl(principal, root.url).href, '<C:calendar-home-set/>');
-    const home = value(prop(user.items[0], CAL, 'calendar-home-set'), DAV, 'href');
-    if (!home) throw Object.assign(new Error('Missing calendar home'), { stage: 'home' });
-    const list = await find('calendars', appleUrl(home, user.url).href,
-      '<D:resourcetype/><D:displayname/><D:current-user-privilege-set/>', '1');
-    return list.items.filter(row => row.href && supportedEventCalendar(row)).slice(0, 60).map(row => {
-      const url = appleUrl(row.href, list.url);
-      if (!url.pathname.endsWith('/')) url.pathname += '/';
-      return { href: url.href, name: (prop(row, DAV, 'displayname')?.text.trim() || '未命名日历').slice(0, 120),
-        writable: writePrivilege(row) };
+    const principal = await discoveryStage('principal', async () =>
+      discoveryLink(await find(BASE, '<D:current-user-principal/>'), DAV, 'current-user-principal'));
+    const home = await discoveryStage('home', async () =>
+      discoveryLink(await find(principal, '<C:calendar-home-set/>'), CAL, 'calendar-home-set'));
+    return discoveryStage('calendars', async () => {
+      const list = await find(home, '<D:resourcetype/><D:displayname/><D:current-user-privilege-set/>', '1');
+      const calendars = new Map();
+      for (const row of list.items) {
+        if (!row.href || !supportedEventCalendar(row)) continue;
+        let url;
+        try { url = appleUrl(row.href, list.url); } catch { continue; }
+        if (!url.pathname.endsWith('/')) url.pathname += '/';
+        calendars.set(url.href, { href: url.href,
+          name: (prop(row, DAV, 'displayname')?.text.trim() || '未命名日历').slice(0, 120),
+          writable: writePrivilege(row) });
+        if (calendars.size >= 60) break;
+      }
+      return [...calendars.values()];
     });
   }
 

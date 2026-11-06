@@ -424,3 +424,30 @@ test('discovery distinguishes rejected Apple authorization from connection and r
     assert.equal(JSON.stringify(result).includes(fakeCreds.password), false);
   }
 });
+
+test('discovery skips unrelated links without sending credentials outside Apple HTTPS', async () => {
+  const home = apple + '/100/calendars/';
+  const calls = [];
+  const found = await newCalDavClient(fakeCreds, async (url, request) => {
+    calls.push(url);
+    assert.match(request.headers.Authorization, /^Basic /);
+    if (url === 'https://caldav.icloud.com/') return xml([
+      property('/', '<d:displayname>Not the principal</d:displayname>'),
+      property('/', '<d:current-user-principal><d:href>mailto:sample@example.invalid</d:href>' +
+        '<d:href>' + apple + '/100/principal/</d:href></d:current-user-principal>'),
+    ]);
+    if (url === apple + '/100/principal/') return xml([
+      property('/100/principal/', '<c:calendar-home-set><d:href>https://not-apple.invalid/home/</d:href>' +
+        '<d:href>/100/calendars/</d:href></c:calendar-home-set>'),
+    ]);
+    assert.equal(url, home);
+    const type = '<d:resourcetype><c:calendar/></d:resourcetype>';
+    return xml([
+      property('https://not-apple.invalid/calendar/', type),
+      property('/100/calendars/selected', type + '<d:displayname>Selected</d:displayname>'),
+      property('/100/calendars/selected/', type + '<d:displayname>Selected</d:displayname>'),
+    ]);
+  }).discover();
+  assert.deepEqual(found.map(row => row.href), [home + 'selected/']);
+  assert.deepEqual(calls, ['https://caldav.icloud.com/', apple + '/100/principal/', home]);
+});

@@ -117,8 +117,9 @@ export function createCalDavService({ provider = newCalDavClient, download = fet
       return await setupCalendars(env, owner, { email, password });
     } catch (error) {
       // Report only fixed codes; Apple responses can contain private paths and identifiers.
-      const code = ['apple_unauthorized', 'apple_unreachable'].includes(error?.code) ? error.code : 'apple_invalid_response';
       const stage = ['principal', 'home', 'calendars'].includes(error?.stage) ? error.stage : undefined;
+      if (!stage) return { error: 'calendar_setup_unavailable', status: 503 };
+      const code = ['apple_unauthorized', 'apple_unreachable'].includes(error?.code) ? error.code : 'apple_invalid_response';
       return { error: code, stage, status: 422 };
     }
   }

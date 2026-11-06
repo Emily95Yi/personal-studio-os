@@ -57,6 +57,11 @@ const server = createServer(async (incoming, outgoing) => {
       ...(hasBody ? { body: Readable.toWeb(incoming), duplex: 'half' } : {}),
     });
     const response = await handler(request, env, { waitUntil(job) { void job.catch(() => {}); } });
+    if (incoming.method === 'POST' && incoming.url === '/api/calendar/caldav/discover') {
+      const result = await response.clone().json().catch(() => ({}));
+      // Only fixed application codes and HTTP status. No credentials, paths, or calendar data.
+      console.log('CalDAV discovery:', response.status, result.error ?? 'ok', result.stage ?? '');
+    }
     outgoing.writeHead(response.status, Object.fromEntries(response.headers));
     if (response.body) Readable.fromWeb(response.body).pipe(outgoing);
     else outgoing.end();

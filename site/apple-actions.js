@@ -36,11 +36,12 @@ async function changeSource(app, url, render) {
 
 const caldavErrors = {
   invalid_credentials: '请输入 Apple 账号和 App 专用密码。',
-  no_writable_calendar: '未找到可用的写入日历。',
+  no_writable_calendar: '未找到指定的可写 iCloud 日历 A。请核对日历名称和权限。',
   apple_connection_failed: 'Apple 连接失败。请核对 App 专用密码及账号。',
   apple_unauthorized: 'Apple 拒绝了授权。请确认账号是该 iCloud 日历的 Apple 账号，并使用新生成的 App 专用密码。',
   apple_unreachable: '暂时无法连接 Apple 日历服务器。请稍后重试。',
   apple_invalid_response: 'Apple 已响应，但未能读取日历设置。',
+  calendar_setup_unavailable: 'Studio 未能暂存这次日历选择。请稍后重试。',
   setup_expired: '日历选择已过期，请重新查找。',
   already_connected: '已连接一个写入日历。',
   event_changed: 'Apple 或另一处 Studio 已更新日程。你的输入仍保留在此表单。',
