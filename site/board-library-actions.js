@@ -35,7 +35,7 @@ function checkDuplicate(form, url, item) {
 }
 
 export function initLibraryActions(app, render) {
-  let explorationFilters;
+  let explorationTag = '';
   const dialog = (...args) => studioDialog(app, ...args);
   const go = address => { location.hash = address; };
   function refresh(action, id) {
@@ -172,16 +172,13 @@ export function initLibraryActions(app, render) {
     toggle();
   }
 
-  function applyFilters(form) {
-    explorationFilters = Object.fromEntries(new FormData(form));
-    app.querySelector('[data-library-results]').innerHTML = explorationResults(explorationFilters);
+  function applyTopicTag(tag) {
+    explorationTag = tag;
+    app.querySelector('[data-library-results]').innerHTML = explorationResults(tag);
   }
 
-  for (const eventName of ['input', 'change', 'submit']) app.addEventListener(eventName, event => {
-    const form = event.target.closest('[data-library-filter]');
-    if (!form) return;
-    if (event.type === 'submit') event.preventDefault();
-    applyFilters(form);
+  app.addEventListener('change', event => {
+    if (event.target.matches('[data-library-topic-tag]')) applyTopicTag(event.target.value);
   });
 
   app.addEventListener('click', async event => {
@@ -242,12 +239,9 @@ export function initLibraryActions(app, render) {
   });
 
   return () => {
-    const form = app.querySelector('[data-library-filter]');
-    if (!form || !explorationFilters) return;
-    for (const [key, value] of Object.entries(explorationFilters)) {
-      const field = form.elements[key];
-      if (field && (field.tagName !== 'SELECT' || [...field.options].some(option => option.value === value))) field.value = value;
-    }
-    applyFilters(form);
+    const filter = app.querySelector('[data-library-topic-tag]');
+    if (!filter || !explorationTag) return;
+    if ([...filter.options].some(option => option.value === explorationTag)) filter.value = explorationTag;
+    applyTopicTag(filter.value);
   };
 }

@@ -424,25 +424,21 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
   display: inline-grid; grid-template-columns: repeat(var(--sb-tab-count), minmax(0, 1fr)); position: relative;
   margin-bottom: 22px; padding: 3px; isolation: isolate; gap: 0;
 }
-.sb-module-tabs:has(> :nth-child(1)[aria-current], > :nth-child(1) input:checked) { --sb-tab: 0; }
-.sb-module-tabs:has(> :nth-child(2)[aria-current], > :nth-child(2) input:checked) { --sb-tab: 1; }
-.sb-module-tabs:has(> :nth-child(3)[aria-current], > :nth-child(3) input:checked) { --sb-tab: 2; }
-.sb-module-tabs:has(> :nth-child(4) input:checked) { --sb-tab: 3; }
-.sb-module-tabs > :is(a, label) { position: relative; z-index: 1; text-align: center; }
-.sb-module-tabs > a, .sb-capture-options span { padding: 5px 10px; }
-.sb-module-tabs a[aria-current], .sb-capture-options input:checked + span { background: var(--surface); font-weight: 680; }
+.sb-module-tabs:has(> :nth-child(1)[aria-current]) { --sb-tab: 0; }
+.sb-module-tabs:has(> :nth-child(2)[aria-current]) { --sb-tab: 1; }
+.sb-module-tabs > a { position: relative; z-index: 1; text-align: center; padding: 5px 10px; }
+.sb-module-tabs a[aria-current] { background: var(--surface); font-weight: 680; }
 @supports selector(:has(a)) {
-  .sb-module-tabs a[aria-current], .sb-capture-options input:checked + span { background: transparent; }
+  .sb-module-tabs a[aria-current] { background: transparent; }
   .sb-module-tabs::before {
     content: ""; position: absolute; inset: 3px auto 3px 3px; width: calc((100% - 6px) / var(--sb-tab-count));
     border-radius: 5px; background: var(--surface); transform: translateX(calc(var(--sb-tab) * 100%));
     opacity: 0; transition: transform 190ms ease, opacity 150ms ease; pointer-events: none;
   }
-  .sb-module-tabs:has([aria-current], input:checked)::before { opacity: 1; }
+  .sb-module-tabs:has([aria-current])::before { opacity: 1; }
   @media (hover: hover) {
     .sb-module-tabs:has(a:nth-child(1):hover) { --sb-tab: 0; }
     .sb-module-tabs:has(a:nth-child(2):hover) { --sb-tab: 1; }
-    .sb-module-tabs:has(a:nth-child(3):hover) { --sb-tab: 2; }
     .sb-module-tabs:has(a:hover)::before { opacity: 1; }
   }
 }
@@ -547,21 +543,18 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .sb-capture-location[hidden] { display: none; }
 .sb-capture-choice { border: 0; padding: 0; margin: 0; min-width: 0; }
 .sb-capture-choice legend { padding: 0; margin-bottom: 4px; font-size: 13px; }
-.sb-module-tabs.sb-capture-options { display: grid; margin: 0; }
-.sb-capture-options-scroll { overflow-x: auto; scrollbar-width: thin; }
-.sb-capture-options[data-capture-options=discoverCategory] {
-  --sb-tab-count: 4;
-  min-width: max-content;
-  white-space: nowrap;
-}
-.sb-capture-options label { cursor: pointer; }
+.sb-capture-options-scroll { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.sb-capture-options { display: flex; width: max-content; gap: 2px; padding: 3px; }
+.sb-capture-options label { position: relative; cursor: pointer; }
 .work-dialog .sb-capture-options input {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: 0; clip-path: inset(50%);
 }
 .sb-capture-options span {
-  display: grid; place-items: center; min-height: 32px; padding-inline: 4px; border-radius: 5px;
-  font-size: 12px; line-height: 1.3; overflow-wrap: anywhere;
+  display: block; max-width: min(220px, 65vw); padding: 6px 10px; border-radius: 5px;
+  font-size: 13px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.sb-capture-options label:hover span { background: var(--tint); }
+.sb-capture-options input:checked + span { background: var(--surface); color: var(--ink); font-weight: 650; }
 .sb-capture-options input:focus-visible + span { outline: 2px solid var(--ring); outline-offset: -2px; }
 .sb-capture-modes button { padding: 6px 12px; }
 .sb-capture-modes button[aria-pressed=true] { background: var(--selected); color: var(--ink); font-weight: 650; }
@@ -725,10 +718,7 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .library-list .library-meta { justify-content: flex-end; }
 .library-category-bar { display: flex; align-items: center; gap: 4px; margin-bottom: 10px; }
 .library-sidebar { position: relative; width: fit-content; max-width: 100%; }
-.library-sidebar summary {
-  display: flex; align-items: center; gap: 6px; list-style: none; width: fit-content;
-  padding: 5px 9px; border-radius: 6px; color: var(--accent); font-size: 13px; cursor: pointer;
-}
+.library-sidebar summary { list-style: none; cursor: pointer; color: var(--accent); }
 .library-sidebar summary:is(:hover, :focus-visible), .library-sidebar[open] summary { background: var(--selected); }
 .library-category-menu {
   position: absolute; z-index: 3; inset-inline-start: 0; top: 100%; width: max-content;
@@ -739,13 +729,14 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .library-sidebar nav a { padding: 6px 8px; font-size: 13px; border-radius: 6px; overflow-wrap: anywhere; }
 .library-sidebar a:is(:hover, [aria-current]), .library-folder-list a:is(:hover, [aria-current]) { background: var(--selected); }
 .library-sidebar-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
-.library-sidebar-actions .action-button, .library-folder-list .action-button, .library-entries .action-button { padding: 4px 7px; font-size: 12px; }
+.library-folder-list .action-button, .library-entries .action-button { padding: 4px 7px; font-size: 12px; }
 .library-filters { margin-bottom: 9px; }
 .library-filters :is(select, input) { max-width: 100%; }
 .library-manager, .library-folders { border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; margin-bottom: 9px; }
 .library-manager:not([open]) { display: none; }
 .library-manager summary { padding: 4px 7px; color: var(--accent); font-size: 13px; cursor: pointer; }
-.library-manager > .action-button { margin-top: 7px; }
+.library-manager > .library-icon { margin-top: 7px; }
+.library-topic-tools { justify-content: flex-end; }
 .library-icon { width: 30px; height: 30px; }
 .library-icon:disabled { opacity: .38; cursor: default; }
 .library-icon:disabled:hover { background: transparent; }

@@ -1,7 +1,7 @@
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
 import { collectionsAddress, collectionItemAddress, discoverAddress, explorationAddress } from './pages.js';
-import { categoryFor, categoryList, entriesFor, entryTypes, filterCollections, foldersFor, libraryMatches,
+import { categoryFor, categoryList, entriesFor, entryTypes, filterCollections, foldersFor,
   resourceTypes, topicsFor } from './board-library-data.js';
 import { contentTitle, objectFor, studioStore } from './studio-data.js';
 import { resourceKey } from './self-board-data.js';
@@ -27,8 +27,6 @@ const heading = (title, intro, actions = '', level = 2) => '<div class="sb-headi
   esc(title) + '</h' + level + '>' +
   (intro ? '<p>' + esc(intro) + '</p>' : '') + '</div><div class="sb-view-actions">' + actions + '</div></div>';
 const empty = (title, intro) => '<div class="sb-empty"><strong>' + esc(title) + '</strong><p>' + esc(intro) + '</p></div>';
-const searchInput = (label, name = 'query') => '<input name="' + name + '" type="search" aria-label="' + esc(label) +
-  '" placeholder="' + esc(label) + '…">';
 const link = (address, label, selected = false) => '<a href="' + esc(address) + '"' +
   (selected ? ' aria-current="page"' : '') + '>' + esc(label) + '</a>';
 
@@ -38,10 +36,10 @@ export function discoverTabs(tab) {
     link(explorationAddress(), 'Personal Explorations', tab === 'explorations') + '</nav>';
 }
 
-export function explorationResults({ query = '', tag = '' } = {}) {
+export function explorationResults(tag = '') {
   const topics = topicsFor(state());
-  const rows = topics.filter(row => (!tag || row.tags.includes(tag)) && libraryMatches(row, ['title', 'description'], query));
-  if (!rows.length) return topics.length ? empty('没有匹配的探索主题', '试试其他关键词或标签。') :
+  const rows = topics.filter(row => !tag || row.tags.includes(tag));
+  if (!rows.length) return topics.length ? empty('没有匹配的探索主题', '试试其他标签。') :
     empty('从一个想探索的问题开始', '新建主题后，可以陆续加入问题、笔记、心得和参考资料。');
   return '<p class="sb-results-count">' + rows.length + ' 个主题 · 最近更新优先</p><div class="library-grid">' + rows.map(row =>
     '<a class="library-card" href="' + esc(explorationAddress(row.id)) + '">' + image(row, 'library-cover') +
@@ -53,11 +51,11 @@ export function explorationResults({ query = '', tag = '' } = {}) {
 
 export function explorationsView() {
   const tags = unique(topicsFor(state()).flatMap(row => row.tags));
-  return heading('Personal Explorations', '围绕一个主题，收拢问题、笔记、理解和参考资料。',
-    libButton('New Topic', 'topic', '', { primary: true, glyph: 'add' })) +
-    '<form class="work-filters library-filters" data-library-filter="topics" role="search">' + searchInput('搜索主题') +
-    '<select name="tag" aria-label="主题标签">' + optionsHtml([['', '所有标签'], ...tags.map(tag => [tag, tag])]) +
-    '</select></form><div data-library-results aria-live="polite">' + explorationResults() + '</div>';
+  return '<div class="sb-list-heading library-topic-tools">' +
+    (tags.length ? '<div class="work-filters"><select data-library-topic-tag aria-label="主题标签">' +
+      optionsHtml([['', '所有标签'], ...tags.map(tag => [tag, tag])]) + '</select></div>' : '') +
+    libButton('New Topic', 'topic', '', { primary: true, glyph: 'add' }) + '</div>' +
+    '<div data-library-results aria-live="polite">' + explorationResults() + '</div>';
 }
 
 function external(url, label = url) {
@@ -143,7 +141,7 @@ export function collectionsView(route) {
       iconButton('重命名 ' + row.title, 'category', row.id, 'edit') +
       iconButton((row.hidden ? '显示 ' : '隐藏 ') + row.title, 'category-visibility', row.id, row.hidden ? 'eye' : 'eyeOff') +
       iconButton('删除 ' + row.title, 'delete-category', row.id, 'trash') + '</div></li>').join('') +
-    '</ul>' + libButton('新建分类', 'category', '', { glyph: 'add' }) + '</details>';
+    '</ul>' + iconButton('新建分类', 'category', '', 'add') + '</details>';
   const folderNav = selected && category ? '<div class="library-folders"><div class="sb-list-heading"><h3>文件夹</h3>' +
     libButton('New Folder', 'folder', '', { glyph: 'folderAdd' }) + '</div>' +
     (folders.length ? '<ul class="library-folder-list"><li>' +
@@ -153,11 +151,12 @@ export function collectionsView(route) {
         iconButton('删除文件夹 ' + row.title, 'delete-folder', row.id, 'trash') + '</div></li>').join('') + '</ul>' : '') +
     '</div>' : '';
   return '<div class="library-category-bar"><details class="library-sidebar" data-library-sidebar data-sb-disclosure>' +
-    '<summary>' + icon('folder', 16) + '<span>' + esc(selected?.title ?? '分类导航') + '</span>' + icon('down', 13) + '</summary>' +
+    '<summary class="sb-icon sb-icon-plain library-icon" aria-label="分类导航" title="' +
+    esc(selected ? '分类导航 · ' + selected.title : '分类导航') + '">' + icon('folder', 17) + '</summary>' +
     '<div class="library-category-menu"><nav aria-label="收藏分类">' + categories.filter(row => !row.hidden || row.id === category)
       .map(row => link(collectionsAddress({ category: row.id }), row.title, category === row.id)).join('') + '</nav>' +
-    '<div class="library-sidebar-actions">' + libButton('新建分类', 'category', '', { glyph: 'add' }) +
-    libButton('管理分类', 'categories', '', { glyph: 'settings' }) + '</div></div></details>' +
+    '<div class="library-sidebar-actions">' + iconButton('新建分类', 'category', '', 'add') +
+    iconButton('管理分类', 'categories', '', 'settings') + '</div></div></details>' +
     (selected ? '<a class="sb-icon sb-icon-plain library-icon" href="' + collectionsAddress() +
       '" aria-label="清除分类筛选" title="清除分类筛选">' + icon('remove', 16) + '</a>' : '') + '</div>' +
     manager + folderNav + collectionRows(location);

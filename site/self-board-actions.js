@@ -9,7 +9,7 @@ import { reviewChanges } from './self-board-review.js';
 import { contentTitle, maxAssetBytes, objectFor, relationCandidates, removeRelation, saveRelation, studioStore } from './studio-data.js';
 import { studioDialog } from './studio-dialog.js';
 import { attachmentInputs, retainedFiles, withAssets } from './workshop-actions.js';
-import { categoryList, entriesFor, resourceAtUrl, saveCollectionItem, saveExplorationEntry, saveExplorationTopic,
+import { categoryList, entriesFor, foldersFor, resourceAtUrl, saveCollectionItem, saveExplorationEntry, saveExplorationTopic,
   topicsFor, itemsFor } from './board-library-data.js';
 import { collectionLocation } from './board-library-view.js';
 import { objectHref, objectLabels } from './workshop-view.js';
@@ -71,44 +71,63 @@ async function readImportedDocument(file, markdownOnly = false) {
 
 function captureOptions(name, label, choices, selected) {
   return '<fieldset class="sb-capture-choice"><legend>' + esc(label) + '</legend>' +
-    '<div class="sb-capture-options-scroll"><div class="segmented sb-module-tabs sb-capture-options" data-capture-options="' + name + '">' +
+    '<div class="sb-capture-options-scroll"><div class="segmented sb-capture-options">' +
     Object.entries(choices).map(([value, title]) =>
       '<label><input type="radio" name="' + name + '" value="' + esc(value) + '"' +
-      (selected === value ? ' checked' : '') + '><span>' + esc(title) + '</span></label>').join('') +
+      (selected === value ? ' checked' : '') + '><span title="' + esc(title) + '">' + esc(title) + '</span></label>').join('') +
     '</div></div></fieldset>';
+}
+
+function revealCaptureOption(input) {
+  const label = input.closest('label');
+  const track = label.closest('.sb-capture-options-scroll');
+  const option = label.getBoundingClientRect();
+  const viewport = track.getBoundingClientRect();
+  if (option.left < viewport.left) track.scrollLeft += option.left - viewport.left;
+  else if (option.right > viewport.right) track.scrollLeft += option.right - viewport.right;
+}
+
+function collectionFolderOptions(category) {
+  return { '': '分类根目录', ...Object.fromEntries(foldersFor(studioStore.state, category).map(folder => [folder.id, folder.title])) };
 }
 
 function captureFields(mode, { importing, labels, collectionCategory, linkDestination, collection, folders, resourceFolder, topicId, topics }) {
   const group = (destination, fields) => '<fieldset class="work-form-fields sb-capture-location" data-capture-destination="' +
     destination + '">' + fields + '</fieldset>';
-  const collectionFields = () => group('collections', select('categoryId', '收藏分类（可选）', { '': '未分类',
+  const collectionFields = () => group('collections', captureOptions('categoryId', '收藏分类（可选）', { '': '未分类',
     ...Object.fromEntries(categoryList(studioStore.state).filter(row => !row.hidden || row.id === collectionCategory)
-      .map(row => [row.id, row.title])) }, collectionCategory));
+      .map(row => [row.id, row.title])) }, collectionCategory) +
+    '<div data-capture-collection-folder>' +
+    select('collectionFolder', '收藏文件夹', collectionFolderOptions(collectionCategory), collection?.folder) + '</div>');
+  const personalFields = () => group('personal', captureOptions('topicId', '探索主题', {
+    ...Object.fromEntries(topics.map(row => [row.id, row.title])), '': '新建主题…',
+  }, topicId || topics[0]?.id || '') +
+    '<div data-capture-topic-name>' + field('topicTitle', '新主题名称', '', 'maxlength="200" required') + '</div>');
   if (mode === 'text') return text('body', '文字', '', 5, 'required autofocus placeholder="先记下一句话…"') +
-    select('destination', '保存到', { reflections: 'Reflections', collections: 'Collections' }, collection ? 'collections' : 'reflections') +
-    group('reflections', select('reflectionLabelId', '标签（可选）', reflectionLabelOptions(labels))) + collectionFields();
+    captureOptions('destination', '保存到', { reflections: 'Reflections', collections: 'Collections' }, collection ? 'collections' : 'reflections') +
+    group('reflections', captureOptions('reflectionLabelId', '标签（可选）', reflectionLabelOptions(labels), '')) + collectionFields();
   if (mode === 'link') {
     const input = field('sourceUrl', '链接', '', 'type="url" required autofocus placeholder="https://"');
     const notes = text('personalNotes', '个人备注（可选）');
     if (importing) return input + notes;
     const resources = categoryFolders(folders, resourcesCategory);
-    const topicChoices = { ...Object.fromEntries(topics.map(row => [row.id, row.title])), '': '新建主题…' };
-    return input + select('destination', '保存到', {
+    return input + captureOptions('destination', '保存到', {
       resources: 'Resources', personal: 'Personal Explorations', collections: 'Collections',
     }, linkDestination) +
       (resources.length ? group('resources', select('resourceFolder', 'Resources 文件夹', folderOptions(folders, resources), resourceFolder)) : '') +
-      group('personal', select('topicId', '探索主题', topicChoices, topicId || topics[0]?.id || '') +
-        '<div data-capture-topic-name>' + field('topicTitle', '新主题名称', '', 'maxlength="200" required') + '</div>') +
-      collectionFields() + notes;
+      personalFields() + collectionFields() + notes;
   }
   if (importing) return '<label>文件<input type="file" name="attachments" required multiple></label>' + text('personalNotes', '文件说明（可选）');
   return '<label>Markdown 文件<input type="file" name="document" accept=".md" required></label>' +
-    captureOptions('destination', '添加到', Object.fromEntries(Object.entries(boardSections).filter(([id]) => id !== 'collections')
-      .map(([id, section]) => [id, section.label])), 'discover') +
-    '<fieldset class="work-form-fields sb-capture-location" data-capture-location>' +
-    captureOptions('discoverCategory', 'Discover 分类',
-      Object.fromEntries(initialDiscoverCategories.map(([name]) => [name, name])), resourcesCategory) +
-    '<div data-capture-folder>' + select('folderId', '文件夹（可选）', {}) + '</div></fieldset>';
+    captureOptions('destination', '添加到', Object.fromEntries(Object.entries(boardSections)
+      .map(([id, section]) => [id, section.label])), collection ? 'collections' : 'discover') +
+    group('discover', captureOptions('discoverArea', 'Discover 板块', { wiki: 'Workshop Wiki', personal: 'Personal Explorations' },
+      linkDestination === 'personal' ? 'personal' : 'wiki') +
+      group('wiki', captureOptions('discoverCategory', 'Wiki 分类',
+        Object.fromEntries(initialDiscoverCategories.map(([name]) => [name, name])), resourcesCategory) +
+        '<div data-capture-folder>' + select('folderId', '文件夹（可选）',
+          folderOptions(folders, categoryFolders(folders, resourcesCategory)), resourceFolder) + '</div>') +
+      personalFields()) + collectionFields();
 }
 
 export function initBoardActions(app, render) {
@@ -151,9 +170,19 @@ export function initBoardActions(app, render) {
       const save = async input => ({ type: 'discover', item: await studioStore.change(state => saveBoardContent(state, { status, ...input })) });
       const saveCollection = async input => {
         const categoryId = data.get('categoryId') || '';
-        const folderId = categoryId === collectionCategory ? collection?.folder ?? '' : '';
+        const folderId = data.get('collectionFolder') || '';
         const item = await studioStore.change(state => saveCollectionItem(state, { ...input, categoryId, folderId }));
         return { type: 'collection-item', item };
+      };
+      const saveToTopic = async entry => {
+        const item = await studioStore.change(state => {
+          const id = data.get('topicId');
+          const topic = id ? objectFor(state, 'topic', id) : saveExplorationTopic(state, { title: data.get('topicTitle') });
+          if (!topic || topic.deletedAt) throw new Error('请选择有效的探索主题。');
+          saveExplorationEntry(state, topic.id, typeof entry === 'function' ? entry(state, topic) : entry);
+          return topic;
+        });
+        return { type: 'topic', item };
       };
       if (mode === 'text') {
         const body = data.get('body');
@@ -167,6 +196,9 @@ export function initBoardActions(app, render) {
         const document = await readImportedDocument(data.get('document'), true);
         if (destination === 'writing') return save({ ...document, type: 'article' });
         if (destination === 'reflections') return save({ ...document, type: 'thought' });
+        const title = document.title.slice(0, 200);
+        if (destination === 'collections') return saveCollection({ title, notes: document.body, resourceType: 'other' });
+        if (data.get('discoverArea') === 'personal') return saveToTopic({ type: 'note', title, body: document.body });
         const category = data.get('discoverCategory');
         const selected = initialDiscoverCategories.find(([name]) => name === category);
         if (destination !== 'discover' || !selected) throw new Error('请选择要添加到的栏目和分类。');
@@ -189,23 +221,18 @@ export function initBoardActions(app, render) {
       const key = resourceKey(sourceUrl);
       if (!key) throw new Error('请输入有效的 HTTP 或 HTTPS 链接。');
       if (destination === 'personal') {
-        const item = await studioStore.change(state => {
-          const selectedId = data.get('topicId');
-          const topic = selectedId ? objectFor(state, 'topic', selectedId) : saveExplorationTopic(state, { title: data.get('topicTitle') });
-          if (!topic || topic.deletedAt) throw new Error('请选择有效的探索主题。');
+        return saveToTopic((state, topic) => {
           const existing = resourceAtUrl(state, sourceUrl);
           const reference = existing ? { type: existing.type, id: existing.item.id } : null;
           if (entriesFor(state, topic.id).some(entry => entry.type === 'reference' &&
               (resourceKey(entry.url) === key || (reference && entry.reference?.type === reference.type && entry.reference.id === reference.id)))) {
             throw new Error('该主题已经收录这个链接。');
           }
-          saveExplorationEntry(state, topic.id, {
+          return {
             type: 'reference', title: existing ? contentTitle(existing.item) : new URL(sourceUrl).hostname,
             body: personalNotes, url: reference ? '' : sourceUrl, reference,
-          });
-          return topic;
+          };
         });
-        return { type: 'topic', item };
       }
       const existing = resourceAtUrl(studioStore.state, sourceUrl);
       if (existing) {
@@ -227,8 +254,10 @@ export function initBoardActions(app, render) {
 
     function syncLocation() {
       const destination = form.elements.destination?.value;
+      const area = destination === 'discover' ? form.elements.discoverArea.value : '';
       for (const group of form.querySelectorAll('[data-capture-destination]')) {
-        group.hidden = group.disabled = group.dataset.captureDestination !== destination;
+        const location = group.dataset.captureDestination;
+        group.hidden = group.disabled = location !== destination && location !== area;
       }
       const topicName = form.querySelector('[data-capture-topic-name]');
       if (topicName) {
@@ -236,23 +265,33 @@ export function initBoardActions(app, render) {
         topicName.hidden = !isNew;
         form.elements.topicTitle.disabled = !isNew;
       }
-      const location = form.querySelector('[data-capture-location]');
-      if (!location) return;
-      const inDiscover = destination === 'discover';
-      location.hidden = !inDiscover;
-      location.disabled = !inDiscover;
-      if (!inDiscover) return;
-      const choices = categoryFolders(folders, form.elements.discoverCategory.value);
-      const folder = form.elements.folderId;
-      fillFolderSelect(folder, folders, choices);
-      form.querySelector('[data-capture-folder]').hidden = !choices.length;
-      folder.disabled = !choices.length;
+      if (destination === 'collections') {
+        const folder = form.elements.collectionFolder;
+        const choices = collectionFolderOptions(form.elements.categoryId.value);
+        const selected = folder.value;
+        const options = Object.entries(choices);
+        folder.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
+        folder.value = Object.hasOwn(choices, selected) ? selected : '';
+        folder.disabled = form.querySelector('[data-capture-collection-folder]').hidden = options.length === 1;
+      }
+      if (area === 'wiki') {
+        const choices = categoryFolders(folders, form.elements.discoverCategory.value);
+        const folder = form.elements.folderId;
+        fillFolderSelect(folder, folders, choices);
+        folder.disabled = form.querySelector('[data-capture-folder]').hidden = !choices.length;
+      }
+      for (const checked of form.querySelectorAll('.sb-capture-options input:checked:not(:disabled)')) {
+        revealCaptureOption(checked);
+      }
     }
 
     const drafts = new Map();
     syncLocation();
     form.addEventListener('change', event => {
-      if (['destination', 'discoverCategory', 'topicId'].includes(event.target.name)) syncLocation();
+      if (event.target.type === 'radio') syncLocation();
+    });
+    form.addEventListener('focusin', event => {
+      if (event.target.matches('.sb-capture-options input')) revealCaptureOption(event.target);
     });
     form.addEventListener('click', event => {
       const button = event.target.closest('[data-capture-mode]');
