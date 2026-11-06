@@ -1,6 +1,6 @@
-import { href, publicHref, readRoute } from './pages.js';
+import { boardContentHref, boardHref, href, publicHref, readRoute } from './pages.js';
 import {
-  collectionView, contentDetail, landing, missingView, publicView, searchView, workspaceOverview,
+  collectionView, landing, missingView, publicView, searchView, workspaceOverview,
 } from './views.js';
 import { icon } from './icons.js';
 import { escapeHtml } from './html.js';
@@ -14,11 +14,14 @@ import { initAppleActions } from './apple-actions.js';
 import { eventDetail, projectOverview, workshopGallery } from './workshop-view.js';
 import { initWorkshopActions } from './workshop-actions.js';
 import { initStudioImport, studioImportView } from './studio-import-view.js';
-import { studioStore } from './studio-data.js';
+import { boardDetail, boardView } from './self-board-view.js';
+import { initBoardActions } from './self-board-actions.js';
+import { contentTitle, isSelfBoard, studioStore } from './studio-data.js';
 
 const app = document.querySelector('#app');
 let period = 'week';
 let studioStorageError = false;
+let mountBoardEditor;
 
 function pageContext(route) {
   const ancestors = [[href(), '首页']];
@@ -29,6 +32,10 @@ function pageContext(route) {
   if (route.projectPath) ancestors.push([href(...route.projectPath), route.projectLabel]);
   if (route.brand) ancestors.push([publicHref(route.brandId), route.brand.label]);
 
+  if (route.type === 'board' || route.type === 'content-detail') {
+    if (route.type === 'board' && !route.section && !route.params.has('view')) ancestors.pop();
+    return { title: route.recordTitle ?? route.workspace.label, ancestors };
+  }
   const isAncestorTitle = ['overview', 'workshop-gallery', 'collection', 'project'].includes(route.type) ||
     (route.type === 'public' && route.pageId === 'home');
   const title = isAncestorTitle ? ancestors.pop()[1] :
@@ -44,14 +51,22 @@ function header(route, { title, ancestors }) {
       '" aria-label="打开 Calendar" title="Calendar">' + icon('calendar', 24) + '</a></div></div></header>';
   }
   const [address, label] = route.parent ? [route.parent, route.parentLabel] : ancestors.at(-1);
-  const start = '<a class="header-icon back-link" href="' + address + '" aria-label="返回 ' + escapeHtml(label) +
-    '" title="返回 ' + escapeHtml(label) + '">' + icon('back', 19) + '</a><h1>' + escapeHtml(title) + '</h1>';
+  const article = route.type === 'content-detail';
+  const backLabel = route.section === 'settings' ? '返回上一页' : '返回 ' + label;
+  const start = '<a class="header-icon back-link" href="' + escapeHtml(address) + '" aria-label="' + escapeHtml(backLabel) +
+    '" title="' + escapeHtml(backLabel) + '">' + icon('back', 19) + '</a>' +
+    (article ? '<a class="sb-header-title" href="' + boardHref() + '">Self-Board</a>' : '<h1>' + escapeHtml(title) + '</h1>');
   const calendar = route.type === 'auto-plan' ? '<a class="header-icon" href="' +
     escapeHtml(calendarHref(todayDate(), 'week', 'auto')) +
     '" aria-label="打开 Calendar" title="Calendar">' + icon('calendar', 18) + '</a>' : '';
-  const search = route.type === 'search' ? '' : '<a class="header-icon" href="' + href('search') +
+  const search = ['search', 'board'].includes(route.type) ? '' : '<a class="header-icon" href="' + (route.workspaceId === 'self-board' ? boardHref('search') : href('search')) +
     '" aria-label="搜索" title="搜索">' + icon('search', 18) + '</a>';
   return '<header class="studio-top"><div class="masthead">' + start + '<div class="header-actions">' + calendar + search +
+    (route.workspaceId === 'self-board' ?
+      '<a class="header-icon" href="' + boardHref('connections') + '" aria-label="Network" title="Network">' + icon('network', 18) + '</a>' +
+      (route.section === 'settings' ? '' : '<a class="header-icon" href="' + boardHref('settings') + '?' +
+        escapeHtml(new URLSearchParams({ from: location.hash || boardHref() }).toString()) +
+        '" aria-label="Self-Board 设置" title="Self-Board 设置">' + icon('settings', 19) + '</a>') : '') +
     '</div></div></header>';
 }
 
@@ -66,7 +81,8 @@ const views = {
   home: landing,
   overview: workspaceOverview,
   'workshop-gallery': workshopGallery,
-  'content-detail': contentDetail,
+  board: boardView,
+  'content-detail': boardDetail,
   'auto-plan': autoPlanView,
   calendar: calendarView,
   settings: settingsView,
@@ -87,7 +103,7 @@ function render({ focus = false } = {}) {
   }
   const context = pageContext(route);
   const canEditTasks = route.type === 'calendar' ||
-    (route.workspaceId === 'self-board' && (route.type === 'overview' || route.collectionId === 'auto'));
+    (route.workspaceId === 'self-board' && ((route.type === 'board' && !route.section) || route.collectionId === 'auto'));
   const canEditPlans = route.collectionId === 'auto';
   const isPlannerPage = canEditTasks || route.type === 'home';
   document.title = context.title;
@@ -97,7 +113,7 @@ function render({ focus = false } = {}) {
   const workshopBreadcrumb = workshop && (route.projectPath || route.type === 'workshop-import')
     ? '<nav class="work-breadcrumb" aria-label="面包屑">' + context.ancestors.map(([address, label]) =>
       '<a href="' + address + '">' + escapeHtml(label) + '</a>').join('<span aria-hidden="true">/</span>') + '</nav>' : '';
-  const storageWarning = studioStorageError && (workshop || route.collectionId === 'discover')
+  const storageWarning = studioStorageError && (workshop || route.workspaceId === 'self-board')
     ? '<p class="work-error" role="alert">无法读取此浏览器的 Studio 数据。</p>' : '';
   app.innerHTML = '<a class="skip" href="#main">跳到内容</a>' + header(route, context) +
     '<main id="main" class="page-main" tabindex="-1"' +
@@ -112,6 +128,7 @@ function render({ focus = false } = {}) {
       target.focus({ preventScroll: true });
     } else if (focus) app.querySelector('main').focus({ preventScroll: true });
   }
+  mountBoardEditor?.(route);
 }
 
 app.addEventListener('click', event => {
@@ -179,7 +196,7 @@ function openTaskDialog(button) {
   const sources = [...new Set([...(plannerRepository.getPlan(form.elements.planId.value)?.sourceIds ?? []),
     task?.sourceContentId].filter(Boolean))].map(originalSource).filter(Boolean);
   const sourceField = form.elements.sourceContentId;
-  sourceField.replaceChildren(new Option('不指定', ''), ...sources.map(({ record }) => new Option(record.title, record.id)));
+  sourceField.replaceChildren(new Option('不指定', ''), ...sources.map(({ record }) => new Option(contentTitle(record), record.id)));
   sourceField.value = task?.sourceContentId ?? '';
   sourceField.disabled = !sources.length;
   form.querySelector('[data-task-source]').hidden = !sources.length;
@@ -311,7 +328,12 @@ app.addEventListener('input', event => {
   results.hidden = matches.length === 0;
   results.replaceChildren(...matches.map(item => {
     const row = document.createElement('li');
-    row.textContent = item.title;
+    if (isSelfBoard(item)) {
+      const link = document.createElement('a');
+      link.href = boardContentHref(item.id);
+      link.textContent = contentTitle(item);
+      row.append(link);
+    } else row.textContent = item.title;
     return row;
   }));
 });
@@ -321,6 +343,8 @@ let lastMode = connection.mode;
 let lastFeed = connection.feed;
 let lastCalDav = connection.caldav;
 let lastSave = connection.save;
+
+function isBoardOverview(route) { return route.type === 'board' && !route.section; }
 
 function isCalendarSurface(route) { return route.type === 'calendar' || route.type === 'settings'; }
 
@@ -353,8 +377,13 @@ onPrivateChange(() => {
   if (route.type === 'public') return;
   const status = app.querySelector('[data-private-status]');
   if (status) status.innerHTML = statusBanner();
-  if ((modeChanged && route.workspaceId !== 'workshop' && route.collectionId !== 'discover') ||
+  if ((modeChanged && route.workspaceId !== 'workshop' &&
+      !['board', 'content-detail'].includes(route.type)) ||
       (route.type === 'settings' && setupChanged)) {
+    render();
+    return;
+  }
+  if (modeChanged && isBoardOverview(route) && !app.querySelector('dialog[open]')) {
     render();
     return;
   }
@@ -380,6 +409,7 @@ function pollVisibleFeed() {
 
 initAppleActions(app, render);
 initWorkshopActions(app, render);
+mountBoardEditor = initBoardActions(app, render);
 initStudioImport(app);
 window.addEventListener('hashchange', () => {
   window.scrollTo(0, 0);

@@ -1,7 +1,7 @@
 import { escapeHtml as esc, safeUrl } from './html.js';
+import { studioDialog } from './studio-dialog.js';
 import { readRoute } from './pages.js';
-import { discoverCards } from './views.js';
-import { addAsset, adoptVersion, currentVersion, eventSections, imageTypes, maxAssetBytes, projectSections,
+import { contentTitle, addAsset, adoptVersion, currentVersion, eventSections, imageTypes, maxAssetBytes, projectSections,
   relationCandidates, relatedObjects, removeRelation, reusableFor, saveDiscover, saveEvent, saveProject, saveRelation,
   saveSession, sessionsFor, studioStore, studioTags, validImage } from './studio-data.js';
 import { documentVersion, eventFields, objectHref, objectLabels, timestamp } from './workshop-view.js';
@@ -24,7 +24,7 @@ function fileField(label, name, accept = '', multiple = false) {
     (accept ? ' accept="' + accept + '"' : '') + (multiple ? ' multiple' : '') + '></label>';
 }
 
-function retainedFiles(ids = []) {
+export function retainedFiles(ids = []) {
   return ids.map(id => {
     const asset = studioStore.state.assets.find(item => item.id === id);
     return asset ? '<label class="work-check"><input type="checkbox" checked name="retainAsset" value="' + esc(id) + '">' +
@@ -63,7 +63,7 @@ function recordFields(type, item, projectId) {
       esc(currentVersion(session).title) + '</label>').join('') + '</fieldset>' : '');
 }
 
-async function fileInput(file, imageOnly = false) {
+export async function fileInput(file, imageOnly = false) {
   if (!file?.name) return null;
   if (!file.size || file.size > maxAssetBytes) throw new Error('每个文件须介于 1 字节和 12 MB 之间。');
   const mime = file.type || 'application/octet-stream';
@@ -76,7 +76,7 @@ async function fileInput(file, imageOnly = false) {
   return asset;
 }
 
-async function attachmentInputs(data) {
+export async function attachmentInputs(data) {
   const files = [];
   for (const file of data.getAll('attachments')) {
     const input = await fileInput(file);
@@ -85,7 +85,7 @@ async function attachmentInputs(data) {
   return files;
 }
 
-function withAssets(state, data, files) {
+export function withAssets(state, data, files) {
   return [...data.getAll('retainAsset'), ...files.map(file => addAsset(state, file))];
 }
 
@@ -108,40 +108,7 @@ export function initWorkshopActions(app, render) {
     (app.querySelector(selector) ?? app.querySelector('main')).focus({ preventScroll: true });
   };
 
-  function dialog(title, fields, save, after, submitLabel = '保存', extraClass = '') {
-    const box = document.createElement('dialog');
-    box.className = 'work-dialog ' + extraClass;
-    box.innerHTML = '<form><h2>' + esc(title) + '</h2><div class="work-form-fields">' + fields +
-      '</div><p class="work-error" role="alert" hidden></p><div class="work-dialog-actions">' +
-      '<button class="action-button secondary" type="button" data-work-close>取消</button>' +
-      '<button type="submit" class="action-button">' + submitLabel + '</button></div></form>';
-    const form = box.querySelector('form');
-    const submit = form.querySelector('[type="submit"]');
-    box.querySelector('[data-work-close]').addEventListener('click', () => box.close());
-    box.addEventListener('close', () => box.remove(), { once: true });
-    box.addEventListener('cancel', event => { if (form.inert) event.preventDefault(); });
-    form.addEventListener('submit', async event => {
-      event.preventDefault();
-      const data = new FormData(form);
-      const error = form.querySelector('[role="alert"]');
-      error.hidden = true;
-      form.inert = true;
-      try {
-        const result = await save(data);
-        box.close();
-        after(result);
-      } catch (cause) {
-        error.textContent = cause.message || '保存失败。';
-        error.hidden = false;
-      } finally {
-        form.inert = false;
-        if (box.open && !submit.disabled) submit.focus();
-      }
-    });
-    app.append(box);
-    box.showModal();
-    return form;
-  }
+  const dialog = (...args) => studioDialog(app, ...args);
 
   function editRecord(type, edit, route) {
     const item = edit ? owner(route).item : {};
@@ -191,7 +158,7 @@ export function initWorkshopActions(app, render) {
   function editRelation(id, { type, item }, reopen) {
     const current = relatedObjects(studioStore.state, type, item.id).direct.find(row => row.edge.id === id);
     const options = relationCandidates(studioStore.state, type, item.id, { edgeId: id });
-    const typeKeys = type === 'discover' ? ['project', 'event'] : ['discover'];
+    const typeKeys = type === 'discover' ? ['project', 'event', 'discover'] : ['discover'];
     const tags = [...new Set(options.flatMap(row => row.item.tags ?? []))].sort();
     const fields = '<div class="work-filters">' +
       '<input name="query" type="search" aria-label="搜索对象" placeholder="搜索对象" autofocus>' +
@@ -214,7 +181,7 @@ export function initWorkshopActions(app, render) {
       const { query, type: filterType, tag } = form.elements;
       const rows = relationCandidates(studioStore.state, type, item.id,
         { edgeId: id, query: query.value, type: filterType.value, tag: tag.value });
-      target.replaceChildren(...rows.map(row => new Option(row.item.title + ' · ' + objectLabels[row.type],
+      target.replaceChildren(...rows.map(row => new Option(contentTitle(row.item) + ' · ' + objectLabels[row.type],
         JSON.stringify([row.type, row.item.id]))));
       target.value = selected || '';
       form.querySelector('[data-no-candidates]').hidden = rows.length > 0;
@@ -279,12 +246,4 @@ export function initWorkshopActions(app, render) {
     }
   });
 
-  const filterDiscover = event => {
-    const form = event.target.closest('[data-discover-filter]');
-    if (form) app.querySelector('[data-discover-results]').innerHTML =
-      discoverCards(Object.fromEntries(new FormData(form)));
-  };
-  app.addEventListener('input', filterDiscover);
-  app.addEventListener('change', filterDiscover);
-  app.addEventListener('submit', event => { if (event.target.matches('[data-discover-filter]')) event.preventDefault(); });
 }

@@ -1,9 +1,10 @@
 import { calendarHref, dateKey, periodBounds, todayDate } from './calendar.js';
 import { escapeHtml } from './html.js';
 import { icon } from './icons.js';
-import { href } from './pages.js';
+import { boardContentHref, href } from './pages.js';
 import { plannerRepository, selfBoardIncludes, studioRepository } from './repository.js';
 import { connection } from './private-api.js';
+import { contentTitle } from './studio-data.js';
 import { canEdit, reviewLabel } from './apple-view.js';
 
 const kinds = { 'one-off': 'One-off', recurring: 'Recurring', quota: 'Quota' };
@@ -16,14 +17,13 @@ function calendarLink(period, from) {
 
 export function originalSource(id) {
   const record = studioRepository.get(id);
-  if (!record || !['discover', 'experience'].some(view => selfBoardIncludes(record, view))) return null;
-  const view = selfBoardIncludes(record, 'discover') ? 'discover' : 'experience';
-  return { record, url: href('self-board', view, record.id) };
+  if (!record || !selfBoardIncludes(record)) return null;
+  return { record, url: boardContentHref(record.id) };
 }
 
 export function taskSourceLink(task) {
   const source = originalSource(task.sourceContentId);
-  return source ? '<a class="task-source" href="' + source.url + '">' + escapeHtml(source.record.title) + '</a>' : '';
+  return source ? '<a class="task-source" href="' + source.url + '">' + escapeHtml(contentTitle(source.record)) + '</a>' : '';
 }
 
 function planSummary(plan) {
@@ -88,7 +88,7 @@ export function autoView() {
 
 function resourceLinks(plan) {
   const links = plan.sourceIds.map(originalSource).filter(Boolean).map(({ record, url }) =>
-    '<li><a class="return-link" href="' + url + '">' + escapeHtml(record.title) + '</a></li>');
+    '<li><a class="return-link" href="' + url + '">' + escapeHtml(contentTitle(record)) + '</a></li>');
   return links.length ? '<ul class="auto-resources">' + links.join('') + '</ul>' : '<p class="subtle">暂无关联资源。</p>';
 }
 
@@ -117,7 +117,8 @@ export function autoPlanView({ plan }) {
 
 export function planDialog() {
   const sources = studioRepository.list({ domain: 'Self-Board' }).filter(item =>
-    selfBoardIncludes(item, 'discover') || selfBoardIncludes(item, 'experience'));
+    ['resource', 'knowledge', 'exercise'].includes(item.type) || (!item.type &&
+      (selfBoardIncludes(item, 'discover') || selfBoardIncludes(item, 'experience'))));
   return '<dialog class="task-dialog plan-dialog" aria-labelledby="plan-dialog-title"><form data-plan-form>' +
     '<h2 id="plan-dialog-title">新建计划</h2>' + (connection.mode === 'preview' ? '<p>本机预览 · 刷新清除</p>' : '') + '<input type="hidden" name="id">' +
     '<label>名称<input required maxlength="120" name="title"></label><label>类型<select name="kind">' +
@@ -128,7 +129,7 @@ export function planDialog() {
     '<label data-quota hidden>每周期目标次数<input required type="number" min="1" max="999" name="target" value="1"></label>' +
     '<label>提醒偏好（可选）<input name="reminder" maxlength="100" placeholder="仅记录偏好"></label>' +
     (sources.length ? '<fieldset><legend>关联原始资料</legend>' + sources.map(item => '<label class="check-label">' +
-      '<input type="checkbox" name="sourceId" value="' + escapeHtml(item.id) + '">' + escapeHtml(item.title) + '</label>').join('') +
+      '<input type="checkbox" name="sourceId" value="' + escapeHtml(item.id) + '">' + escapeHtml(contentTitle(item)) + '</label>').join('') +
       '</fieldset>' : '<p>暂无可关联资料。</p>') +
     '<p data-form-error role="alert" hidden></p><div class="widget-actions"><button type="button" class="action-button secondary" data-dialog-cancel>取消</button>' +
     '<button type="submit" class="action-button">保存计划</button></div></form></dialog>';

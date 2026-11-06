@@ -3,7 +3,7 @@ import { studioStore } from './studio-data.js';
 import { importMigration, mapLegacyArchive, maxTransferBytes, previewMigration, rawFormat, studioExport } from './studio-migration.js';
 import { testArchive, testMapping } from './studio-fixture.js';
 
-const labels = { projects: 'Project', events: 'Event', content: 'Discover', sessions: '文档', relations: '关联', assets: '附件' };
+const labels = { projects: 'Project', events: 'Event', content: 'Discover', sessions: '文档', relations: '关联', assets: '附件', boardFolders: '知识库文件夹', reflectionLabels: '灵感标签' };
 
 export function studioImportView() {
   return '<section class="work-reading"><div class="section-heading work-heading"><h2>导入</h2><div class="work-actions">' +

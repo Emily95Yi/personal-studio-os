@@ -4,7 +4,7 @@ const activities = [];
 const stories = [];
 
 export function selfBoardIncludes(item, view) {
-  return (item.domains?.includes('Self-Board') || item.primaryWorkspace === 'Self-Board') &&
+  return !item.deletedAt && (item.domains?.includes('Self-Board') || item.primaryWorkspace === 'Self-Board') &&
     (!view || (item.views?.includes(view) ?? view === 'discover'));
 }
 
@@ -12,9 +12,9 @@ export const studioRepository = {
   list({ domain, kind, query = '' } = {}) {
     const q = query.trim().toLowerCase();
     return studioStore.state.content.filter(item =>
-      (!domain || item.domains?.includes(domain) || item.primaryWorkspace === domain) &&
+      !item.deletedAt && (!domain || item.domains?.includes(domain) || item.primaryWorkspace === domain) &&
       (!kind || item.kind === kind) &&
-      [item.title, item.category, item.description, item.body, item.contentType, item.sourceInfo,
+      [item.title, item.category, item.summary, item.description, item.body, item.contentType, item.sourceInfo,
         ...(item.domains ?? []), ...(item.tags ?? [])].join(' ').toLowerCase().includes(q));
   },
   get(id) { return objectFor(studioStore.state, 'discover', id); },

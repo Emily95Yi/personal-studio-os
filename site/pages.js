@@ -1,3 +1,4 @@
+import { contentTitle } from './studio-data.js';
 import { plannerRepository, selfBoardIncludes, studioRepository, workshopRepository } from './repository.js';
 
 export const workspaces = {
@@ -46,6 +47,63 @@ export const workspaces = {
     },
   },
 };
+
+export const boardSections = {
+  writing: { label: 'Writing', zh: '文章与作品', icon: 'edit', description: '写作、编辑与版本审阅' },
+  reflections: { label: 'Reflections', zh: '想法与灵感', icon: 'self', description: '随手记录，留一点空间给未完成的想法' },
+  discover: { label: 'Discover', zh: '个人知识库', icon: 'globe', description: '收录资料、方法与可以再用的经验' },
+};
+
+const boardViews = {
+  writing: ['all', 'drafts', 'published', 'collections'],
+  reflections: ['all', 'timeline', 'topics', 'open-questions', 'revisited', 'fragments'],
+  discover: ['all', 'knowledge', 'resources', 'exercises', 'inspirations'],
+  connections: ['relations', 'unlinked'],
+};
+
+export const boardHref = (section, view) => href('self-board', ...(section ? [section] : [])) +
+  (view ? '?view=' + encodeURIComponent(view) : '');
+export const boardContentHref = id => href('self-board', 'content', id);
+
+export function discoverAddress(category, folderId, creating = false) {
+  const query = new URLSearchParams(creating ? { view: 'new' } : undefined);
+  if (category) query.set('category', category);
+  if (folderId) query.set('folder', folderId);
+  return boardHref('discover') + (query.size ? '?' + query : '');
+}
+
+function boardSettingsParent(params) {
+  const from = params.get('from') || '';
+  return /^#\/(?:private\/)?self-board(?:\/(?!settings(?:[/?]|$))[^?#]*)?(?:\?[^#]*)?$/.test(from) ? from : boardHref();
+}
+
+function boardRoute(workspace, section, id, params) {
+  const base = { workspaceId: 'self-board', workspace, section, params };
+  if (!section) return { ...base, type: 'board' };
+  if (section === 'search' && !id) return { ...base, type: 'board', view: section };
+  if (section === 'settings' && !id) {
+    return { ...base, type: 'board', view: section, parent: boardSettingsParent(params), parentLabel: '上一页' };
+  }
+  if (section === 'writing' && id === 'new') return { ...base, type: 'board', view: 'new' };
+  if (section === 'discover' && !id && params.get('view') === 'new') {
+    return { ...base, type: 'board', view: 'new', parent: discoverAddress(params.get('category'), params.get('folder')),
+      parentLabel: 'Discover' };
+  }
+  if (Object.hasOwn(boardViews, section) && !id) {
+    const requested = params.get('view');
+    if (section === 'writing' && requested === 'unused-fragments') {
+      return { redirect: boardHref('reflections', 'fragments') };
+    }
+    const selected = section === 'writing' && requested === 'in-progress' ? 'drafts' : requested;
+    return { ...base, type: 'board', view: boardViews[section].includes(selected) ? selected : boardViews[section][0] };
+  }
+  if (id && ['content', 'discover', 'experience', 'reflect-create'].includes(section)) {
+    const record = studioRepository.get(id);
+    if (record && !record.deletedAt && selfBoardIncludes(record, ['experience', 'reflect-create'].includes(section) ? section : undefined)) {
+      return { ...base, type: 'content-detail', record, recordTitle: contentTitle(record) };
+    }
+  }
+}
 
 export const brands = {
   yiqiyihui: {
@@ -117,6 +175,10 @@ export function readRoute(hash) {
 
   if (Object.hasOwn(workspaces, root)) {
     const workspace = workspaces[root];
+    if (root === 'self-board' && segments.length <= 3) {
+      const board = boardRoute(workspace, section, pageId, new URLSearchParams(query));
+      if (board) return board;
+    }
     if (!section) return { type: root === 'workshop' ? 'workshop-gallery' : 'overview', workspaceId: root, workspace };
     if (root === 'workshop' && section === 'import' && !pageId) {
       return { type: 'workshop-import', workspaceId: root, workspace };
@@ -135,12 +197,6 @@ export function readRoute(hash) {
       if (root === 'self-board' && section === 'auto' && segments.length === 3) {
         const plan = plannerRepository.getPlan(pageId);
         if (plan) return { ...route, type: 'auto-plan', record: plan, plan };
-      }
-      if (root === 'self-board' && ['discover', 'experience', 'reflect-create'].includes(section) && segments.length === 3) {
-        const record = studioRepository.get(pageId);
-        if (record && selfBoardIncludes(record, section === 'discover' ? undefined : section)) {
-          return { ...route, type: 'content-detail', record };
-        }
       }
       return missing(href(root, section), collection.label);
     }

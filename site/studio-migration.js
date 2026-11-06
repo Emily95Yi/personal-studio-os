@@ -1,5 +1,6 @@
-import { canRelate, collections, currentVersion, eventSections, imageTypes, isDiscover, maxAssetBytes,
+import { canRelate, collections, currentVersion, eventSections, imageTypes, isSelfBoard, maxAssetBytes,
   objectFor, projectSections, relationKey, validImage } from './studio-data.js';
+import { canAddSubfolder, contentTypes, discoverCategory, exerciseFields, isDiscoverType, reflectionColors, provenances, statuses, visibilities } from './self-board-data.js';
 import { safeUrl } from './html.js';
 
 export const transferFormat = 'yistudio-transfer-v1';
@@ -12,7 +13,7 @@ const nonempty = value => typeof value === 'string' && value.trim().length > 0;
 const require = (condition, message) => { if (!condition) throw new Error(message); };
 
 export function studioExport(state) {
-  return { format: transferFormat, ...Object.fromEntries(collections.map(key => [key, key === 'content' ? state.content.filter(isDiscover) : state[key]])) };
+  return { format: transferFormat, ...Object.fromEntries(collections.map(key => [key, key === 'content' ? state.content.filter(isSelfBoard) : state[key] ?? []])) };
 }
 
 function field(value, path) {
@@ -109,6 +110,18 @@ function optionalList(row, key, label) {
 }
 
 function validateRecords(state) {
+  const folders = new Map(state.boardFolders.map(folder => [folder.id, folder]));
+  const labels = new Map(state.reflectionLabels.map(label => [label.id, label]));
+  for (const folder of folders.values()) {
+    require(nonempty(folder.title) && nonempty(folder.category), '文件夹缺少名称或分类：' + folder.id);
+    optionalFields(folder, ['parentId'], folder.title);
+    require(folder.pinned == null || typeof folder.pinned === 'boolean', '文件夹置顶状态无效：' + folder.title);
+    require(!folder.parentId || canAddSubfolder(folders.get(folder.parentId), folder.category),
+      '文件夹的上级目录无效：' + folder.title);
+  }
+  for (const label of labels.values()) {
+    require(nonempty(label.name) && Object.hasOwn(reflectionColors, label.color), '卡片标签缺少名称或有效颜色：' + label.id);
+  }
   const assets = new Map(state.assets.map(asset => [asset.id, asset]));
   function validateAssets(row, label) {
     optionalList(row, 'assetIds', label);
@@ -131,7 +144,36 @@ function validateRecords(state) {
 
   for (const key of ['projects', 'events', 'content']) {
     for (const row of state[key]) {
-      require(nonempty(row.title), '记录缺少标题：' + row.id);
+      const unified = key === 'content' && Object.hasOwn(contentTypes, row.type);
+      const label = row.title || row.id;
+      require(nonempty(row.title) || (unified && (nonempty(row.body) || nonempty(row.sourceUrl) || row.assetIds?.length || row.coverAssetId)),
+        '记录缺少内容：' + row.id);
+      if (unified) {
+        optionalList(row, 'topics', label);
+        optionalFields(row, ['summary', 'type', 'status', 'provenance', 'visibility', 'parentContentId', 'revisionGroupId',
+          'notionPageId', 'originalPath', 'originalBlockRange', 'deletedAt', 'series', 'sourceCollection', 'discoverCategory', 'folderId', 'reflectionLabelId',
+          'trigger', 'question', 'experiment', 'excerpt', 'personalNotes', 'aiNotes', ...Object.keys(exerciseFields)], label);
+        require((!row.status || Object.hasOwn(statuses, row.status)) && Object.hasOwn(provenances, row.provenance) &&
+          Object.hasOwn(visibilities, row.visibility), '内容状态、来源或可见性无效：' + label);
+        if (row.folderId) require(isDiscoverType(row.type) && folders.get(row.folderId)?.category === discoverCategory(row),
+          '知识条目缺少对应文件夹：' + label);
+        if (row.reflectionLabelId) require(labels.has(row.reflectionLabelId), '灵感记录缺少对应标签：' + label);
+        if (row.parentContentId) {
+          const parent = objectFor(state, 'discover', row.parentContentId);
+          require(row.type === 'draft' && isSelfBoard(parent) && row.id !== parent.id, '草稿缺少来源文章：' + label);
+        }
+        if (row.revisions != null) {
+          require(Array.isArray(row.revisions), '内容历史须为列表：' + label);
+          const ids = new Set();
+          for (const version of row.revisions) {
+            require(plain(version) && nonempty(version.id) && !ids.has(version.id) &&
+              typeof version.body === 'string', '内容历史版本无效：' + label);
+            optionalFields(version, ['title', 'summary', 'createdAt', 'provenance', 'sourceUrl', 'sourceInfo'], label);
+            validateAssets(version, label);
+            ids.add(version.id);
+          }
+        }
+      }
       optionalFields(row, ['description', 'body', 'coverAssetId', 'coverUrl', 'posterUrl', 'sourceInfo', 'sourceUrl',
         'date', 'time', 'location', 'fee', 'theme', 'createdAt', 'updatedAt', 'contentType', 'category', 'primaryWorkspace'], row.title);
       optionalList(row, 'tags', row.title);
@@ -202,9 +244,10 @@ export function previewMigration(state, transfer, retained = []) {
   for (const collection of collections) {
     const rows = transfer[collection] ?? [];
     require(Array.isArray(rows), collection + ' 须为列表。');
-    const existing = new Map(state[collection].map(row => [row.id, row]));
+    const stored = state[collection] ?? [];
+    const existing = new Map(stored.map(row => [row.id, row]));
     const incoming = new Set();
-    next[collection] = [...state[collection]];
+    next[collection] = [...stored];
     counts[collection] = { added: 0, duplicate: 0, conflict: 0 };
     for (const row of rows) {
       require(plain(row) && nonempty(row.id) && row.id.length <= 2000, collection + ' 有无效 ID。');
@@ -218,7 +261,7 @@ export function previewMigration(state, transfer, retained = []) {
           conflicts.push({ collection, id: row.id, label: row.title || row.name || row.id });
         }
       } else {
-        require(collection !== 'content' || isDiscover(row), '迁移的资料须属于 Discover：' + row.id);
+        require(collection !== 'content' || isSelfBoard(row), '迁移的资料须属于 Self-board：' + row.id);
         next[collection].push(row);
         counts[collection].added += 1;
         additions.push({ collection, id: row.id, label: row.title || row.name || currentVersion(row.versions ? row : null)?.title || row.id });

@@ -26,13 +26,13 @@ export const eventSections = {
 };
 
 export const reusableSections = ['flow', 'facilitation', 'questions', 'visual', 'playbook', 'session'];
-export const collections = ['projects', 'events', 'content', 'sessions', 'relations', 'assets'];
+export const collections = ['projects', 'events', 'content', 'sessions', 'relations', 'assets', 'boardFolders', 'reflectionLabels'];
 const objectCollections = { project: 'projects', event: 'events', discover: 'content' };
 export const maxAssetBytes = 12 * 1024 * 1024;
 export const imageTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'];
 
 export function emptyStudio() {
-  return { revision: 0, projects: [], events: [], content: [], sessions: [], relations: [], assets: [] };
+  return { revision: 0, ...Object.fromEntries(collections.map(key => [key, []])) };
 }
 
 const now = () => new Date().toISOString();
@@ -44,9 +44,16 @@ export function objectFor(state, type, id) {
   return Object.hasOwn(objectCollections, type) ? find(state[objectCollections[type]], id) : undefined;
 }
 
+export function isSelfBoard(item) {
+  return Boolean(item && (item.primaryWorkspace === 'Self-Board' || (Array.isArray(item.domains) && item.domains.includes('Self-Board'))));
+}
+
+export function contentTitle(item) {
+  return item.title?.trim() || (item.body ?? item.description ?? '').trim().split(/\r?\n/, 1)[0].slice(0, 56) || '未命名记录';
+}
+
 export function isDiscover(item) {
-  return Boolean(item && (item.primaryWorkspace === 'Self-Board' || (Array.isArray(item.domains) && item.domains.includes('Self-Board'))) &&
-    (item.views == null || (Array.isArray(item.views) && item.views.includes('discover'))));
+  return isSelfBoard(item) && (item.views == null || (Array.isArray(item.views) && item.views.includes('discover')));
 }
 
 export function studioTags(text) {
@@ -172,19 +179,20 @@ export function adoptVersion(state, eventId, sourceId, versionId) {
 
 export function relationKey(edge) {
   return JSON.stringify([[edge.sourceType, edge.sourceId], [edge.targetType, edge.targetId]]
-    .sort((a, b) => a[0].localeCompare(b[0])));
+    .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1])));
 }
 
 export function canRelate(state, aType, aId, bType, bId) {
-  const allowed = ['project', 'event'];
-  if (aType === 'discover' && allowed.includes(bType)) {
-    return isDiscover(objectFor(state, aType, aId)) && Boolean(objectFor(state, bType, bId));
-  }
-  return bType === 'discover' && allowed.includes(aType) && canRelate(state, bType, bId, aType, aId);
+  if (aType === bType && aId === bId) return false;
+  const a = objectFor(state, aType, aId);
+  const b = objectFor(state, bType, bId);
+  return Boolean(a && b && (aType === 'discover' || bType === 'discover') &&
+    (aType !== 'discover' || isSelfBoard(a)) && (bType !== 'discover' || isSelfBoard(b)));
 }
 
 export function saveRelation(state, { id, sourceType, sourceId, targetType, targetId, relationType }) {
-  if (!canRelate(state, sourceType, sourceId, targetType, targetId)) fail('关联对象已不可用。');
+  if (!canRelate(state, sourceType, sourceId, targetType, targetId) ||
+      objectFor(state, sourceType, sourceId)?.deletedAt || objectFor(state, targetType, targetId)?.deletedAt) fail('关联对象已不可用。');
   const candidate = { sourceType, sourceId, targetType, targetId, relationType: relationType?.trim() || 'related' };
   const existing = id && find(state.relations, id);
   if (id && !existing) fail('这条关联已不可用。');
@@ -213,7 +221,7 @@ function directRelations(state, type, id) {
       return [{ edge, type: edge.sourceType, item: objectFor(state, edge.sourceType, edge.sourceId) }];
     }
     return [];
-  }).filter(row => row.item);
+  }).filter(row => row.item && !row.item.deletedAt);
 }
 
 export function relatedObjects(state, type, id) {
@@ -234,14 +242,15 @@ export function relatedObjects(state, type, id) {
 }
 
 export function relationCandidates(state, ownerType, ownerId, { type, query = '', tag = '', edgeId } = {}) {
-  const types = ownerType === 'discover' ? ['project', 'event'] : ['discover'];
+  const types = ownerType === 'discover' ? ['discover', 'project', 'event'] : ['discover'];
   const blocked = new Set(directRelations(state, ownerType, ownerId).filter(row => row.edge.id !== edgeId)
     .map(row => JSON.stringify([row.type, row.item.id])));
   const needle = query.trim().toLocaleLowerCase();
   return types.filter(key => !type || key === type).flatMap(key => state[objectCollections[key]]
-    .filter(item => (key !== 'discover' || isDiscover(item)) &&
-      !blocked.has(JSON.stringify([key, item.id])) && (!tag || item.tags?.includes(tag)) &&
-      [item.title, item.theme, item.contentType, ...(item.tags ?? [])].join(' ').toLocaleLowerCase().includes(needle))
+    .filter(item => !item.deletedAt && (key !== ownerType || item.id !== ownerId) &&
+      (key !== 'discover' || isSelfBoard(item)) &&
+      !blocked.has(JSON.stringify([key, item.id])) && (!tag || (item.topics ?? item.tags)?.includes(tag)) &&
+      [item.title, item.body, item.summary, item.description, item.theme, item.type, item.contentType, ...(item.topics ?? item.tags ?? [])].join(' ').toLocaleLowerCase().includes(needle))
     .map(item => ({ type: key, item })));
 }
 
