@@ -334,7 +334,7 @@ app.addEventListener('submit', event => {
   if (route.type === 'calendar') {
     const { mode, date: selected } = calendarSelection(route.params);
     if (dateKey(selected) !== saved.date) {
-      history.replaceState(history.state, '', calendarHref(date, mode, route.params.get('from')));
+      history.replaceState(history.state, '', calendarHref(date, mode, route.params.get('from'), route.params.get('source')));
     }
   }
   render();

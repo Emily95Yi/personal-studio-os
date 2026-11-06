@@ -2,7 +2,7 @@ import { addDays, dateKey, parseDate } from './calendar.js';
 
 const tokyo = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' });
 const timeLabel = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-const tokyoMoment = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d$/;
+const tokyoMoment = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
 const maxLaunchLength = 6000;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const shortcutChannel = 'yistudio-shortcut-results';
@@ -19,20 +19,23 @@ export function readShortcutResult(params) {
 }
 
 export function eventStatusLabel(event) {
-  if (event.syncMode === 'caldav') {
+  if (event.syncMode === 'caldav' || event.sourceGroup === 'A') {
     const state = event.caldav?.state;
     const reason = event.caldav?.reason;
-    if (state === 'added') return 'Added';
-    if (state === 'delete_queued') return '删除中';
+    if (state === 'added' || (!state && !event.syncMode)) return 'Synced';
+    if (state === 'delete_queued') return 'Pending · 等待删除';
     if (state === 'queued' || !state) return 'Pending · 等待同步';
     return {
-      conflict: 'Pending · 时间冲突',
+      conflict: 'Conflict · 时间重叠',
       cancelled: 'Pending · 已中止',
-      removed_remotely: 'Pending · 暂无日程',
-      remote_changed: 'Pending · Apple 端记录已改变',
-      delete_changed: 'Pending · Apple 端有更新，请核对后再删除',
-      delete_failed: 'Pending · 删除失败',
-    }[reason] ?? 'Pending · 同步失败';
+      moved_to_b: 'Conflict · 日程已在 B',
+      remote_changed: 'Conflict · 两端都有修改',
+      remote_deleted: 'Conflict · Apple 端已删除',
+      delete_changed: 'Conflict · Apple 端有更新',
+      unsupported_remote: 'Conflict · Apple 版本无法安全修改',
+      apple_unauthorized: 'Error · Apple 授权失效',
+      connection_error: 'Error · 暂时无法同步',
+    }[reason] ?? 'Error · 同步失败';
   }
   if (['synced', 'sync_error'].includes(event.status)) return eventStatus[event.status];
   if (event.deviceResult === 'added') return '已添加 · 待 iCloud 核对';
@@ -52,7 +55,7 @@ export function eventTimes(allDay, start, end) {
   }
   const valid = value => tokyoMoment.test(value) && parseDate(value.slice(0, 10)) &&
     Number.isFinite(Date.parse(value + '+09:00'));
-  if (!valid(start) || !valid(end) || end <= start) return null;
+  if (!valid(start) || !valid(end) || Date.parse(end + '+09:00') <= Date.parse(start + '+09:00')) return null;
   return {
     start: new Date(start + '+09:00').toISOString(),
     end: new Date(end + '+09:00').toISOString(),

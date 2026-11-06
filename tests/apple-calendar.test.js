@@ -8,6 +8,9 @@ import { parseIcs, windowFor } from '../worker/ics.js';
 import { fetchIcs, normalizeSource, openSource, sealSource } from '../worker/source.js';
 import { combineEvents, eventIcs, eventStatusLabel, eventTimes, readShortcutResult, shortcutUrl } from '../site/calendar-events.js';
 import { plannerRepository } from '../site/repository.js';
+import { allCalendarEvents, showEvent } from '../site/apple-view.js';
+import { connection } from '../site/private-api.js';
+import { calendarView } from '../site/planner-view.js';
 
 const fakeUrl = 'webcal://p1-caldav.icloud.com/published/2/fixture_not_a_real_credential';
 const ics = (...events) => ['BEGIN:VCALENDAR', 'VERSION:2.0', ...events.flatMap(properties =>
@@ -155,7 +158,11 @@ test('Worker verifies signed Access tokens, isolates source and planner, caches 
   });
 
   assert.equal((await send('calendar/feed')).status, 401);
-  assert.equal((await send('calendar/feed', { auth: await token('alice', 'wrong') })).status, 401);
+  assert.equal((await send('calendar/caldav')).status, 401);
+  assert.equal((await send('calendar/caldav/event/' + crypto.randomUUID(), { method: 'PUT', value: { source: 'A' } })).status, 401);
+  const wrong = await token('alice', 'wrong');
+  assert.equal((await send('calendar/feed', { auth: wrong })).status, 401);
+  assert.equal((await send('calendar/caldav/refresh', { method: 'POST', auth: wrong })).status, 401);
   assert.equal((await send('calendar/feed', { auth: alice })).headers.get('cache-control'), 'private, no-store');
   const settings = { auth: alice, method: 'PUT', value: { url: fakeUrl } };
   assert.equal((await send('calendar/settings', { ...settings, origin: 'https://public.example.test' })).status, 403);
@@ -188,4 +195,36 @@ test('Worker verifies signed Access tokens, isolates source and planner, caches 
   assert.deepEqual(await (await send('planner', { auth: bob })).json(), { revision: 0, snapshot: null });
   assert.equal((await send('calendar/settings', { auth: alice, method: 'DELETE' })).status, 200);
   assert.deepEqual(await (await send('calendar/feed', { auth: alice })).json(), { status: 'unconfigured', events: [] });
+});
+
+test('calendar views preserve source filters, deduplicate display and omit B mutation controls', t => {
+  const old = { ...connection };
+  t.after(() => Object.assign(connection, old));
+  plannerRepository.restore(null);
+  const day = '2027-01-08';
+  const fields = { title: 'Apple A original', id: 'original', uid: 'same-uid', recurrence: '',
+    source: 'icloud', allDay: true, start: day, end: '2027-01-09', dayStart: day, dayEnd: '2027-01-09' };
+  connection.mode = 'private';
+  connection.caldav = { enabled: true, configured: true, name: 'Test A', sourceId: 'source-a', statuses: [],
+    events: [{ ...fields, linkId: crypto.randomUUID(), version: '"1"' }],
+    secondary: { name: 'Test B', sourceId: 'source-b', events: [{ ...fields, title: 'Duplicate B' },
+      { ...fields, title: 'B only', uid: 'only-b', id: 'only-b' }] },
+  };
+  connection.feed = { status: 'ready', events: [{ ...fields, title: 'Old public B', uid: 'old-ics' }] };
+  assert.deepEqual(allCalendarEvents().map(row => row.title), ['Apple A original', 'B only']);
+  assert.deepEqual(allCalendarEvents('B').map(row => row.title), ['Duplicate B', 'B only']);
+  assert.notEqual(allCalendarEvents('A')[0].id, allCalendarEvents('B')[0].id);
+  const params = new URLSearchParams({ source: 'B', date: day, view: 'day' });
+  const html = calendarView({ params });
+  assert.match(html, /view=week[^"]*&amp;source=B/);
+  assert.match(html, /B only/);
+  assert.doesNotMatch(html, /Apple A original|data-caldav-new/);
+  const body = { innerHTML: '' };
+  const dialog = { dataset: {}, open: true, querySelector: () => body };
+  const app = { querySelector: () => dialog, querySelectorAll: () => [] };
+  showEvent(app, allCalendarEvents('A')[0]);
+  assert.match(body.innerHTML, /data-caldav-edit/);
+  assert.match(body.innerHTML, /data-caldav-command="delete"/);
+  showEvent(app, allCalendarEvents('B')[0]);
+  assert.doesNotMatch(body.innerHTML, /data-caldav-edit|data-caldav-command/);
 });

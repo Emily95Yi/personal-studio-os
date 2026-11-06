@@ -74,9 +74,10 @@ export function formatPeriod(date, mode) {
   return start.getUTCFullYear() + '年' + formatDay(start) + ' 至 ' + year + formatDay(end);
 }
 
-export function calendarHref(date = todayDate(), mode = 'week', from) {
+export function calendarHref(date = todayDate(), mode = 'week', from, source) {
   return href('calendar') + '?view=' + mode + '&date=' + dateKey(date) +
-    (['self-board', 'auto'].includes(from) ? '&from=' + from : '');
+    (['self-board', 'auto'].includes(from) ? '&from=' + from : '') +
+    (source === 'A' || source === 'B' ? '&source=' + source : '');
 }
 
 export function calendarSelection(params) {

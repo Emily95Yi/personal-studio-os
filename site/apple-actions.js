@@ -1,6 +1,6 @@
-import { eventIcs, shortcutAttemptKey, shortcutChannel, shortcutReceiptKey } from './calendar-events.js';
+import { eventIcs, eventTimeLabel, shortcutAttemptKey, shortcutChannel, shortcutReceiptKey } from './calendar-events.js';
 import { allCalendarEvents, canEdit, openReview, readReview, showEvent, updateReview } from './apple-view.js';
-import { caldavCommand, connection, disconnectCalDav, discoverCalDav, loadCalDav, loadFeed, loadPlanner, onPrivateChange, pollCalDav,
+import { caldavCommand, connection, createCalDavEvent, disconnectCalDav, discoverCalDav, loadCalDav, loadFeed, loadPlanner, onPrivateChange, pollCalDav,
   saveChanges, selectCalDav, setSource } from './private-api.js';
 import { plannerRepository } from './repository.js';
 
@@ -40,13 +40,39 @@ const caldavErrors = {
   apple_connection_failed: 'Apple 连接失败。请核对 App 专用密码及账号。',
   setup_expired: '日历选择已过期，请重新查找。',
   already_connected: '已连接一个写入日历。',
-  event_changed: '日程状态已更新，请重新查看。',
+  event_changed: 'Apple 或另一处 Studio 已更新日程。你的输入仍保留在此表单。',
+  invalid_calendar: '请选择不同的 A、B 日历，并确认 A 有写入权限。',
+  invalid_event: '请检查标题、开始及结束时间。',
   sync_in_progress: '正在处理同步，请稍后断开。',
   different_calendar: '请重新连接原来的写入日历，以保留现有日程对应关系。',
 };
 
 function showCalDavError(element, error) {
   if (element?.isConnected) element.textContent = caldavErrors[error.code] ?? '操作未完成，请重试。';
+}
+
+function fillCalendars(section, calendars) {
+  const form = section.querySelector('[data-caldav-select]');
+  const { calendarId, secondaryId } = form.elements;
+  const active = calendars.find(row => row.primary);
+  calendarId.replaceChildren(new Option('请选择可写日历', ''));
+  for (const row of calendars.filter(row => active ? row.primary : row.canWrite)) {
+    calendarId.add(new Option(row.name, row.id, row.primary, row.primary));
+  }
+  calendarId.disabled = Boolean(active);
+  function updateSecondary() {
+    const selected = secondaryId.value;
+    secondaryId.replaceChildren(new Option('暂不使用私人日历 B', ''));
+    for (const row of calendars.filter(row => row.id !== calendarId.value)) {
+      secondaryId.add(new Option(row.name, row.id));
+    }
+    secondaryId.value = [...secondaryId.options].some(option => option.value === selected) ? selected : '';
+  }
+  calendarId.onchange = updateSecondary;
+  updateSecondary();
+  const currentB = calendars.find(row => row.secondary);
+  if (currentB) secondaryId.value = currentB.id;
+  form.hidden = false;
 }
 
 export function initAppleActions(app, render) {
@@ -115,18 +141,55 @@ export function initAppleActions(app, render) {
       }
       return;
     }
+    if (button.hasAttribute('data-caldav-discover-existing')) {
+      const section = button.closest('.caldav-settings');
+      const status = section.querySelector('[data-caldav-message]');
+      button.disabled = true;
+      try {
+        const data = await discoverCalDav();
+        if (section.isConnected) fillCalendars(section, data.calendars);
+      } catch (error) {
+        showCalDavError(status, error);
+      } finally {
+        button.disabled = false;
+      }
+      return;
+    }
+    if (button.dataset.caldavNew) {
+      openReview(app, null, null, button.dataset.caldavNew);
+      return;
+    }
     if (button.hasAttribute('data-caldav-edit')) {
       const item = currentEvent(app);
-      const task = item && plannerRepository.getTask(item.taskId);
-      if (!task) return;
+      if (!item?.caldav) return;
+      const task = item.taskId ? plannerRepository.getTask(item.taskId) : null;
       button.closest('dialog').close();
       openReview(app, task, item);
+      return;
+    }
+    if (button.hasAttribute('data-caldav-rebase')) {
+      const form = button.form;
+      await loadCalDav();
+      if (!form.isConnected) return;
+      const latest = allCalendarEvents().find(row => row.id === form.elements.eventId.value);
+      const message = form.querySelector('[data-form-error]');
+      if (!latest?.caldav || ['queued', 'delete_queued', 'conflict'].includes(latest.caldav.state)) {
+        message.textContent = '此日程已移除、正在同步或仍有冲突。当前输入没有被清除。';
+        return;
+      }
+      const details = [latest.title, eventTimeLabel(latest), latest.location, latest.notes].filter(Boolean).join('\n');
+      if (!window.confirm('当前版本：\n' + details + '\n\n保留表单内容，改用此版本作为下次保存的基准？')) return;
+      form.elements.eventVersion.value = JSON.stringify(latest.caldav.version);
+      button.hidden = true;
+      message.hidden = true;
       return;
     }
     if (button.dataset.caldavCommand) {
       const item = currentEvent(app);
       if (!item?.caldav) return;
       const action = button.dataset.caldavCommand;
+      if (action === 'accept_remote' && item.caldav.local && !window.confirm('采用 Apple 版本并舍弃这次 Studio 修改？')) return;
+      if (action === 'keep_local' && !window.confirm('按详情中的 Studio 操作更新 Apple？如果 Apple 再次修改，将重新提示冲突。')) return;
       if (action === 'delete' && !window.confirm('删除这条奕Studio日程，并删除它在 iCloud 中的对应事件？')) return;
       const status = button.closest('dialog').querySelector('[data-caldav-event-message]');
       status.textContent = '正在提交…';
@@ -170,7 +233,7 @@ export function initAppleActions(app, render) {
       button.textContent = '正在刷新…';
       await loadFeed({ manual: true });
       if (button.isConnected) {
-        button.textContent = '刷新订阅';
+        button.textContent = '刷新日历';
         button.disabled = false;
       }
     }
@@ -204,14 +267,11 @@ export function initAppleActions(app, render) {
           status.textContent = '正在查找 Apple 日历…';
           const data = await discoverCalDav(email.value, value);
           if (!form.isConnected) return;
-          const target = section.querySelector('[data-caldav-select]');
-          target.elements.calendarId.replaceChildren(new Option('请选择专用测试日历', ''));
-          for (const calendar of data.calendars) target.elements.calendarId.add(new Option(calendar.name, calendar.id));
-          target.hidden = false;
-          status.textContent = '请选择奕Studio可以写入的测试日历。';
+          fillCalendars(section, data.calendars);
+          status.textContent = '请选择读写日历 A，以及可选的私人只读日历 B。';
         } else {
           status.textContent = '正在连接…';
-          await selectCalDav(form.elements.calendarId.value);
+          await selectCalDav(form.elements.calendarId.value, form.elements.secondaryId.value);
           if (form.isConnected) render({ focus: true });
         }
       } catch (error) {
@@ -234,37 +294,32 @@ export function initAppleActions(app, render) {
     if (!canEdit()) return;
     const data = readReview(form);
     const editId = form.elements.eventId.value;
-    if (editId && data?.details && !data.details.title) {
+    const createId = form.elements.createId.value;
+    if (editId || createId) {
       const error = form.querySelector('[data-form-error]');
-      error.textContent = '请输入日程标题。';
-      error.hidden = false;
-      return;
-    }
-    if (editId && data?.details) {
-      const item = allCalendarEvents().find(row => row.id === editId);
-      const version = Number(form.elements.eventVersion.value);
-      const error = form.querySelector('[data-form-error]');
-      if (!item?.caldav || version !== item.caldav.version || !['pending', 'error'].includes(item.caldav.state)) {
-        error.textContent = '日程状态已改变，请重新打开。';
+      if (!data?.details?.title?.trim()) {
+        error.textContent = '请输入标题并检查起止时间。';
         error.hidden = false;
         return;
       }
       const submit = form.querySelector('button[type=submit]');
       submit.disabled = true;
-      plannerRepository.updateCalendarDraft(editId, data.details);
-      await saveChanges();
       try {
-        if (connection.save !== 'idle') throw new Error('Planner save failed');
-        await caldavCommand(item, 'retry');
+        if (editId) {
+          const version = JSON.parse(form.elements.eventVersion.value);
+          await caldavCommand({ id: editId, caldav: { version } }, 'edit', data.details);
+        } else await createCalDavEvent(createId, data.details);
         if (form.isConnected) {
           form.closest('dialog').close();
           render({ focus: true });
-          const updated = allCalendarEvents().find(row => row.id === editId);
+          const updated = allCalendarEvents().find(row => row.id === (editId || createId));
           if (updated) showEvent(app, updated);
         }
       } catch (failure) {
         error.hidden = false;
         showCalDavError(error, failure);
+        form.querySelector('[data-caldav-rebase]').hidden = !editId || failure.status !== 409;
+        if (failure.status === 409) void loadCalDav();
         submit.disabled = false;
       }
       return;

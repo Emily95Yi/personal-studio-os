@@ -80,8 +80,9 @@ export async function loadFeed({ manual = false, force = false } = {}) {
   if (connection.mode !== 'private' || settingSource) return;
   if (!manual && !force && Date.now() - lastFeedAttempt < 15_000) return;
   const attempt = ++feedRequest;
-  void loadCalDav({ manual });
   lastFeedAttempt = Date.now();
+  if (connection.caldav.secondary) return loadCalDav({ manual });
+  void loadCalDav({ manual });
   try {
     const feed = await request(manual ? 'calendar/refresh' : 'calendar/feed', { method: manual ? 'POST' : 'GET' });
     if (attempt !== feedRequest) return;
@@ -141,26 +142,36 @@ export function pollCalDav(remaining = 7) {
 }
 
 export function discoverCalDav(email, password) {
-  return request('calendar/caldav/discover', { method: 'POST', value: { email, password }, durable: false });
+  return request('calendar/caldav/discover', { method: 'POST', value: email ? { email, password } : { reuse: true }, durable: false });
 }
 
-export async function selectCalDav(id) {
+async function mutateCalDav(path, options) {
   ++caldavRequest;
-  updateCalDav(await request('calendar/caldav/select', { method: 'POST', value: { id } }));
+  const data = await request('calendar/caldav' + path, options);
+  ++caldavRequest;
+  updateCalDav(data);
+  return data;
+}
+
+export async function selectCalDav(id, secondaryId) {
+  await mutateCalDav('/select', { method: 'POST', value: { id, secondaryId } });
   pollCalDav();
 }
 
 export async function disconnectCalDav() {
-  ++caldavRequest;
   clearTimeout(caldavPoll);
-  updateCalDav(await request('calendar/caldav', { method: 'DELETE' }));
+  await mutateCalDav('', { method: 'DELETE' });
 }
 
-export async function caldavCommand(event, action) {
-  ++caldavRequest;
-  updateCalDav(await request('calendar/caldav/event/' + encodeURIComponent(event.id), {
-    method: 'POST', value: { action, version: event.caldav?.version },
-  }));
+export async function caldavCommand(event, action, details) {
+  await mutateCalDav('/event/' + encodeURIComponent(event.id), {
+    method: 'POST', value: { action, source: 'A', version: event.caldav?.version, details },
+  });
+  pollCalDav();
+}
+
+export async function createCalDavEvent(id, details) {
+  await mutateCalDav('/event/' + encodeURIComponent(id), { method: 'PUT', value: { source: 'A', details } });
   pollCalDav();
 }
 

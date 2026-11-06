@@ -61,16 +61,17 @@ async function caldavApi(request, env, ctx, owner, path, service) {
     result = await service.discover(env, owner, await body(request, 1024));
   } else if (path === '/api/calendar/caldav/select' && method === 'POST') {
     const input = await body(request, 512);
-    result = await service.select(env, owner, input?.id);
+    result = await service.select(env, owner, input?.id, input?.secondaryId);
     if (!result.error) syncLater(ctx, service.run(env, owner, { manual: true }));
   } else if (path === '/api/calendar/caldav/refresh' && method === 'POST') {
     syncLater(ctx, service.run(env, owner, { manual: true }));
     result = await service.view(env, owner);
   } else {
-    const event = /^\/api\/calendar\/caldav\/event\/([\da-f-]{36})$/i.exec(path);
-    if (!event || method !== 'POST') return json({ error: 'not_found' }, 404);
-    result = await service.command(env, owner, event[1], await body(request, 1024));
-    if (!result.error) syncLater(ctx, service.run(env, owner));
+    const event = /^\/api\/calendar\/caldav\/event\/([\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12})$/.exec(path);
+    if (!event || !['PUT', 'POST'].includes(method)) return json({ error: 'not_found' }, 404);
+    const input = await body(request, 64 * 1024);
+    result = await (method === 'PUT' ? service.create : service.command)(env, owner, event[1], input);
+    if (!result.error) syncLater(ctx, service.run(env, owner, { manual: input?.action === 'accept_remote' }));
   }
   return json(result, result.status ?? 200);
 }

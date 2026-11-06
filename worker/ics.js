@@ -46,7 +46,7 @@ function checkRules(component) {
   for (const child of component.getAllSubcomponents()) checkRules(child);
 }
 
-export function parseIcs(ics, window) {
+export function parseIcs(ics, window, { includeNotes = false } = {}) {
   if (!/^BEGIN:VCALENDAR\r?$/im.test(ics)) throw new Error('Invalid iCalendar');
   const calendar = new ICAL.Component(ICAL.parse(ics));
   if (calendar.name !== 'vcalendar') throw new Error('Invalid calendar component');
@@ -97,10 +97,11 @@ export function parseIcs(ics, window) {
     if (dayStart >= window.end || dayEnd <= window.start) return;
     const id = JSON.stringify([uid, recurrence]);
     const description = String(item.description ?? '');
-    // Only the marker is needed for matching. Do not put private notes in the projection.
     const marker = /^YiStudio-Event-ID:\s*([\da-f-]{36})[ \t]*$/im.exec(description)?.[1]?.toLowerCase();
     rows.set(id, {
       id, uid, recurrence, busy: String(item.component.getFirstPropertyValue('transp')).toUpperCase() !== 'TRANSPARENT', source: 'icloud', marker,
+      ...(includeNotes ? { notes: description.split(/\r?\n/).filter(line =>
+        !/^YiStudio-Event-ID: [\da-f-]{36}$/i.test(line)).join('\n') } : {}),
       title: String(item.summary || '无标题日程').slice(0, 300),
       location: String(item.location ?? '').slice(0, 300),
       start, end, dayStart, dayEnd, allDay,

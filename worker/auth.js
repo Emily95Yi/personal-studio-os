@@ -22,7 +22,7 @@ export async function authenticate(request, env) {
       issuer: expectedIssuer, audience: env.ACCESS_AUD, algorithms: ['RS256'],
       requiredClaims: ['sub', 'iat', 'exp'],
     });
-    return payload.type === 'app' && typeof payload.email === 'string' && payload.email && payload.sub
+    return payload.type === 'app' && typeof payload.email === 'string' && payload.email && typeof payload.sub === 'string' && payload.sub
       ? payload.sub : null;
   } catch {
     return null;

@@ -29,15 +29,25 @@ function validTask(row, plans) {
     optional(row.sourceContentId, value => text(value, 256));
 }
 
+// Only these fields cross the CalDAV boundary. Planner links stay in the planner snapshot.
+export function scheduleFields(row) {
+  if (!row || typeof row !== 'object') return null;
+  const { title, notes, location, allDay, start, end } = row;
+  const validTime = allDay === true ? day : allDay === false ? dateTime : () => false;
+  if (!text(title, 300) || !title.trim() || !text(notes, 8000) || !text(location, 300) ||
+      !validTime(start) || !validTime(end) || (allDay ? start >= end : Date.parse(start) >= Date.parse(end))) return null;
+  const lines = value => value.replace(/\r\n?/g, '\n');
+  return { title: lines(title), notes: lines(notes), location: lines(location), allDay, start, end, timeZone: 'Asia/Tokyo' };
+}
+
 function validEvent(row, reviews) {
   const review = reviews.get(row.reviewId);
-  const validTime = row.allDay === true ? day : row.allDay === false ? dateTime : () => false;
   return review?.action === 'calendar' && review.taskId === row.taskId &&
     row.timeZone === 'Asia/Tokyo' && statuses.includes(row.status) &&
     optional(row.syncMode, value => value === 'caldav') &&
     optional(row.deviceResult, value => ['added', 'existing'].includes(value)) &&
     text(row.title, 120) && text(row.notes, 700) && text(row.location, 200) && text(row.targetCalendar, 80) &&
-    validTime(row.start) && validTime(row.end) && row.start < row.end;
+    Boolean(scheduleFields(row));
 }
 
 export function validSnapshot(snapshot) {

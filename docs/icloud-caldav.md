@@ -1,32 +1,30 @@
-# iCloud CalDAV 测试与迁移
+# Apple Calendar 双向同步与部署
 
-## 测试环境
+在 Studio 的「Calendar → 日历设置 → Apple 私人日历」使用同一个 Apple 账号和 [App 专用密码](https://support.apple.com/en-ie/102654)，选择两个不同的 iCloud 日历：A 可读写，B 在 Studio 只读。已有 A 连接可直接点「选择只读日历 B」，复用原授权。没有私人 B 时，仍可选用原有的公开 ICS 订阅。私人 B 读取失败时会保留其上次成功缓存，不切换到公开源。需要更换密码时，断开连接再选回同一个 A；Apple 端也可撤销 App 专用密码。连接请求不回显密码、私有路径或授权头。
 
-先在隔离的 Access Worker 和新 D1 数据库中验收。沿用 Cloudflare Access JWT 校验，并设置不同于现网的 HTTPS 地址。应用 0001 和 0002 迁移，在测试 Worker 配置以下变量：
+在 Calendar 可以按 A / B / 全部筛选，保留 Day / Week / Month。可直接创建 A 日程，也可以从原 Auto 待办的 Review 新建关联日程。Studio 创建时使用固定 UID；后续修改使用当前 ETag 对原资源做条件 PUT，删除也检查 ETag。连接和同步状态与 Planner 数据分开；Apple 的标题、时间、全天状态、地点和备注会覆盖已同步日程的显示字段，原 Project、Event、Task、Review 和 Auto 关联保持独立。已确认的 Apple 删除保留本地同步墓碑，后续刷新不会重新创建原事件。
 
-- CALDAV_ENABLED 设置为字符串 true。
-- 在测试 Worker 设置 CALDAV_TEST_CALENDAR 为专用测试日历的准确名称。只有名称匹配的唯一可写日历可被选中。现网不需要此限制。
-- CALDAV_ENCRYPTION_KEY 设置为独立的 32 字节 Base64 Worker secret。ICS 订阅继续使用 ICAL_ENCRYPTION_KEY。
-- 如需在关闭浏览器后继续处理排队项目和清理过期的连接草稿，可为测试 Worker 配置每分钟 Cron。已有页面访问和保存请求也会触发处理。
+- **Pending / Error**：修改已保存在 Studio，等待处理或重试。
+- **Synced**：Apple 端版本已读回。两端可继续编辑。
+- **Conflict**：两边的修改仍在。先对照详情，再选择采用 Apple 版本或明确应用 Studio 的修改。Apple 已删除时不会以原 UID 重建。
+- 重复事件、邀请和无法验证版本的资源可以查看，需在 Apple 日历中修改。对已关联单次事件，移到显示范围外不会被当作删除。标准显示范围为过去 90 天至未来 366 天，按东京日期展示。
+- 新增仍会检查 A 和 B 的时间重叠。如果已配置只读源却暂时不可用，新增会暂停等待重试。两个日历没有共同的事务；独立客户端可以在检查与写入之间新建重叠日程。
 
-两项 CalDAV 配置缺失任一时，旧版接口仍可使用，新增的 CalDAV 写入接口关闭。部署时保持公开预览关闭，检查匿名访问和跨用户请求被拒绝。
+## 隔离验收
 
-## 授权和两个日历
+创建两个空的 iCloud 测试日历，默认命名为 `YiStudio CalDAV Test A` 和 `YiStudio CalDAV Test B`。在本机运行 `node scripts/caldav-acceptance.mjs`；如使用其他名称，在命令后加两个带引号的准确名称，先 A 后 B。从终端输出打开仅监听 127.0.0.1 的测试页面，手动填写 App 专用密码。测试数据库在内存里，不使用生产数据；进程退出后会清除。本机桥接只用于验收真实 CalDAV，Access 的生产行为需要单独验证。
 
-1. 在 Apple Calendar 创建专用测试日历。建议使用独立集成 Apple 账号，只给它测试日历编辑权。可写日历能否被当前 Apple 账号通过 CalDAV 枚举需实测。
-2. 用测试环境的「日历设置 → 奕Studio 日历 · 读写」提交 Apple 账号与 App 专用密码。选专用日历。密码通过 HTTPS 提交，使用单独的 Worker 密钥加密后存入 D1。接口不回显密码、CalDAV 路径或授权头。
-3. 在「日常日历 · 只读」配置现有 Apple 公开订阅。两个日历会在同一页面显示。公开订阅链接持有者仍可直接读取该 Apple 订阅。私人 CalDAV 只读来源可在 Apple 账号权限实测后再扩展。
-4. 断开写入连接会清除保存的加密凭据和缓存，保留事件对应关系。需要更新密码时断开后重新选择同一日历。也可在 Apple 端撤销 App 专用密码。现阶段不提供直接换成另一个写入日历，以免旧事件被重新发布。
+1. 在 Studio 新建单次 A 日程，确认 iPhone 只出现一条。检查定时、全天和跨日样例。
+2. 在 iPhone 修改标题、起止、全天、地点和备注，再刷新 Studio 核对。随后从 Studio 再次修改，在 iPhone 确认是同一条事件。
+3. 分别从两端删除。刷新两次，确认 Apple 删除不会被 Studio 补写。打开 Studio 编辑表单后先在 iPhone 保存同一条，再在 Studio 提交；确认旧版本被拒绝，表单内容保留，或详情中保留两版供选择。
+4. 在 Apple 添加、修改、删除 B 日程并手动刷新。确认 Studio 没有 B 的写入入口。测试密码撤销后是否显示失败并保留缓存；完成后删除测试数据、撤销专用测试密码、停止本机进程。
+5. 运行 `npm test`。自动化覆盖条件写入、412、缓存、签名 JWT 和模块回归；实际 iCloud 与 iPhone 验收单独记录。
 
-[Apple 第三方应用与 App 专用密码](https://support.apple.com/en-ie/102654) · [Apple 私人日历共享](https://support.apple.com/en-ca/guide/icloud/mm6b1a9479/icloud/1.0)
+## 既有 Worker 上线
 
-## 验收
+- 使用现有 `yistudio-private` Worker、现有 `奕Studio Private` Access 应用及其所有者策略。生产地址为 `https://yistudio-private.cho-eki0915.workers.dev`，`workers_dev = true`，预览 URL 保持关闭。确保 Access 应用覆盖整个主机，且 JWT 的签发方、受众和当前 Worker 的 `ACCESS_TEAM`、`ACCESS_AUD` 一致。保留既有用户的身份和 D1 归属键。
+- 从 Worker 控制台核对当前 `DB` 绑定，再复制 `wrangler.toml` 到已忽略的 `wrangler.production.toml`，仅在私有副本中用已核对的数据库 ID 替换占位值。不要新建数据库覆盖绑定。保留现有定时任务、变量和两个 Worker Secrets（`ICAL_ENCRYPTION_KEY`、`CALDAV_ENCRYPTION_KEY`）。不要轮换现有加密密钥；它们用来解密已有连接与订阅。若生产已有 `CALDAV_TEST_CALENDAR`，保持原值，扩大到正式 A 日历需要在真机验收后另行核对。
+- 真机验收通过后，记录当前 Worker 版本，导出 D1 到仓库之外或已忽略且仅本人可读的目录。确认备份可还原，且远端待应用迁移只有新增字段的 `0003_caldav_bidirectional.sql`。先用私有配置执行 Wrangler dry run，再对同一个 D1 应用迁移、部署到同一个 Worker。所有远端命令都使用 `--config wrangler.production.toml`。
+- 部署后核对新版本承接 100% 流量、域名仍启用、匿名 API 跳转 Access、所有者可登录，以及 Calendar 与其他模块可打开。如有问题，可回退 Worker 到原版本；新增 D1 字段与旧代码兼容，回退 Worker 不会回滚 D1 或 Apple 事件。
 
-- 用同一测试日历确认一条事项。只有 Apple 返回的事件 ID、标记和时间匹配才显示 Added。刷新并检查显示一条，再在手机核对。
-- 在只读日历和写入日历分别设置一个重叠时段，检查 Pending 冲突、改期重试和中止。只读源读取失败应暂缓写入，避免把未知时段当作空闲。
-- 在 Apple 删除已添加的测试事件，再刷新。只有在目标日历成功查询并核实资源已消失时，才显示 Pending · 暂无日程。工作台保留原事项，直到用户重新添加或删除。退出日期范围、连接失败、改期都不应被当作删除。
-- 从工作台删除已关联的测试事件，确认 Apple 端移除。如果 Apple 端发生版本变化，工作台提示核对，再由用户重新确认。另检查拒绝写入、断网和重复请求时不会清除本地状态或多建一条。
-- 断开连接，再确认只读来源正常。重新连接同一测试日历，确认已删除的事件不会重建。
-- 真机通过后再考虑将生产现有订阅升级。旧快捷指令创建的历史事件不会被自动接管，首版只管理 CalDAV 创建的单次、无受邀人的日程。
-
-标准动作使用条件 PUT、版本校验的 DELETE、以及读取校验。第三方日历客户端仍可能在查冲突到写入之间插入日程，两个独立日历没有共同事务。 [CalDAV 标准](https://www.rfc-editor.org/rfc/rfc4791.html)
+[Cloudflare Access 与 Workers](https://developers.cloudflare.com/workers/configuration/cloudflare-access/) · [Cloudflare D1 Wrangler 命令](https://developers.cloudflare.com/d1/wrangler-commands/) · [CalDAV 标准](https://www.rfc-editor.org/rfc/rfc4791.html)

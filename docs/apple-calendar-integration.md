@@ -1,17 +1,8 @@
 # Apple Calendar 集成
 
-## 先启用私有工作台
+本页说明旧版公开 ICS 和设备快捷指令，可作为兼容方式。私人日历 A / B 的设置、验收和生产部署见 [Apple Calendar 双向同步与部署](icloud-caldav.md)。
 
-仓库提供了 Worker、D1 迁移和 Cloudflare Access 校验。GitHub 分支和本机静态预览不会连接任何日历。私有环境需要独立 HTTPS 域名、D1 实例和 Access 策略。
-
-1. 在 Cloudflare Zero Trust 建立仅允许工作台成员登录的自托管 Access 应用，覆盖私有工作台整个域名。记录团队域名与应用 AUD。使用独立域名和部署为公开站提供静态页面。
-2. 创建专用 D1 数据库。在部署配置中把 `wrangler.toml` 的占位数据库 ID 换成实际 ID，将 `DB` 绑定到该数据库。先用隔离的数据库验证迁移。生产配置中保持 `workers_dev = false` 和 `preview_urls = false`。
-3. 配置 Worker 环境变量 `STUDIO_ORIGIN`（完整 HTTPS origin，无尾斜线）、`ACCESS_TEAM`（例如 `example.cloudflareaccess.com`，无协议）和 `ACCESS_AUD`。用 `openssl rand -base64 32` 在本机生成密钥，通过 Cloudflare secret 设置 `ICAL_ENCRYPTION_KEY`。备份密钥到私有密钥管理系统，轮换前需安排重新加密或重新配置订阅。
-4. 对隔离 D1 应用迁移，为私有 Worker 配置同一自定义域名。部署后先检查未登录访问被拒、登录后读取 Settings 正常、公开站和非私有域名无法请求私有 API。确认后才配置订阅。
-
-Worker 验证 Access JWT 的签名、签发方、受众和有效期，按 `sub` 隔离日历与计划。订阅地址由 Worker 加密后存入 D1。D1 同时保存该用户的计划和最小日程投影，具有数据库读取权限的管理员仍需按私人数据管理。生产日志应保持关闭或只记录不带请求内容的摘要，不能记录设置请求正文、订阅地址、事件或回调结果。参见 [Cloudflare Access JWT 校验](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/) 和 [Worker Secrets](https://developers.cloudflare.com/workers/configuration/secrets/)。
-
-## 配置 iCloud 订阅
+## 可选：配置公开 iCloud 订阅
 
 1. 在 iPhone 的日历应用中打开「日历」，点目标 iCloud 日历旁的详情，打开「公共日历」并复制链接。也可从 iCloud.com 的日历共享面板复制。建议先创建专用测试日历，仅加入可公开给链接持有者的测试记录。可在 [Apple 的共享说明](https://support.apple.com/guide/iphone/-iph7613c4fb/ios) 查看设备步骤。
 2. 用 Access 登录私有奕Studio，打开 **Calendar → 日历设置**。粘贴 iCloud 给出的 `webcal://` 或 `https://` 链接，点 **保存订阅**。Settings 不回显已保存地址。持有链接即可在奕Studio之外直接查看该日历。如果曾在不想共享的地方贴过链接，请在 Apple 侧关闭公共共享并核对旧链接是否失效，再复制新链接。
@@ -51,7 +42,7 @@ Worker 只请求匹配 Apple 主机和 `/published/2/` 路径的 HTTPS 订阅，
 - **Auto → 计划 → 安排日期 → 打开该安排 → Review**。也可以在 **Calendar → 新建待办 → 打开该待办 → Review**。核对 Link 和 Time，选 Action，再确认。只有 Add to Calendar 产生独立的待写入日程。Add To-Do 确认已有待办，Remind Only 只记录意向。
 - **Calendar → 当天日程 → 加入 Apple 日历**。设备兼容时启动快捷指令。其他设备可以 **下载 .ics** 并手动导入。周期规则和候选留在工作台，Apple 接收用户选中的单次安排。
 - **Calendar → 刷新订阅**。用备注中的 Event ID 或导出文件的 UID 配对，并检查开始、结束和全天类型。一条准确匹配才显示「已匹配 iCloud」并合为一行。相同来源 ID 对应多项或时段不一致时保留记录以供核对，暂停再次导出。在 Apple 日历更正后刷新。已请求打开但没有匹配的事件可手动「标记需核对」。
-- 草稿属于单次待办，确认属于 Review。Calendar Event 使用独立 ID，从待写入到已请求打开、需核对或由订阅计算出的已匹配。浏览器回调和下载都不会产生同步成功状态。已经确认的日程保留独立快照，改动原待办不会改写它。现阶段不提供改写 Apple 事件或手动绑定任意 UID 的功能。
+- 草稿属于单次待办，确认属于 Review。Calendar Event 使用独立 ID，从待写入到已请求打开、需核对或由订阅计算出的已匹配。浏览器回调和下载都不会产生同步成功状态。已经确认的日程保留独立快照，改动原待办不会改写它。此流程不改写 Apple 事件。需要双向修改时使用 CalDAV。
 
 ## iPhone 与 Mac 验收
 
@@ -77,7 +68,3 @@ Worker 只请求匹配 Apple 主机和 `/published/2/` 路径的 HTTPS 订阅，
 4. 返回页显示「已存在」或「已添加」。原工作台能收到匹配的本次回调时，会更新事件标签。若系统跳到另一浏览器，先在返回页看结果，再从工作台刷新订阅。只有读回 iCloud 的唯一匹配会显示「已匹配 iCloud」。
 
 自动版先在专用测试日历验证。使用同一测试日程点两次，第一次应添加，第二次应停止。分别验证定时和全天记录，并确认目标日历中每项只出现一条。手动确认版可作为设备兼容回退。
-
-## 无自有域名时的私有预览
-
-Cloudflare 支持用 Access 保护单个 Worker 的 workers.dev 地址。先启用 Zero Trust，然后建立只允许本人登录的规则。使用部署专用配置启用该 Worker 的 workers_dev，继续禁用公开预览地址，并将 STUDIO_ORIGIN 配成该 Worker 的完整 HTTPS 地址。确认匿名请求被 Access 拒绝、登录后 API 可用，再粘贴真实订阅。默认仓库配置仍关闭 workers.dev。见 [Cloudflare Access 与 Workers](https://developers.cloudflare.com/workers/configuration/cloudflare-access/)。

@@ -1,17 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { appleUrl, newCalDavClient } from '../worker/caldav.js';
 import { createCalDavService, overlaps } from '../worker/caldav-sync.js';
 import { createHandler } from '../worker/index.js';
 import { getSource, saveSource } from '../worker/feed.js';
-import { eventTimes } from '../site/calendar-events.js';
+import { eventIcs, eventTimes } from '../site/calendar-events.js';
 import { dateKey } from '../site/calendar.js';
 import { plannerRepository } from '../site/repository.js';
 
 const apple = 'https://p42-caldav.icloud.com';
 const collection = apple + '/100/calendars/studio/';
+const privateB = apple + '/100/calendars/read-only/';
 const xml = rows => new Response('<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">' +
   rows.join('') + '</d:multistatus>', { status: 207 });
 const property = (href, props) => '<d:response><d:href>' + href + '</d:href><d:propstat><d:prop>' +
@@ -21,10 +22,13 @@ const fakeCreds = { email: 'test@example.invalid', password: 'test-test-test-tes
 function appleFixture() {
   const events = new Map();
   const calls = [];
+  const controls = { revoked: false, bStatus: 0, beforePut: null };
+  let version = 0;
   const send = async (url, request) => {
     calls.push({ url, method: request.method, headers: request.headers });
     assert.equal(request.redirect, 'manual');
     assert.ok(request.headers.Authorization.startsWith('Basic '));
+    if (controls.revoked) return new Response(null, { status: 401 });
     if (request.method === 'PROPFIND') {
       if (url === 'https://caldav.icloud.com/') return Response.redirect(apple + '/', 302);
       if (url === apple + '/') return xml([property('/', '<d:current-user-principal><d:href>/100/principal/</d:href></d:current-user-principal>')]);
@@ -40,17 +44,26 @@ function appleFixture() {
     }
     if (request.method === 'REPORT') {
       const uid = /<C:text-match[^>]*>([^<]+)<\/C:text-match>/.exec(request.body)?.[1];
-      return xml([...events].filter(([, row]) => !uid || row.ics.includes('UID:' + uid + '\r\n')).map(([href, row]) =>
+      if (url === privateB && controls.bStatus) return new Response(null, { status: controls.bStatus });
+      return xml([...events].filter(([href, row]) => href.startsWith(url) &&
+        (!uid || row.ics.includes('UID:' + uid + '\r\n'))).map(([href, row]) =>
         property(new URL(href).pathname, '<d:getetag>' + row.etag +
           '</d:getetag><c:calendar-data><![CDATA[' + row.ics + ']]></c:calendar-data>')));
     }
-    const row = events.get(url);
     if (request.method === 'PUT') {
-      assert.equal(request.headers['If-None-Match'], '*');
-      if (row) return new Response(null, { status: 412 });
-      events.set(url, { ics: request.body, etag: '"1"' });
-      return new Response(null, { status: 201 });
+      assert.ok(url.startsWith(collection));
+      controls.beforePut?.(url);
+      const row = events.get(url);
+      if (request.headers['If-None-Match'] === '*') {
+        if (row) return new Response(null, { status: 412 });
+        events.set(url, { ics: request.body, etag: '"' + (++version) + '"' });
+        return new Response(null, { status: 201 });
+      }
+      if (!row || request.headers['If-Match'] !== row.etag) return new Response(null, { status: 412 });
+      events.set(url, { ics: request.body, etag: '"' + (++version) + '"' });
+      return new Response(null, { status: 204 });
     }
+    const row = events.get(url);
     if (!row) return new Response(null, { status: 404 });
     if (request.method === 'DELETE') {
       if (request.headers['If-Match'] !== row.etag) return new Response(null, { status: 412 });
@@ -59,11 +72,12 @@ function appleFixture() {
     }
     return new Response(row.ics, { headers: { ETag: row.etag } });
   };
-  return { events, calls, send };
+  return { events, calls, send, controls };
 }
 
 function sqliteAdapter(sqlite) {
   return {
+    batch: async statements => Promise.all(statements.map(statement => statement.run())),
     prepare(sql) {
       return { bind: (...args) => ({
         first: async () => sqlite.prepare(sql).get(...args),
@@ -94,16 +108,23 @@ test('CalDAV discovery keeps authentication on Apple, and rejects non-Apple redi
   assert.equal(overlaps(time, { allDay: true, start: '2027-01-01', end: '2027-01-02' }), true);
 });
 
-test('private API queues, blocks overlapping calendars, retries, detects external deletion, and deletes with ETag', async () => {
+function database() {
   const sqlite = new DatabaseSync(':memory:');
-  for (const name of ['0001_private_calendar.sql', '0002_caldav.sql']) {
+  for (const name of readdirSync(new URL('../migrations/', import.meta.url)).sort()) {
     sqlite.exec(readFileSync(new URL('../migrations/' + name, import.meta.url), 'utf8'));
   }
-  const env = {
+  return sqlite;
+}
+
+const fixtureEnv = sqlite => ({
     DB: sqliteAdapter(sqlite), CALDAV_ENABLED: 'true',
     CALDAV_ENCRYPTION_KEY: btoa('k'.repeat(32)), ICAL_ENCRYPTION_KEY: btoa('i'.repeat(32)),
     ACCESS_TEAM: 'fixture.cloudflareaccess.com', ACCESS_AUD: 'fixture', STUDIO_ORIGIN: 'https://studio.example.invalid',
-  };
+});
+
+test('planner-linked events retain overlap safety, survive Apple deletion as tombstones and delete conditionally', async () => {
+  const sqlite = database();
+  const env = fixtureEnv(sqlite);
   const { send, events, calls } = appleFixture();
   const day = dateKey();
   const instant = value => new Date(day + 'T' + value + '+09:00').toISOString().replace(/[-:]/g, '').replace('.000', '');
@@ -140,7 +161,7 @@ test('private API queues, blocks overlapping calendars, retries, detects externa
   const restricted = { ...env, CALDAV_TEST_CALENDAR: 'Other fixture' };
   assert.equal((await request(prefix + '/discover', 'POST', fakeCreds, 'alice', restricted)).status, 422);
   const config = await request(prefix + '/discover', 'POST', fakeCreds);
-  assert.deepEqual(config.calendars.map(row => row.name), ['Studio Fixture']);
+  assert.deepEqual(config.calendars.map(row => [row.name, row.canWrite]), [['Studio Fixture', true], ['Read only', false]]);
   assert.equal(JSON.stringify(config).includes(fakeCreds.password), false);
   const calendarSelection = { id: config.calendars[0].id };
   assert.equal((await request(prefix + '/select', 'POST', calendarSelection, 'alice', restricted)).status, 400);
@@ -166,9 +187,9 @@ test('private API queues, blocks overlapping calendars, retries, detects externa
     revision = saved.revision;
     await flush();
   };
-  const act = async (id, action) => {
+  const act = async (id, action, details) => {
     const row = await current(id);
-    const response = await request(prefix + '/event/' + id, 'POST', { action, version: row.version });
+    const response = await request(prefix + '/event/' + id, 'POST', { action, version: row.version, details });
     assert.equal(response.status, 200);
     await flush();
   };
@@ -177,9 +198,7 @@ test('private API queues, blocks overlapping calendars, retries, detects externa
   assert.equal((await current(first.id)).reason, 'conflict');
   assert.equal((await current(first.id)).conflicts[0].title, 'Daily Fixture');
   assert.equal(events.size, 0);
-  plannerRepository.updateCalendarDraft(first.id, { ...eventTimes(false, day + 'T10:00', day + 'T11:00'), location: '', notes: '' });
-  await save();
-  await act(first.id, 'retry');
+  await act(first.id, 'edit', { ...eventTimes(false, day + 'T10:00', day + 'T11:00'), title: first.title, location: '', notes: '' });
   assert.equal((await current(first.id)).state, 'added');
   assert.equal(events.size, 1);
   assert.equal((await request(prefix + '/event/' + first.id, 'POST', { action: 'delete', version: 0 }, 'bob')).status, 404);
@@ -199,17 +218,21 @@ test('private API queues, blocks overlapping calendars, retries, detects externa
   assert.equal((await current(first.id)).reason, 'removed_remotely');
   await save();
   assert.equal(events.size, 0);
-  await act(first.id, 'retry');
-  assert.equal((await current(first.id)).state, 'added');
+  assert.equal((await request(prefix + '/event/' + first.id, 'POST', { action: 'retry', version: (await current(first.id)).version })).status, 409);
+  const row = sqlite.prepare('SELECT snapshot FROM planner_states WHERE owner = ?').get('alice');
+  assert.equal(JSON.parse(row.snapshot).events.find(event => event.id === first.id).taskId, first.taskId);
+
+  const replacement = makeEvent('Other event', '12:00', '13:00');
+  await save();
+  const replacementHref = collection + replacement.id + '.ics';
+  events.get(replacementHref).etag = '"apple-edited"';
+  await act(replacement.id, 'delete');
+  assert.equal((await current(replacement.id)).reason, 'delete_changed');
   assert.equal(events.size, 1);
-  events.get(href).etag = '"2"';
-  await act(first.id, 'delete');
-  assert.equal((await current(first.id)).reason, 'delete_changed');
-  assert.equal(events.size, 1);
-  await act(first.id, 'delete');
-  assert.equal((await current(first.id)).state, 'deleted');
+  await act(replacement.id, 'keep_local');
+  assert.equal((await current(replacement.id)).state, 'deleted');
   assert.equal(events.size, 0);
-  assert.ok(calls.some(call => call.method === 'DELETE' && call.headers['If-Match'] === '"2"'));
+  assert.ok(calls.some(call => call.method === 'DELETE' && call.headers['If-Match'] === '"apple-edited"'));
 
   feedFails = true;
   const third = makeEvent('Unavailable', '12:00', '13:00');
@@ -224,4 +247,132 @@ test('private API queues, blocks overlapping calendars, retries, detects externa
   await flush();
   assert.equal((await current(first.id)).state, 'deleted');
   assert.equal(events.size, 0);
+});
+
+test('conditional PUT keeps the original UID and merges Apple changes without overwriting concurrent drafts', async () => {
+  const env = fixtureEnv(database());
+  const { events, calls, send, controls } = appleFixture();
+  const service = createCalDavService({ provider: creds => newCalDavClient(creds, send) });
+  const owner = 'alice';
+  const calendar = (await service.discover(env, owner, fakeCreds)).calendars[0];
+  await service.select(env, owner, calendar.id);
+  const day = dateKey();
+  const timed = eventTimes(false, day + 'T09:00', day + 'T10:00');
+  const id = crypto.randomUUID();
+  const details = { ...timed, title: 'Studio', location: 'Room 1', notes: 'First line\nSecond line' };
+  await service.create(env, owner, id, { source: 'A', details });
+  await service.run(env, owner);
+  const current = async () => (await service.view(env, owner)).statuses.find(row => row.id === id);
+  const href = collection + id + '.ics';
+  assert.equal((await current()).state, 'added');
+  assert.equal((await current()).remote.start, day + 'T00:00:00Z');
+  const putCount = () => calls.filter(call => call.method === 'PUT').length;
+  await service.create(env, owner, id, { source: 'A', details });
+  await service.run(env, owner);
+  assert.equal(putCount(), 1);
+
+  const original = await current();
+  const tomorrow = new Date(Date.parse(day) + 86_400_000).toISOString().slice(0, 10);
+  const appleEdit = { id, title: 'iPhone', location: 'Tokyo', notes: 'Private notes',
+    start: day, end: tomorrow, allDay: true };
+  events.set(href, { ics: eventIcs(appleEdit).replace(/\\nYiStudio-Event-ID:[\s\S]*?\r\nEND:VEVENT/, '\r\nEND:VEVENT'), etag: '"apple-2"' });
+  await service.run(env, owner, { manual: true });
+  const remote = await current();
+  assert.deepEqual([remote.remote.title, remote.remote.location, remote.remote.notes, remote.remote.allDay, remote.remote.start, remote.remote.end],
+    ['iPhone', 'Tokyo', 'Private notes', true, day, tomorrow]);
+  assert.equal((await service.command(env, owner, id, { action: 'edit', version: original.version, details })).status, 409);
+  const studioEdit = { ...remote.remote, title: 'Studio update', location: 'Shibuya', notes: 'Edited in Studio' };
+  await service.command(env, owner, id, { action: 'edit', version: remote.version, details: studioEdit });
+  await service.run(env, owner);
+  assert.equal((await current()).remote.title, 'Studio update');
+  assert.equal(events.size, 1);
+  assert.match(events.get(href).ics, new RegExp('UID:' + id + '@yi-studio'));
+  assert.equal(calls.filter(call => call.method === 'PUT').at(-1).headers['If-Match'], '"apple-2"');
+  assert.equal(calls.some(call => call.method === 'DELETE'), false);
+
+  const nextEdit = { ...studioEdit, title: 'Studio pending' };
+  await service.command(env, owner, id, { action: 'edit', version: (await current()).version, details: nextEdit });
+  // The phone writes after the Worker GET but just before its PUT.
+  controls.beforePut = url => {
+    events.set(url, { ics: eventIcs({ ...appleEdit, title: 'Concurrent Apple edit' }), etag: '"apple-race"' });
+    controls.beforePut = null;
+  };
+  await service.run(env, owner);
+  const conflict = await current();
+  assert.equal(conflict.state, 'conflict');
+  assert.equal(conflict.local.title, 'Studio pending');
+  assert.equal(conflict.remote.title, 'Concurrent Apple edit');
+  assert.equal(events.get(href).etag, '"apple-race"');
+  await service.command(env, owner, id, { action: 'keep_local', version: conflict.version });
+  await service.run(env, owner);
+  assert.equal((await current()).state, 'added');
+  assert.equal((await current()).remote.title, 'Studio pending');
+  assert.equal(calls.filter(call => call.method === 'PUT').at(-1).headers['If-Match'], '"apple-race"');
+
+  await service.command(env, owner, id, { action: 'edit', version: (await current()).version, details });
+  events.delete(href);
+  await service.run(env, owner);
+  const removed = await current();
+  assert.equal(removed.reason, 'remote_deleted');
+  assert.equal(removed.local.title, 'Studio');
+  const before = putCount();
+  await service.command(env, owner, id, { action: 'accept_remote', version: removed.version });
+  await service.run(env, owner, { manual: true });
+  assert.equal((await current()).state, 'deleted');
+  assert.equal(events.size, 0);
+  assert.equal(putCount(), before);
+});
+
+test('private B uses the same authorization, retains its cache on failure and never receives writes', async () => {
+  const env = fixtureEnv(database());
+  const { events, calls, send, controls } = appleFixture();
+  const service = createCalDavService({ provider: creds => newCalDavClient(creds, send) });
+  const owner = 'alice';
+  const [a, b] = (await service.discover(env, owner, fakeCreds)).calendars;
+  assert.equal((await service.select(env, owner, b.id)).status, 400);
+  assert.equal((await service.select(env, owner, a.id, a.id)).status, 400);
+  await service.select(env, owner, a.id);
+  const reused = (await service.discover(env, owner, { reuse: true })).calendars;
+  const primary = reused.find(row => row.primary);
+  const secondary = reused.find(row => row.name === b.name);
+  await service.select(env, owner, primary.id, secondary.id);
+  const day = dateKey();
+  const id = crypto.randomUUID();
+  const details = { id, ...eventTimes(false, day + 'T23:00', day + 'T23:45'), title: 'Private B', notes: '', location: '' };
+  const bHref = privateB + id + '.ics';
+  events.set(bHref, { ics: eventIcs(details), etag: '"b1"' });
+  await service.run(env, owner, { manual: true });
+  const valid = await service.view(env, owner);
+  assert.equal(valid.secondary.events[0].title, 'Private B');
+  assert.notEqual(valid.sourceId, valid.secondary.sourceId);
+  assert.equal(valid.events.length, 0);
+  assert.equal(valid.secondary.events[0].linkId, undefined);
+  for (const action of ['edit', 'delete']) {
+    assert.equal((await service.command(env, owner, id, { action, version: '"b1"', details, source: 'B' })).status, 404);
+    assert.equal((await service.command(env, owner, id, { action, version: '"b1"', details, source: 'A' })).status, 404);
+  }
+  assert.equal((await service.create(env, owner, id, { source: 'B', details })).status, 404);
+
+  controls.bStatus = 503;
+  await service.run(env, owner, { manual: true });
+  let view = await service.view(env, owner);
+  assert.equal(view.stale, false);
+  assert.equal(view.secondary.stale, true);
+  assert.equal(view.secondary.fetchedAt, valid.secondary.fetchedAt);
+  assert.deepEqual(view.secondary.events, valid.secondary.events);
+  controls.bStatus = 0;
+  controls.revoked = true;
+  await service.run(env, owner, { manual: true });
+  view = await service.view(env, owner);
+  assert.equal(view.authorizationFailed, true);
+  assert.equal(view.secondary.authorizationFailed, true);
+  assert.deepEqual(view.secondary.events, valid.secondary.events);
+  controls.revoked = false;
+  events.set(bHref, { ics: eventIcs({ ...details, title: 'B updated' }), etag: '"b2"' });
+  await service.run(env, owner, { manual: true });
+  assert.equal((await service.view(env, owner)).secondary.events[0].title, 'B updated');
+  events.delete(bHref);
+  await service.run(env, owner, { manual: true });
+  assert.equal((await service.view(env, owner)).secondary.events.length, 0);
+  assert.equal(calls.some(call => ['PUT', 'DELETE'].includes(call.method) && call.url.startsWith(privateB)), false);
 });

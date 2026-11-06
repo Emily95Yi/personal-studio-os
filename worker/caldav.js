@@ -101,15 +101,44 @@ function writePrivilege(row) {
 
 export const studioUid = id => id + '@yi-studio';
 
-function ownsEvent(ics, id) {
-  const component = new ICAL.Component(ICAL.parse(ics));
-  if (component.name !== 'vcalendar' || component.getAllSubcomponents('vevent').length !== 1) return false;
-  const event = component.getFirstSubcomponent('vevent');
-  if (!event || event.hasProperty('rrule') || event.hasProperty('recurrence-id') || event.hasProperty('rdate') ||
-      event.hasProperty('attendee') || event.hasProperty('organizer')) return false;
-  const marker = 'YiStudio-Event-ID: ' + id;
-  return event.getFirstPropertyValue('uid') === studioUid(id) &&
-    String(event.getFirstPropertyValue('description') ?? '').split(/\r?\n/).includes(marker);
+const strongETag = value => /^"[^"\r\n]+"$/.test(value ?? '');
+
+function singleEvent(ics, uid) {
+  const calendar = new ICAL.Component(ICAL.parse(ics));
+  const events = calendar.getAllSubcomponents('vevent');
+  const event = events[0];
+  // A single-instance editor must not rewrite a series, invitation or mixed resource.
+  if (calendar.name !== 'vcalendar' || events.length !== 1 ||
+      calendar.getAllSubcomponents().some(item => !['vevent', 'vtimezone'].includes(item.name)) ||
+      ['rrule', 'exrule', 'recurrence-id', 'rdate', 'exdate', 'attendee', 'organizer'].some(name => event.hasProperty(name)) ||
+      (uid && event.getFirstPropertyValue('uid') !== uid)) return null;
+  return { calendar, event };
+}
+
+export function scheduleFromResource(resource) {
+  const parts = resource?.owned && singleEvent(resource.ics);
+  const start = parts?.event?.getFirstPropertyValue('dtstart');
+  if (!start) return null;
+  // Use the event's own date so a move outside the display window is still reconciled.
+  const date = Temporal.PlainDate.from(start.toString().slice(0, 10));
+  return parseIcs(resource.ics, { start: date.subtract({ days: 2 }).toString(), end: date.add({ days: 3 }).toString() },
+    { includeNotes: true })[0] ?? null;
+}
+
+function updatedIcs(resource, details) {
+  const { calendar, event } = singleEvent(resource.ics);
+  const replacement = new ICAL.Component(ICAL.parse(eventIcs(details))).getFirstSubcomponent('vevent');
+  // Preserve UID, alarms, unknown properties, and the rest of Apple's resource.
+  for (const field of ['summary', 'location', 'description', 'dtstart', 'dtend', 'dtstamp']) {
+    event.removeAllProperties(field);
+    if (field === 'description') {
+      event.addPropertyWithValue(field, details.notes);
+    } else event.addProperty(replacement.getFirstProperty(field));
+  }
+  event.removeAllProperties('duration');
+  event.updatePropertyWithValue('sequence', Number(event.getFirstPropertyValue('sequence') ?? 0) + 1);
+  event.updatePropertyWithValue('last-modified', ICAL.Time.fromJSDate(new Date(), true));
+  return calendar.toString() + '\r\n';
 }
 
 export function newCalDavClient(credentials, send = fetch) {
@@ -137,6 +166,10 @@ export function newCalDavClient(credentials, send = fetch) {
 
   async function report(url, method, payload, depth, discovery = false) {
     const result = await request(url, method, payload, { Depth: depth }, discovery);
+    if (result.response.status === 401 || result.response.status === 403) {
+      await result.response.body?.cancel();
+      throw Object.assign(new Error('Apple authorization failed'), { code: 'apple_unauthorized' });
+    }
     if (result.response.status !== 207 || Number(result.response.headers.get('Content-Length')) > MAX_XML) {
       await result.response.body?.cancel();
       throw new Error('CalDAV query failed');
@@ -184,7 +217,7 @@ export function newCalDavClient(credentials, send = fetch) {
     });
   }
 
-  async function getOwned(collection, href, id) {
+  async function getOwned(collection, href, uid) {
     const { response } = await request(collectionResource(collection, href).href, 'GET');
     if (response.status === 404 || response.status === 410) {
       await response.body?.cancel();
@@ -192,21 +225,25 @@ export function newCalDavClient(credentials, send = fetch) {
     }
     if (response.status !== 200) {
       await response.body?.cancel();
-      throw new Error('Could not read iCloud event');
+      throw Object.assign(new Error('Could not read iCloud event'), {
+        code: [401, 403].includes(response.status) ? 'apple_unauthorized' : 'connection_error',
+      });
     }
     const ics = await readText(response.body, MAX_ICS);
-    return { href, ics, owned: ownsEvent(ics, id), etag: response.headers.get('ETag') };
+    return { href, ics, owned: Boolean(singleEvent(ics, uid)), etag: response.headers.get('ETag') };
   }
 
   async function locate(collection, event, knownHref) {
+    const uid = event.uid ?? studioUid(event.id);
     const direct = knownHref || collectionResource(collection, event.id + '.ics').href;
-    const resource = await getOwned(collection, direct, event.id);
-    if (resource) return resource;
-    const candidates = await query(collection, null, studioUid(event.id));
+    const resource = await getOwned(collection, direct, uid);
+    if (resource?.owned) return resource;
+    const candidates = await query(collection, null, uid);
     if (candidates.length > 1) return { owned: false };
-    if (!candidates.length) return null;
-    // A UID match must also retain the Studio marker and be a single event.
-    const match = await getOwned(collection, candidates[0].href, event.id);
+    if (!candidates.length) return resource;
+    // Apple may move or rename the resource; the UID survives notes and path changes.
+    const candidate = candidates[0];
+    const match = await getOwned(collection, candidate.href, uid);
     return match ?? { owned: false };
   }
 
@@ -220,8 +257,22 @@ export function newCalDavClient(credentials, send = fetch) {
     return locate(collection, event, href);
   }
 
+  async function update(collection, resource, event) {
+    if (!resource.owned || !strongETag(resource.etag)) return { changed: true };
+    const href = collectionResource(collection, resource.href).href;
+    const { response } = await request(href, 'PUT', updatedIcs(resource, event), {
+      'Content-Type': 'text/calendar; charset=utf-8', 'If-Match': resource.etag,
+    });
+    await response.body?.cancel();
+    if ([404, 410, 412].includes(response.status)) return { changed: true };
+    if (![200, 204].includes(response.status)) throw new Error('iCloud update failed');
+    // A subsequent GET may already reflect a newer Apple edit. The caller
+    // verifies the fields before treating the write as synced.
+    return { resource: await locate(collection, event, href) };
+  }
+
   async function remove(collection, resource) {
-    if (!resource.owned || !resource.etag || !/^"[^"\r\n]+"$/.test(resource.etag)) return 'changed';
+    if (!resource.owned || !strongETag(resource.etag)) return 'changed';
     const { response } = await request(collectionResource(collection, resource.href).href,
       'DELETE', undefined, { 'If-Match': resource.etag });
     await response.body?.cancel();
@@ -230,9 +281,17 @@ export function newCalDavClient(credentials, send = fetch) {
     throw new Error('iCloud deletion failed');
   }
 
-  async function read(collection, window) {
-    return (await query(collection, window)).flatMap(resource => parseIcs(resource.ics, window));
+  async function scan(collection, window) {
+    return (await query(collection, window)).map(resource => {
+      const single = singleEvent(resource.ics);
+      const uid = single?.event.getFirstPropertyValue('uid');
+      return { ...resource, uid, owned: Boolean(uid), events: parseIcs(resource.ics, window, { includeNotes: true }) };
+    });
   }
 
-  return { discover, locate, create, remove, read };
+  async function read(collection, window) {
+    return (await query(collection, window)).flatMap(resource => parseIcs(resource.ics, window, { includeNotes: true }));
+  }
+
+  return { discover, locate, create, update, remove, read, scan };
 }
