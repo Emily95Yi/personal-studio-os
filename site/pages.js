@@ -16,10 +16,12 @@ export const workspaces = {
     collections: {
       'exams-practice': {
         label: 'Exams & Practice', zh: '考试与练习', empty: '还没有考试或练习记录',
+        entryLabel: '考试', icon: 'exam', entryHref: 'https://emily-quiz-notebook.cho-eki0915.workers.dev/',
         description: '这里将汇总资格考试、题库练习、错题、学习进度和考试知识，后续接入独立题库。',
       },
       'resume-experience': {
         label: 'Resume & Experience', zh: '简历与经历', empty: '还没有简历或经历记录',
+        entryLabel: '简历', icon: 'resume',
         description: '这里将存放简历、工作经历、项目经验、专业技能和成果描述。',
       },
     },

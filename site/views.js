@@ -12,7 +12,7 @@ function emptyState(title, description) {
 }
 
 function entry(address, area) {
-  return '<a class="workspace-entry" href="' + address + '"><span class="entry-icon">' +
+  return '<a class="workspace-entry" href="' + escapeHtml(address) + '"><span class="entry-icon">' +
     icon(area.icon, 26) + '</span><span class="entry-label">' + escapeHtml(area.entryLabel ?? area.label) + '</span></a>';
 }
 
@@ -50,6 +50,11 @@ export function workspaceOverview({ workspace, workspaceId, period = 'week' }) {
     return '<div class="board-grid">' +
       ['discover', 'experience', 'reflect-create'].map(id => contentWidget(id, collections[id])).join('') +
       autoWidget(period) + '</div>';
+  }
+  if (workspaceId === 'career') {
+    const cards = Object.entries(workspace.collections).map(([id, collection]) =>
+      entry(collection.entryHref ?? href(workspaceId, id), collection)).join('');
+    return '<nav class="workspace-entries career-entries" aria-label="Career 模块">' + cards + '</nav>';
   }
   const entries = Object.entries(workspace.collections).map(([id, collection]) =>
     '<a href="' + href(workspaceId, id) + '"><strong>' + collection.label + '</strong><span>' + collection.zh + '</span>' +
