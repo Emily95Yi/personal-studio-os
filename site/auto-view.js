@@ -3,6 +3,8 @@ import { escapeHtml } from './html.js';
 import { icon } from './icons.js';
 import { href } from './pages.js';
 import { plannerRepository, selfBoardIncludes, studioRepository } from './repository.js';
+import { connection } from './private-api.js';
+import { canEdit, reviewLabel } from './apple-view.js';
 
 const kinds = { 'one-off': 'One-off', recurring: 'Recurring', quota: 'Quota' };
 const periods = { day: '日', week: '周', month: '月' };
@@ -54,7 +56,7 @@ function taskRows(tasks, allowSkip = false) {
       '<input type="checkbox" data-task-check="' + task.id + '" aria-label="完成 ' + escapeHtml(task.title) + '"' +
       (task.done ? ' checked' : '') + '>') +
     '<button class="task-title" type="button" data-task-edit="' + task.id + '">' +
-    '<strong>' + escapeHtml(task.title) + '</strong><small>' + escapeHtml(task.date.slice(5)) + '</small></button>' +
+    '<strong>' + escapeHtml(task.title) + '</strong><small>' + escapeHtml([task.date.slice(5), reviewLabel(task)].filter(Boolean).join(' · ')) + '</small></button>' +
     (allowSkip && !task.done && !(task.skipped && plannerRepository.getPlan(task.planId)?.kind === 'one-off' &&
       tasks.some(item => !item.skipped && item.planId === task.planId)) ? '<button type="button" class="text-action" data-task-skip="' + task.id + '">' +
       (task.skipped ? '恢复' : '跳过') + '</button>' : '') + taskSourceLink(task) + '</li>').join('') + '</ul>';
@@ -75,8 +77,11 @@ export function autoWidget(period = 'week') {
 }
 
 export function autoView() {
-  return '<div class="section-heading auto-toolbar"><span class="subtle">演示 · 刷新清除</span><div class="planner-actions">' +
-    '<button class="action-button" type="button" data-plan-new>新建计划</button>' + calendarLink('week', 'auto') + '</div></div>' +
+  return '<div class="section-heading auto-toolbar"><span class="subtle">' +
+    (connection.mode === 'preview' ? '本机预览 · 刷新清除' : connection.mode === 'private' ? '' :
+      connection.mode === 'loading' ? '正在连接私有工作台…' : '私有服务不可用') +
+    '</span><div class="planner-actions">' +
+    (canEdit() ? '<button class="action-button" type="button" data-plan-new>新建计划</button>' : '') + calendarLink('week', 'auto') + '</div></div>' +
     '<section class="auto-section"><h2>计划</h2>' + planCards(plannerRepository.listPlans()) + '</section>' +
     '<section class="auto-section"><h2>单次安排</h2>' + taskRows(plannerRepository.standaloneTasks(), true) + '</section>';
 }
@@ -96,7 +101,7 @@ export function autoPlanView({ plan }) {
     (records.some(item => !item.taskId) ? '<button class="text-action" type="button" data-plan-undo="' + plan.id + '">撤销最近手动记录</button>' : '') +
     '</div>';
   return '<div class="section-heading auto-toolbar"><span class="subtle">' + planSummary(plan) +
-    ' · 演示</span><div class="planner-actions"><button class="action-button secondary" type="button" data-plan-edit="' +
+    (connection.mode === 'preview' ? ' · 本机预览' : '') + '</span><div class="planner-actions"><button class="action-button secondary" type="button" data-plan-edit="' +
     plan.id + '">编辑计划</button><button class="action-button secondary" type="button" data-plan-pause="' + plan.id + '">' +
     (plan.paused ? '恢复计划' : '暂停计划') + '</button></div></div>' +
     '<section class="auto-section"><div class="section-heading"><h2>安排</h2>' +
@@ -114,7 +119,7 @@ export function planDialog() {
   const sources = studioRepository.list({ domain: 'Self-Board' }).filter(item =>
     selfBoardIncludes(item, 'discover') || selfBoardIncludes(item, 'experience'));
   return '<dialog class="task-dialog plan-dialog" aria-labelledby="plan-dialog-title"><form data-plan-form>' +
-    '<h2 id="plan-dialog-title">新建计划</h2><p>演示 · 刷新清除</p><input type="hidden" name="id">' +
+    '<h2 id="plan-dialog-title">新建计划</h2>' + (connection.mode === 'preview' ? '<p>本机预览 · 刷新清除</p>' : '') + '<input type="hidden" name="id">' +
     '<label>名称<input required maxlength="120" name="title"></label><label>类型<select name="kind">' +
     Object.entries(kinds).map(([value, label]) => '<option value="' + value + '">' + label + '</option>').join('') +
     '</select></label><label data-rule hidden>周期<select name="period">' +
@@ -126,5 +131,5 @@ export function planDialog() {
       '<input type="checkbox" name="sourceId" value="' + escapeHtml(item.id) + '">' + escapeHtml(item.title) + '</label>').join('') +
       '</fieldset>' : '<p>暂无可关联资料。</p>') +
     '<p data-form-error role="alert" hidden></p><div class="widget-actions"><button type="button" class="action-button secondary" data-dialog-cancel>取消</button>' +
-    '<button type="submit" class="action-button">保存演示计划</button></div></form></dialog>';
+    '<button type="submit" class="action-button">保存计划</button></div></form></dialog>';
 }

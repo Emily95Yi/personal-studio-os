@@ -88,8 +88,67 @@ const tasks = [];
 /** @type {Completion[]} */
 const completions = [];
 const habitDates = new Set();
+const reviews = [];
+const calendarEvents = [];
+const listeners = new Set();
+
+function changed() { for (const listener of listeners) listener(); }
+
+function replace(target, source) {
+  target.splice(0, target.length, ...structuredClone(source ?? []));
+}
 
 export const plannerRepository = {
+  onChange(listener) { listeners.add(listener); },
+  snapshot() { return structuredClone({ plans, tasks, completions, reviews, events: calendarEvents, habitDates: [...habitDates] }); },
+  restore(snapshot) {
+    replace(plans, snapshot?.plans);
+    replace(tasks, snapshot?.tasks);
+    replace(completions, snapshot?.completions);
+    replace(reviews, snapshot?.reviews);
+    replace(calendarEvents, snapshot?.events);
+    habitDates.clear();
+    for (const date of snapshot?.habitDates ?? []) habitDates.add(date);
+  },
+  getReview(taskId) {
+    const review = reviews.find(row => row.taskId === taskId);
+    return review && { ...review };
+  },
+  calendarEvents() { return calendarEvents.map(event => ({ ...event })); },
+  eventForTask(taskId) {
+    const event = calendarEvents.find(row => row.taskId === taskId);
+    return event && { ...event };
+  },
+  confirmReview(taskId, action, details) {
+    const task = this.getTask(taskId);
+    if (!task || task.skipped || this.eventForTask(taskId) || !['remind', 'todo', 'calendar'].includes(action) ||
+        (action === 'calendar' && !details)) return null;
+    const previous = reviews.find(row => row.taskId === taskId);
+    const review = { id: previous?.id ?? crypto.randomUUID(), taskId, action, confirmedAt: new Date().toISOString() };
+    if (previous) Object.assign(previous, review);
+    else reviews.push(review);
+    const event = action === 'calendar' ? {
+      ...details, id: crypto.randomUUID(), taskId, reviewId: review.id,
+      title: task.title, status: 'export_pending', timeZone: 'Asia/Tokyo',
+    } : null;
+    if (event) calendarEvents.push(event);
+    changed();
+    return { review: { ...review }, event: event && { ...event } };
+  },
+  markDeviceResult(id, result) {
+    const event = calendarEvents.find(row => row.id === id);
+    if (event?.status !== 'export_launched' || !['added', 'existing'].includes(result)) return;
+    event.deviceResult = result;
+    changed();
+  },
+  markEvent(id, status) {
+    if (!['export_pending', 'export_launched', 'sync_error'].includes(status)) return;
+    const event = calendarEvents.find(row => row.id === id);
+    if (event && event.status !== status) {
+      event.status = status;
+      changed();
+    }
+  },
   listPlans() { return plans.map(plan => ({ ...plan, sourceIds: [...plan.sourceIds] })); },
   getPlan(id) { return this.listPlans().find(plan => plan.id === id); },
   savePlan(input) {
@@ -110,11 +169,15 @@ export const plannerRepository = {
       plans.splice(index, 1);
       plans.unshift(plan);
     }
+    changed();
     return this.getPlan(plan.id);
   },
   togglePause(id) {
     const plan = plans.find(entry => entry.id === id);
-    if (plan) plan.paused = !plan.paused;
+    if (plan) {
+      plan.paused = !plan.paused;
+      changed();
+    }
   },
   tasksBetween(start, end) {
     return tasks.filter(task => !task.skipped && task.date >= start && task.date <= end).map(task => ({ ...task }));
@@ -148,6 +211,7 @@ export const plannerRepository = {
       const index = completions.findIndex(entry => entry.taskId === task.id);
       if (index !== -1) completions.splice(index, 1);
     }
+    changed();
     return { ...task };
   },
   toggleSkip(id) {
@@ -156,16 +220,21 @@ export const plannerRepository = {
     if (task.skipped && this.getPlan(task.planId)?.kind === 'one-off' &&
         tasks.some(entry => entry.planId === task.planId && entry.id !== task.id && !entry.skipped)) return false;
     task.skipped = !task.skipped;
+    changed();
     return true;
   },
   recordCompletion(planId, date) {
     if (plans.some(plan => plan.id === planId && !plan.paused && plan.kind !== 'one-off')) {
       completions.push({ id: crypto.randomUUID(), planId, date });
+      changed();
     }
   },
   undoCompletion(planId) {
     const index = completions.findLastIndex(entry => entry.planId === planId && !entry.taskId);
-    if (index !== -1) completions.splice(index, 1);
+    if (index !== -1) {
+      completions.splice(index, 1);
+      changed();
+    }
   },
   completionsForPlan(planId) { return completions.filter(entry => entry.planId === planId).map(entry => ({ ...entry })); },
   checkInsBetween(start, end) {
@@ -174,5 +243,6 @@ export const plannerRepository = {
   toggleCheckIn(date) {
     if (habitDates.has(date)) habitDates.delete(date);
     else habitDates.add(date);
+    changed();
   },
 };

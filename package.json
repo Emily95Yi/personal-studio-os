@@ -2,5 +2,16 @@
   "name": "personal-studio-os",
   "private": true,
   "type": "module",
-  "scripts": { "dev": "node scripts/preview.mjs" }
+  "scripts": {
+    "dev": "node scripts/preview.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@js-temporal/polyfill": "0.5.1",
+    "ical.js": "2.2.1",
+    "jose": "6.2.15"
+  },
+  "devDependencies": {
+    "wrangler": "4.157.0"
+  }
 }
