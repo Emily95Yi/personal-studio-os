@@ -5,6 +5,7 @@ import { boardContent, boardFolderPath, boardRecords, boardSection, contentTypes
   relationTypes, removeBoardFolder, removeReflectionLabel, resourceKey, resourcesCategory, saveBoardContent, saveBoardFolder,
   saveReflectionLabel, toggleBoardFolderPin } from './self-board-data.js';
 import { boardOptions, boardResults, searchResults, setReflectionOrder } from './self-board-view.js';
+import { calendarSearchResults } from './planner-view.js';
 import { reviewChanges } from './self-board-review.js';
 import { contentTitle, maxAssetBytes, objectFor, relationCandidates, removeRelation, saveRelation, studioStore } from './studio-data.js';
 import { studioDialog } from './studio-dialog.js';
@@ -14,6 +15,16 @@ import { categoryList, entriesFor, foldersFor, resourceAtUrl, saveCollectionItem
   topicsFor, itemsFor } from './board-library-data.js';
 import { collectionLocation } from './board-library-view.js';
 import { objectHref, objectLabels } from './workshop-view.js';
+
+export function refreshHeaderSearch(app) {
+  const form = app.querySelector('[data-sb-floating-search]:not([hidden])');
+  if (!form) return;
+  const query = form.elements.query.value.trim();
+  const results = app.querySelector('[data-sb-search-results]');
+  const render = form.dataset.sbFloatingSearch === 'calendar' ? calendarSearchResults : searchResults;
+  results.hidden = !query;
+  results.innerHTML = query ? render(query) : '';
+}
 
 const field = (name, label, value = '', attributes = '') => '<label>' + label + '<input name="' + name + '" value="' +
   esc(value ?? '') + '" ' + attributes + '></label>';
@@ -574,19 +585,32 @@ export function initBoardActions(app, render) {
   }
 
   for (const event of ['input', 'change', 'submit']) app.addEventListener(event, filterResults);
+  function toggleHeaderSearch(button, open) {
+    const form = app.querySelector('[data-sb-floating-search]');
+    const results = app.querySelector('[data-sb-search-results]');
+    button.setAttribute('aria-expanded', String(open));
+    form.hidden = !open;
+    results.hidden = !open || !form.elements.query.value.trim();
+    if (open) {
+      refreshHeaderSearch(app);
+      form.elements.query.focus({ preventScroll: true });
+    }
+  }
+
   function searchFromHeader(event) {
     const form = event.target.closest('[data-sb-floating-search]');
     if (!form) return;
     if (event.type === 'submit') event.preventDefault();
-    const query = form.elements.query.value.trim();
-    app.querySelector('[data-sb-search-results]').innerHTML = query ? searchResults(query) : '';
+    refreshHeaderSearch(app);
   }
   for (const event of ['input', 'submit']) app.addEventListener(event, searchFromHeader);
-  app.addEventListener('toggle', event => {
-    if (event.target.matches('[data-sb-header-search][open]')) {
-      event.target.querySelector('input').focus({ preventScroll: true });
-    }
-  }, true);
+  app.addEventListener('click', event => {
+    const button = app.querySelector('[data-sb-header-search]');
+    if (!button) return;
+    const open = button.getAttribute('aria-expanded') === 'true';
+    if (button.contains(event.target)) toggleHeaderSearch(button, !open);
+    else if (open && !event.target.closest('[data-sb-floating-search], [data-sb-search-results], dialog')) toggleHeaderSearch(button, false);
+  });
   app.addEventListener('submit', event => {
     if (!event.target.matches('[data-sb-search]')) return;
     event.preventDefault();
@@ -616,6 +640,13 @@ export function initBoardActions(app, render) {
   });
   app.addEventListener('keydown', event => {
     if (event.key !== 'Escape' || app.querySelector('dialog[open]')) return;
+    const search = app.querySelector('[data-sb-header-search][aria-expanded="true"]');
+    if (search) {
+      event.preventDefault();
+      toggleHeaderSearch(search, false);
+      search.focus({ preventScroll: true });
+      return;
+    }
     const details = event.target.closest('[data-sb-disclosure][open]') || app.querySelector('[data-sb-disclosure][open]');
     if (!details) return;
     details.open = false;

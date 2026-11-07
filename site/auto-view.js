@@ -1,13 +1,20 @@
 import { calendarHref, dateKey, periodBounds, todayDate } from './calendar.js';
 import { escapeHtml } from './html.js';
 import { icon } from './icons.js';
-import { boardContentHref, href } from './pages.js';
+import { boardContentHref, boardSections, collectionItemAddress, explorationAddress, href } from './pages.js';
 import { plannerRepository, selfBoardIncludes, studioRepository } from './repository.js';
 import { connection } from './private-api.js';
-import { contentTitle } from './studio-data.js';
+import { contentTitle, studioStore } from './studio-data.js';
+import { entriesFor, explorationEntryTitle, itemsFor, topicsFor } from './board-library-data.js';
+import { boardContent, boardSection } from './self-board-data.js';
 import { canEdit, reviewLabel } from './apple-view.js';
 
-const kinds = { 'one-off': 'One-off', recurring: 'Recurring', quota: 'Quota' };
+const kinds = { 'one-off': '单次', recurring: '重复规则', quota: '周期目标' };
+const kindHelp = {
+  'one-off': '手动安排一次。',
+  recurring: '保存重复间隔。日期需手动安排，目前不会自动创建待办或发送通知。',
+  quota: '按周期统计完成次数，可以手动安排日期，也可以直接记录完成。',
+};
 const periods = { day: '日', week: '周', month: '月' };
 
 function calendarLink(period, from) {
@@ -15,23 +22,47 @@ function calendarLink(period, from) {
     '" aria-label="打开 Calendar" title="Calendar">' + icon('calendar', 17) + '</a>';
 }
 
+function sourceGroups() {
+  const state = studioStore.state;
+  const groups = new Map();
+  const add = (group, record, url, title = contentTitle(record)) => {
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push({ record, title, url });
+  };
+  for (const record of studioRepository.list().filter(item => selfBoardIncludes(item))) {
+    add(boardSections[boardSection(boardContent(record))].zh, record, boardContentHref(record.id));
+  }
+  for (const topic of topicsFor(state)) {
+    add('个人探索', topic, explorationAddress(topic.id));
+    for (const entry of entriesFor(state, topic.id)) {
+      add('个人探索', entry, explorationAddress(topic.id) + '?' + new URLSearchParams({ entry: entry.id }),
+        contentTitle(topic) + ' / ' + explorationEntryTitle(entry));
+    }
+  }
+  for (const item of itemsFor(state)) add('生活收藏', item, collectionItemAddress(item.id));
+  return groups;
+}
+
 export function originalSource(id) {
-  const record = studioRepository.get(id);
-  if (!record || !selfBoardIncludes(record)) return null;
-  return { record, url: boardContentHref(record.id) };
+  if (!id) return null;
+  for (const sources of sourceGroups().values()) {
+    const source = sources.find(({ record }) => record.id === id);
+    if (source) return source;
+  }
+  return null;
 }
 
 export function taskSourceLink(task) {
   const source = originalSource(task.sourceContentId);
-  return source ? '<a class="task-source" href="' + source.url + '">' + escapeHtml(contentTitle(source.record)) + '</a>' : '';
+  return source ? '<a class="task-source" href="' + escapeHtml(source.url) + '">' + escapeHtml(source.title) + '</a>' : '';
 }
 
 function planSummary(plan) {
-  if (plan.kind === 'one-off') return plan.paused ? 'One-off · 已暂停' : 'One-off';
+  if (plan.kind === 'one-off') return kinds[plan.kind] + (plan.paused ? ' · 已暂停' : '');
   if (plan.paused) return kinds[plan.kind] + ' · 已暂停';
   const unit = periods[plan.period];
-  return plan.kind === 'quota' ? '每' + unit + ' ' + plan.target + ' 次' :
-    '每 ' + plan.interval + ' ' + unit;
+  return plan.kind === 'quota' ? '周期目标 · 每' + unit + ' ' + plan.target + ' 次' :
+    '重复规则 · 每 ' + plan.interval + ' ' + unit;
 }
 
 function quotaProgress(plan) {
@@ -62,20 +93,6 @@ function taskRows(tasks, allowSkip = false) {
       (task.skipped ? '恢复' : '跳过') + '</button>' : '') + taskSourceLink(task) + '</li>').join('') + '</ul>';
 }
 
-export function autoWidget(period = 'week') {
-  const [start, end] = periodBounds(todayDate(), period).map(dateKey);
-  const plans = plannerRepository.listPlans();
-  const dated = plannerRepository.tasksBetween(start, end);
-  return '<section class="widget widget-auto"><div class="section-heading"><h2><a href="' + href('self-board', 'auto') +
-    '">Auto</a></h2><div class="planner-actions"><div class="segmented" aria-label="Auto 摘要周期">' +
-    [['week', '本周'], ['month', '本月']].map(([mode, label]) => '<button type="button" data-period="' +
-      mode + '" aria-pressed="' + (period === mode) + '">' + label + '</button>').join('') + '</div>' +
-    calendarLink('week', 'self-board') + '</div></div>' +
-    taskRows(dated.slice().sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4)) +
-    (plans.length ? '<div class="auto-recent"><h3>最近计划</h3>' + planCards(plans.slice(0, 3)) + '</div>' : '') +
-    '</section>';
-}
-
 export function autoView() {
   return '<div class="section-heading auto-toolbar"><span class="subtle">' +
     (connection.mode === 'preview' ? '本机预览 · 刷新清除' : connection.mode === 'private' ? '' :
@@ -87,8 +104,8 @@ export function autoView() {
 }
 
 function resourceLinks(plan) {
-  const links = plan.sourceIds.map(originalSource).filter(Boolean).map(({ record, url }) =>
-    '<li><a class="return-link" href="' + url + '">' + escapeHtml(contentTitle(record)) + '</a></li>');
+  const links = plan.sourceIds.map(originalSource).filter(Boolean).map(({ title, url }) =>
+    '<li><a class="return-link" href="' + escapeHtml(url) + '">' + escapeHtml(title) + '</a></li>');
   return links.length ? '<ul class="auto-resources">' + links.join('') + '</ul>' : '<p class="subtle">暂无关联资源。</p>';
 }
 
@@ -106,7 +123,7 @@ export function autoPlanView({ plan }) {
     (plan.paused ? '恢复计划' : '暂停计划') + '</button></div></div>' +
     '<section class="auto-section"><div class="section-heading"><h2>安排</h2>' +
     (canSchedule ? '<button class="action-button" type="button" data-plan-schedule="' + plan.id + '">安排日期</button>' : '') +
-    '</div>' + taskRows(tasks, true) + '</section>' +
+    '</div>' + (plan.kind === 'recurring' ? '<p class="subtle">' + kindHelp.recurring + '</p>' : '') + taskRows(tasks, true) + '</section>' +
     '<section class="auto-section"><h2>完成记录</h2>' + quotaProgress(plan) +
     (records.length ? '<ul class="auto-resources">' + records.slice().reverse().map(item => '<li>' +
       escapeHtml(item.date) + (item.taskId ? ' · 安排完成' : ' · 手动记录') + '</li>').join('') + '</ul>' :
@@ -116,21 +133,23 @@ export function autoPlanView({ plan }) {
 }
 
 export function planDialog() {
-  const sources = studioRepository.list({ domain: 'Self-Board' }).filter(item =>
-    ['resource', 'knowledge', 'exercise'].includes(item.type) || (!item.type &&
-      (selfBoardIncludes(item, 'discover') || selfBoardIncludes(item, 'experience'))));
+  const groups = sourceGroups();
   return '<dialog class="task-dialog plan-dialog" aria-labelledby="plan-dialog-title"><form data-plan-form>' +
     '<h2 id="plan-dialog-title">新建计划</h2>' + (connection.mode === 'preview' ? '<p>本机预览 · 刷新清除</p>' : '') + '<input type="hidden" name="id">' +
-    '<label>名称<input required maxlength="120" name="title"></label><label>类型<select name="kind">' +
+    '<label>名称<input required maxlength="120" name="title"></label><label>类型<select name="kind" aria-describedby="plan-kind-help">' +
     Object.entries(kinds).map(([value, label]) => '<option value="' + value + '">' + label + '</option>').join('') +
-    '</select></label><label data-rule hidden>周期<select name="period">' +
+    '</select></label><p id="plan-kind-help" data-plan-kind-help></p><label data-rule hidden>周期<select name="period">' +
     Object.entries(periods).map(([value, label]) => '<option value="' + value + '">' + label + '</option>').join('') +
     '</select></label><label data-frequency hidden>间隔周期数<input required type="number" min="1" max="999" name="interval" value="1"></label>' +
     '<label data-quota hidden>每周期目标次数<input required type="number" min="1" max="999" name="target" value="1"></label>' +
     '<label>提醒偏好（可选）<input name="reminder" maxlength="100" placeholder="仅记录偏好"></label>' +
-    (sources.length ? '<fieldset><legend>关联原始资料</legend>' + sources.map(item => '<label class="check-label">' +
-      '<input type="checkbox" name="sourceId" value="' + escapeHtml(item.id) + '">' + escapeHtml(contentTitle(item)) + '</label>').join('') +
-      '</fieldset>' : '<p>暂无可关联资料。</p>') +
+    (groups.size ? '<fieldset><legend>关联 Self-Board 内容</legend><label>筛选内容<input type="search" data-plan-source-filter></label>' +
+      '<div class="plan-sources">' + [...groups].map(([group, sources]) => '<div data-plan-source-group><strong>' + escapeHtml(group) +
+        '</strong>' + sources.map(({ record, title }) => '<label class="check-label" data-plan-source-option>' +
+        '<input type="checkbox" name="sourceId" value="' + escapeHtml(record.id) + '"><span>' + escapeHtml(title) + '</span></label>').join('') +
+        '</div>').join('') + '<p data-plan-source-empty hidden>没有匹配的内容。</p></div></fieldset>' : '<p>暂无可关联内容。</p>') +
     '<p data-form-error role="alert" hidden></p><div class="widget-actions"><button type="button" class="action-button secondary" data-dialog-cancel>取消</button>' +
     '<button type="submit" class="action-button">保存计划</button></div></form></dialog>';
 }
+
+export const planKindHelp = kind => kindHelp[kind];

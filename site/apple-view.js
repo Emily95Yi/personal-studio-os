@@ -52,7 +52,7 @@ export const calendarTasks = (start, end) => {
   });
 };
 export const onDay = (event, day) => event.dayStart <= day && event.dayEnd > day;
-const actionLabels = { remind: 'Remind Only', todo: 'Add To-Do', calendar: 'Add to Calendar' };
+const actionLabels = { remind: '仅记录提醒意向', todo: '保留待办', calendar: '已建立日程' };
 
 export function settingsView() {
   if (connection.mode !== 'private') {
@@ -61,9 +61,10 @@ export function settingsView() {
     return '<section class="empty-state"><h2>Apple 日历</h2><p>' + note + '</p></section>';
   }
   const configured = connection.feed.status !== 'unconfigured';
-  return caldavSettings() + '<section class="empty-state apple-settings"><h2>' +
+  if (connection.caldav.secondary) return caldavSettings();
+  return caldavSettings() + '<section class="empty-state apple-settings" data-ics-settings><h2>' +
     (connection.caldav.enabled ? 'iCloud · 公开 ICS 备用方式' : 'iCloud 订阅') + '</h2><p data-settings-status role="status">' +
-    (connection.caldav.secondary ? '已连接私人 iCloud 日历。' : configured ? '订阅已配置。可替换或断开。' : '可选：未连接私人 iCloud 日历时，可以使用公开订阅。') + '</p>' +
+    (configured ? '订阅已配置。可替换或断开。' : '可选：未连接私人 iCloud 日历时，可以使用公开订阅。') + '</p>' +
     '<form data-apple-settings autocomplete="off"><label>iCloud 公开日历链接' +
     '<input type="password" name="source" maxlength="512" required autocomplete="off" spellcheck="false"></label>' +
     '<div class="widget-actions"><button class="action-button" type="submit">保存订阅</button>' +
@@ -109,10 +110,10 @@ export function statusBanner() {
 export function reviewDialog() {
   return `<dialog class="task-dialog apple-dialog" data-review-dialog aria-labelledby="review-title">
     <form data-review-form>
-      <h2 id="review-title">Review</h2><input type="hidden" name="taskId"><input type="hidden" name="eventId"><input type="hidden" name="eventVersion"><input type="hidden" name="createId">
-      <p>Link · <strong data-review-link></strong></p>
+      <h2 id="review-title">建立日程</h2><input type="hidden" name="action" value="calendar"><input type="hidden" name="taskId"><input type="hidden" name="eventId"><input type="hidden" name="eventVersion"><input type="hidden" name="createId">
+      <p data-review-link hidden></p>
       <label data-caldav-edit-title hidden>日程标题<input name="eventTitle" maxlength="300" disabled></label>
-      <fieldset data-review-time hidden><legend>Time · Asia/Tokyo</legend>
+      <fieldset><legend>时间 · 东京</legend>
         <label class="check-label"><input type="checkbox" name="allDay">全天</label>
         <div class="apple-fields"><label>开始时间<input type="datetime-local" name="startTime"></label>
         <label>结束时间<input type="datetime-local" name="endTime"></label></div>
@@ -122,10 +123,6 @@ export function reviewDialog() {
         <label>备注<textarea name="notes" maxlength="8000" rows="2"></textarea></label>
         <label>目标日历（可选）<input name="targetCalendar" maxlength="80"></label>
       </fieldset>
-      <label>Action<select name="action">
-        <option value="remind">Remind Only</option><option value="todo">Add To-Do</option>
-        <option value="calendar">Add to Calendar</option>
-      </select></label>
       <p data-review-summary></p><p data-form-error role="alert" hidden></p>
       <button class="text-action" type="button" data-caldav-rebase hidden>查看 Apple 最新版本并继续编辑</button>
       <div class="widget-actions"><button class="action-button secondary" type="button" data-dialog-cancel>取消</button>
@@ -134,22 +131,17 @@ export function reviewDialog() {
 }
 
 export function updateReview(form) {
-  const { action, allDay, startTime, endTime, startDate, endDate } = form.elements;
-  const calendar = action.value === 'calendar';
-  form.querySelector('[data-review-time]').hidden = !calendar;
+  const { allDay, startTime, endTime, startDate, endDate } = form.elements;
   for (const field of [startTime, endTime, startDate, endDate]) {
     const dateOnly = field.type === 'date';
     field.closest('label').hidden = dateOnly !== allDay.checked;
-    field.required = calendar && !field.closest('label').hidden;
+    field.required = !field.closest('label').hidden;
     field.disabled = !field.required;
   }
   form.elements.targetCalendar.closest('label').hidden = connection.caldav.configured;
-  form.querySelector('button[type=submit]').textContent = calendar && connection.caldav.configured ? '保存并同步' : '确认安排';
-  form.querySelector('[data-review-summary]').textContent = {
-    calendar: connection.caldav.configured ? '保存后检查时间冲突并同步到 ' + connection.caldav.name + '。' : '确认后生成待写入日程。',
-    remind: '保留提醒意向。目前没有通知服务。',
-    todo: '保留现有待办，不重复创建。',
-  }[action.value];
+  form.querySelector('button[type=submit]').textContent = connection.caldav.configured ? '保存并同步' : '建立日程';
+  form.querySelector('[data-review-summary]').textContent = connection.caldav.configured
+    ? '保存后检查时间冲突并同步到 ' + connection.caldav.name + '。' : '保存后生成待写入日程。';
 }
 
 export function openReview(app, task, event, date = task?.date ?? dateKey()) {
@@ -165,14 +157,11 @@ export function openReview(app, task, event, date = task?.date ?? dateKey()) {
   form.elements.eventTitle.disabled = !direct;
   form.elements.eventTitle.required = direct;
   form.elements.place.maxLength = direct ? 300 : 200;
-  form.elements.startTime.step = form.elements.endTime.step = direct ? '1' : '60';
+  form.elements.startTime.step = form.elements.endTime.step = event ? '1' : '60';
   form.elements.notes.maxLength = direct ? 8000 : 700;
   form.querySelector('[data-caldav-edit-title]').hidden = !direct;
   form.querySelector('[data-caldav-rebase]').hidden = true;
-  form.elements.action.disabled = direct;
-  form.elements.action.closest('label').hidden = direct;
-  form.querySelector('h2').textContent = event ? '编辑 YiStudio 日程' : direct ? '新建 YiStudio 日程' : 'Review';
-  form.elements.action.value = direct ? 'calendar' : plannerRepository.getReview(task.id)?.action ?? 'calendar';
+  form.querySelector('h2').textContent = event ? '编辑 YiStudio 日程' : direct ? '新建 YiStudio 日程' : '建立日程';
   form.elements.startTime.value = date + 'T09:00';
   form.elements.endTime.value = date + 'T10:00';
   form.elements.startDate.value = date;
@@ -198,7 +187,9 @@ export function openReview(app, task, event, date = task?.date ?? dateKey()) {
     form.elements.place.value = event.location;
     form.elements.notes.value = event.notes ?? '';
   }
-  form.querySelector('[data-review-link]').textContent = task?.title ?? calendarSourceLabels.A;
+  const source = form.querySelector('[data-review-link]');
+  source.hidden = !task;
+  source.textContent = task?.title ?? '';
   form.querySelector('[data-form-error]').hidden = true;
   updateReview(form);
   dialog.showModal();

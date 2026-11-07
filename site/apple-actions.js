@@ -19,7 +19,7 @@ function download(event) {
 }
 
 async function changeSource(app, url, render) {
-  const section = app.querySelector('.apple-settings');
+  const section = app.querySelector('[data-ics-settings]');
   const status = section.querySelector('[data-settings-status]');
   const buttons = [...section.querySelectorAll('button')];
   for (const button of buttons) button.disabled = true;

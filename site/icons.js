@@ -8,6 +8,7 @@ const paths = {
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/>',
   globe: '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/>',
   back: '<path d="M20 12H5m5 5-5-5 5-5"/>',
+  auto: '<path d="m13 2-9 12h7l-1 8 10-12h-7l1-8Z"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/>',
   calendarAdd: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-9 3v5m-2.5-2.5h5"/>',
   taskAdd: '<rect x="3" y="5" width="18" height="15" rx="2"/><path d="m6 11 1.5 1.5L10 10m5 2v5m-2.5-2.5h5"/>',

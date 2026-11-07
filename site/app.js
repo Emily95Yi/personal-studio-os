@@ -4,10 +4,10 @@ import {
 } from './views.js';
 import { icon } from './icons.js';
 import { escapeHtml } from './html.js';
-import { autoPlanView, autoWidget, originalSource, planDialog } from './auto-view.js';
+import { autoPlanView, originalSource, planDialog, planKindHelp } from './auto-view.js';
 import { plannerRepository, studioRepository } from './repository.js';
 import { calendarHref, calendarSelection, dateKey, parseDate, todayDate } from './calendar.js';
-import { calendarHeaderActions, calendarRefreshState, calendarView, taskDialog } from './planner-view.js';
+import { calendarHeaderActions, calendarRefreshState, calendarView, taskDialog, weekPreview } from './planner-view.js';
 import { allCalendarEvents, canEdit, eventDialog, reviewDialog, settingsView, showEvent, statusBanner } from './apple-view.js';
 import { connection, loadCalDav, loadFeed, loadPlanner, onPrivateChange } from './private-api.js';
 import { initAppleActions } from './apple-actions.js';
@@ -15,7 +15,7 @@ import { eventDetail, projectOverview, workshopGallery } from './workshop-view.j
 import { initWorkshopActions } from './workshop-actions.js';
 import { initStudioImport, studioImportView } from './studio-import-view.js';
 import { boardDetail, boardView } from './self-board-view.js';
-import { initBoardActions } from './self-board-actions.js';
+import { initBoardActions, refreshHeaderSearch } from './self-board-actions.js';
 import { boardContent, boardSection } from './self-board-data.js';
 import { initLibraryActions } from './board-library-actions.js';
 import { contentTitle, isSelfBoard, studioStore } from './studio-data.js';
@@ -23,7 +23,6 @@ import { beginStudioEdit, closeStudioSync, migrateLocalStudio, onStudioNotice, r
   startStudioSync, studioNotice, studioSync } from './studio-cloud.js';
 
 const app = document.querySelector('#app');
-let period = 'week';
 let studioStorageError = false;
 let mountBoardEditor;
 let mountLibrary;
@@ -107,24 +106,26 @@ function header(route, { title, ancestors }) {
   const calendar = route.type === 'auto-plan' ? '<a class="header-icon" href="' +
     escapeHtml(calendarHref(todayDate(), 'week', 'auto')) +
     '" aria-label="打开 Calendar" title="Calendar">' + icon('calendar', 18) + '</a>' : '';
-  const search = inBoard ? boardHeaderSearch() : route.type === 'search' ? '' :
+  const floatingSearch = inBoard || route.type === 'calendar';
+  const search = floatingSearch ? headerSearch(route.type === 'calendar') : route.type === 'search' ? '' :
     '<a class="header-icon" href="' + href('search') + '" aria-label="搜索" title="搜索">' + icon('search', 18) + '</a>';
-  return '<header class="studio-top"><div class="masthead' + (inBoard ? ' sb-masthead' : '') + '">' + start +
-    '<div class="header-actions">' + calendar + search + (route.type === 'calendar' ? calendarHeaderActions() : '') + (inBoard ?
+  return '<header class="studio-top"><div class="masthead' + (inBoard ? ' sb-masthead' : '') +
+    (floatingSearch ? ' searchable-masthead' : '') + '">' + start +
+    '<div class="header-actions">' + search + calendar + (route.type === 'calendar' ? calendarHeaderActions() : '') + (inBoard ?
       '<button type="button" class="header-icon sb-header-button" data-sb-capture aria-label="快速添加" title="快速添加">' + icon('add', 19) + '</button>' +
       '<a class="header-icon" href="' + boardHref('connections') + '" aria-label="Network" title="Network">' + icon('network', 18) + '</a>' +
       '<a class="header-icon" href="' + escapeHtml(boardSettingsAddress(location.hash || boardHref())) +
       '" aria-label="Self-Board 设置" title="Self-Board 设置">' + icon('settings', 19) + '</a>' : '') +
-    '</div></div></header>';
+    '</div></div>' + (floatingSearch ? '<div class="sb-search-results" data-sb-search-results aria-live="polite" hidden></div>' : '') + '</header>';
 }
 
-function boardHeaderSearch() {
-  return '<details class="sb-header-search" data-sb-disclosure data-sb-header-search>' +
-    '<summary class="header-icon" aria-label="搜索" title="搜索">' + icon('search', 18) + '</summary>' +
-    '<div class="sb-search-panel"><form data-sb-floating-search role="search" aria-label="Self-Board 搜索">' +
-    '<label class="sb-search">' + icon('search', 17) +
-    '<input type="search" name="query" aria-label="全局搜索" placeholder="搜索文章、灵感、资料或活动…"></label></form>' +
-    '<div class="sb-search-results" data-sb-search-results aria-live="polite"></div></div></details>';
+function headerSearch(calendar) {
+  const label = calendar ? '搜索日程' : '搜索 Self-Board';
+  return '<form id="header-search" data-sb-floating-search="' + (calendar ? 'calendar' : 'self-board') +
+    '" role="search" aria-label="' + label + '" hidden>' +
+    '<input type="search" name="query" aria-label="' + label + '" placeholder="' + label + '…"></form>' +
+    '<button type="button" class="header-icon sb-header-button" data-sb-header-search aria-expanded="false" ' +
+    'aria-controls="header-search" aria-label="搜索" title="搜索">' + icon('search', 18) + '</button>';
 }
 
 function boardTitleMenu(section, title, article) {
@@ -168,10 +169,9 @@ function render({ focus = false } = {}) {
   }
   if (route.entity === 'topic' && topicLease?.address !== location.hash) route.params.delete('edit');
   const context = pageContext(route);
-  const canEditTasks = route.type === 'calendar' ||
-    (route.workspaceId === 'self-board' && ((route.type === 'board' && !route.section) || route.collectionId === 'auto'));
+  const canEditTasks = route.type === 'calendar' || route.collectionId === 'auto';
   const canEditPlans = route.collectionId === 'auto';
-  const isPlannerPage = canEditTasks || route.type === 'home';
+  const isPlannerPage = canEditTasks || isBoardOverview(route) || route.type === 'home';
   document.title = context.title;
   app.dataset.page = route.type;
   app.dataset.space = route.type === 'public' ? 'public' : 'private';
@@ -186,7 +186,7 @@ function render({ focus = false } = {}) {
     (route.type === 'home' ? '' : ' aria-label="' + escapeHtml(context.title) + '"') + '>' + publicNav(route) +
     (isPlannerPage ? '<div data-private-status>' + statusBanner() + '</div>' : '') +
     workshopBreadcrumb + storageWarning + (route.type === 'public' ? '' : syncBanner()) +
-    views[route.type]({ ...route, period }) + '</main>' +
+    views[route.type](route) + '</main>' +
     (canEditTasks ? taskDialog() + reviewDialog() + eventDialog() : '') + (canEditPlans ? planDialog() : '');
   if (focus || route.documentId) {
     const target = app.querySelector('[data-work-selected] > summary');
@@ -197,6 +197,17 @@ function render({ focus = false } = {}) {
   }
   mountBoardEditor?.(route);
   mountLibrary?.(route);
+  if (route.entity === 'topic' && route.params.has('entry')) {
+    const id = route.params.get('entry');
+    const entry = [...app.querySelectorAll('[data-entry]')].find(node => node.dataset.entry === id);
+    entry?.scrollIntoView({ block: 'nearest' });
+    entry?.focus({ preventScroll: true });
+  }
+  const source = canEditPlans && route.type === 'collection' && canEdit() && originalSource(route.params.get('source'));
+  if (source) {
+    history.replaceState(history.state, '', href('self-board', 'auto'));
+    openPlanDialog(undefined, source);
+  }
 }
 
 app.addEventListener('click', event => {
@@ -220,11 +231,6 @@ app.addEventListener('click', event => {
   }
   const button = event.target.closest('button');
   if (!button) return;
-  if (button.dataset.period) {
-    period = button.dataset.period;
-    button.closest('.widget-auto').outerHTML = autoWidget(period);
-    app.querySelector('[data-period="' + period + '"]').focus({ preventScroll: true });
-  }
   if (button.hasAttribute('data-dialog-cancel')) button.closest('dialog').close();
   if (!canEdit()) return;
   if (button.dataset.taskNew || button.dataset.taskEdit || button.dataset.planSchedule) openTaskDialog(button);
@@ -266,7 +272,7 @@ function openTaskDialog(button) {
   const sources = [...new Set([...(plannerRepository.getPlan(form.elements.planId.value)?.sourceIds ?? []),
     task?.sourceContentId].filter(Boolean))].map(originalSource).filter(Boolean);
   const sourceField = form.elements.sourceContentId;
-  sourceField.replaceChildren(new Option('不指定', ''), ...sources.map(({ record }) => new Option(contentTitle(record), record.id)));
+  sourceField.replaceChildren(new Option('不指定', ''), ...sources.map(({ record, title }) => new Option(title, record.id)));
   sourceField.value = task?.sourceContentId ?? '';
   sourceField.disabled = !sources.length;
   form.querySelector('[data-task-source]').hidden = !sources.length;
@@ -275,17 +281,20 @@ function openTaskDialog(button) {
   form.elements.title.setCustomValidity('');
   form.querySelector('[data-form-error]').hidden = true;
   const review = form.querySelector('[data-task-review]');
-  const confirmed = task && plannerRepository.getReview(task.id);
   const scheduled = task && plannerRepository.eventForTask(task.id);
   const deleted = scheduled && connection.caldav.statuses.some(row => row.id === scheduled.id && row.state === 'deleted');
   review.hidden = !task || task.skipped || deleted;
-  review.textContent = scheduled ? '查看日历安排' : confirmed ? '重新 Review' : 'Review';
+  const action = scheduled ? '查看日程' : '建立日程';
+  review.setAttribute('aria-label', action);
+  review.title = action;
+  review.innerHTML = icon(scheduled ? 'calendar' : 'calendarAdd', 19);
   dialog.showModal();
   (plan ? form.elements.date : form.elements.title).focus();
 }
 
 function updatePlanFields(form) {
   const kind = form.elements.kind.value;
+  form.querySelector('[data-plan-kind-help]').textContent = planKindHelp(kind);
   for (const [selector, show] of [['[data-rule]', kind !== 'one-off'], ['[data-frequency]', kind === 'recurring'],
     ['[data-quota]', kind === 'quota']]) {
     const field = form.querySelector(selector);
@@ -294,7 +303,7 @@ function updatePlanFields(form) {
   }
 }
 
-function openPlanDialog(id) {
+function openPlanDialog(id, source) {
   const plan = id ? plannerRepository.getPlan(id) : null;
   if (id && !plan) return;
   const dialog = app.querySelector('.plan-dialog');
@@ -302,18 +311,36 @@ function openPlanDialog(id) {
   form.reset();
   dialog.querySelector('h2').textContent = plan ? '编辑计划' : '新建计划';
   form.elements.id.value = plan?.id ?? '';
-  form.elements.title.value = plan?.title ?? '';
+  form.elements.title.value = plan?.title ?? source?.title.slice(0, 120) ?? '';
   form.elements.kind.value = plan?.kind ?? 'one-off';
   form.elements.period.value = plan?.period ?? 'month';
   form.elements.interval.value = plan?.interval ?? 1;
   form.elements.target.value = plan?.target ?? 1;
   form.elements.reminder.value = plan?.reminder ?? '';
-  form.querySelectorAll('[name="sourceId"]').forEach(field => { field.checked = plan?.sourceIds.includes(field.value) ?? false; });
+  const sourceIds = plan?.sourceIds ?? (source ? [source.record.id] : []);
+  form.querySelectorAll('[name="sourceId"]').forEach(field => { field.checked = sourceIds.includes(field.value); });
+  filterPlanSources(form, '');
   form.elements.title.setCustomValidity('');
   form.querySelector('[data-form-error]').hidden = true;
   updatePlanFields(form);
   dialog.showModal();
   form.elements.title.focus();
+}
+
+function filterPlanSources(form, input) {
+  const query = input.trim().toLowerCase();
+  let matches = 0;
+  for (const group of form.querySelectorAll('[data-plan-source-group]')) {
+    let groupMatches = 0;
+    for (const item of group.querySelectorAll('[data-plan-source-option]')) {
+      item.hidden = !item.textContent.toLowerCase().includes(query);
+      if (!item.hidden) groupMatches++;
+    }
+    group.hidden = groupMatches === 0;
+    matches += groupMatches;
+  }
+  const empty = form.querySelector('[data-plan-source-empty]');
+  if (empty) empty.hidden = matches > 0;
 }
 
 app.addEventListener('change', event => {
@@ -344,11 +371,17 @@ app.addEventListener('submit', event => {
   }
   const error = form.querySelector('[data-form-error]');
   if (planForm) {
+    const sourceIds = new FormData(form).getAll('sourceId');
+    if (sourceIds.length > 100) {
+      error.textContent = '每个计划最多关联 100 条内容。';
+      error.hidden = false;
+      return;
+    }
     const plan = plannerRepository.savePlan({
       id: form.elements.id.value || undefined, title, kind: form.elements.kind.value,
       period: form.elements.period.value, interval: Number(form.elements.interval.value),
       target: Number(form.elements.target.value), reminder: form.elements.reminder.value.trim(),
-      sourceIds: new FormData(form).getAll('sourceId'),
+      sourceIds,
     });
     if (!plan) {
       error.textContent = '无法保存。请检查计划类型和已有安排。';
@@ -382,11 +415,11 @@ app.addEventListener('submit', event => {
     }
   }
   render();
-  (app.querySelector('[data-task-edit="' + saved.id + '"]') ??
-    app.querySelector('[data-period="' + period + '"]') ?? app.querySelector('main')).focus({ preventScroll: true });
+  (app.querySelector('[data-task-edit="' + saved.id + '"]') ?? app.querySelector('main')).focus({ preventScroll: true });
 });
 
 app.addEventListener('input', event => {
+  if (event.target.matches('[data-plan-source-filter]')) filterPlanSources(event.target.form, event.target.value);
   if (event.target.name === 'title' && event.target.form?.matches('[data-task-form], [data-plan-form]')) event.target.setCustomValidity('');
   if (event.target.id !== 'studio-query') return;
   const query = event.target.value.trim();
@@ -425,10 +458,10 @@ function enterPrivateSurface() {
     initialized = true;
     void loadPlanner().then(() => {
       const current = readRoute(location.hash);
-      if (isCalendarSurface(current)) void loadFeed();
+      if (isCalendarSurface(current) || isBoardOverview(current)) void loadFeed();
       else if (current.collectionId === 'auto' || current.workspaceId === 'self-board') void loadCalDav();
     });
-  } else if (isCalendarSurface(route)) void loadFeed();
+  } else if (isCalendarSurface(route) || isBoardOverview(route)) void loadFeed();
   else if (route.collectionId === 'auto') void loadCalDav();
 }
 
@@ -437,7 +470,7 @@ onPrivateChange(() => {
   const modeChanged = lastMode !== connection.mode;
   const caldavChanged = lastCalDav !== connection.caldav;
   const setupChanged = lastCalDav.enabled !== connection.caldav.enabled ||
-    lastCalDav.configured !== connection.caldav.configured;
+    lastCalDav.configured !== connection.caldav.configured || Boolean(lastCalDav.secondary) !== Boolean(connection.caldav.secondary);
   const feedChanged = lastFeed !== connection.feed || caldavChanged;
   lastCalDav = connection.caldav;
   const saveChanged = lastSave !== connection.save;
@@ -463,6 +496,12 @@ onPrivateChange(() => {
     if (event) showEvent(app, event);
     else dialog.close();
   }
+  if (feedChanged && isBoardOverview(route)) {
+    const preview = app.querySelector('[data-week-preview]');
+    const focused = preview?.contains(document.activeElement);
+    if (preview) preview.innerHTML = weekPreview();
+    if (focused) preview.querySelector('a').focus({ preventScroll: true });
+  }
   if (route.type !== 'calendar') return;
   const refresh = app.querySelector('[data-feed-refresh]');
   if (refresh) {
@@ -473,6 +512,7 @@ onPrivateChange(() => {
     refresh.title = label;
   }
   if (!feedChanged) return;
+  if (!app.querySelector('[data-sb-search-results] :focus')) refreshHeaderSearch(app);
   const active = document.activeElement;
   const focusedLink = active?.closest('main') ? active.getAttribute('href') : null;
   app.querySelector('main').innerHTML = '<div data-private-status>' + statusBanner() + '</div>' + syncBanner() + calendarView(route);
@@ -481,7 +521,7 @@ onPrivateChange(() => {
 });
 
 function pollVisibleFeed() {
-  if (document.visibilityState === 'visible' && isCalendarSurface(readRoute(location.hash))) void loadFeed();
+  if (document.visibilityState === 'visible' && (isCalendarSurface(readRoute(location.hash)) || isBoardOverview(readRoute(location.hash)))) void loadFeed();
 }
 
 initAppleActions(app, render);

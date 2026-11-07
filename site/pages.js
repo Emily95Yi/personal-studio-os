@@ -69,6 +69,7 @@ export function boardSettingsAddress(from, view) {
   if (from) query.set('from', from);
   return boardHref('settings') + (query.size ? '?' + query : '');
 }
+export const autoSourceAddress = id => href('self-board', 'auto') + '?' + new URLSearchParams({ source: id });
 export const boardContentHref = id => href('self-board', 'content', id);
 export const explorationAddress = id => id ? href('self-board', 'explorations', id) : boardHref('discover') + '?tab=explorations';
 export const collectionItemAddress = id => href('self-board', 'collections', id);
@@ -220,7 +221,7 @@ export function readRoute(hash) {
     }
     if (Object.hasOwn(workspace.collections, section)) {
       const collection = workspace.collections[section];
-      const route = { type: 'collection', workspaceId: root, workspace, collectionId: section, collection };
+      const route = { type: 'collection', workspaceId: root, workspace, collectionId: section, collection, params: new URLSearchParams(query) };
       if (root === 'workshop' && section === 'projects') {
         if (segments.length === 2) return { type: 'workshop-gallery', workspaceId: root, workspace, redirect: href(root) };
         return readProjectRoute(route, segments.slice(2), new URLSearchParams(query));

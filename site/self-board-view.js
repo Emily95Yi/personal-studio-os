@@ -1,4 +1,4 @@
-import { autoWidget } from './auto-view.js';
+import { weekPreview } from './planner-view.js';
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
 import { boardContentHref, boardHref, boardSections, boardSettingsAddress, discoverAddress, href } from './pages.js';
@@ -126,17 +126,16 @@ function moveFolderList(item) {
 
 function rowList(items, mode) {
   return '<ul class="sb-rows">' + items.map(item => {
-    const isEvent = item.type === 'event';
-    const section = isEvent ? '' : boardSection(item);
+    const section = boardSection(item);
     const writing = section === 'writing';
     const discover = section === 'discover';
-    const module = isEvent ? 'Workshop · Event' : boardSections[section].label;
+    const module = boardSections[section].label;
     const meta = writing ? timeLabel(changed(item)) + writingBadge(item) :
-      discover ? '' : timeLabel(isEvent ? date(item) : changed(item)) + '<small>' + esc(module) + '</small>';
+      discover ? '' : timeLabel(changed(item)) + '<small>' + esc(module) + '</small>';
     const title = writing ? item.title?.trim() || '未命名文章' : contentTitle(item);
     const description = discover ? '' : writing ? (item.summary ?? '').replace(/\s+/g, ' ').trim().slice(0, 190) : preview(item);
     const move = mode === 'discover' ? moveFolderList(item) : '';
-    return '<li' + (move ? ' class="sb-row-actions"' : '') + '><a class="sb-row" href="' + (isEvent ? objectHref('event', item) : boardContentHref(item.id)) + '">' +
+    return '<li' + (move ? ' class="sb-row-actions"' : '') + '><a class="sb-row" href="' + boardContentHref(item.id) + '">' +
       '<div class="sb-row-copy"><strong>' + (mode === 'discover' ? icon('file', 15) + ' ' : '') + esc(title) + '</strong>' +
       (description && description !== title ? '<p>' + esc(description) + '</p>' : '') +
       '</div>' + (meta ? '<div class="sb-row-meta">' + meta + '</div>' : '') + '</a>' + move + '</li>';
@@ -326,23 +325,9 @@ function boardTrash() {
   return rows.length ? '<ul class="sb-relations">' + rows.join('') + '</ul>' : '<p>回收站为空</p>';
 }
 
-function shortcuts() {
-  return '<nav class="sb-shortcuts" aria-label="其他入口">' +
-    '<a href="' + boardHref('auto') + '">Auto ↗</a><a href="' + href('calendar') + '?from=self-board">Calendar ↗</a></nav>';
-}
-
 export function searchResults(query) {
-  if (!query.trim()) return empty('查找文章、灵感或资料', '也可以搜索与 Self-Board 相关的 Workshop 活动。');
+  if (!query.trim()) return empty('搜索 Self-Board', '输入文章、反思、资料、探索或收藏的关键词。');
   const items = boardRecords(state(), true).filter(row => matchContent(row, { query }));
-  const relatedEvents = new Map();
-  for (const { edge, source, target } of relationObjects({})) {
-    if (edge.sourceType === 'event') relatedEvents.set(source.id, source);
-    if (edge.targetType === 'event') relatedEvents.set(target.id, target);
-  }
-  for (const event of relatedEvents.values()) {
-    const item = { ...event, type: 'event', body: [event.theme, event.description, event.location].filter(Boolean).join(' · '), topics: event.tags ?? [] };
-    if (matchContent(item, { query })) items.push(item);
-  }
   const library = [
     ['topic', topicsFor(state()).filter(row => libraryMatches(row, ['title', 'description'], query) ||
       entriesFor(state(), row.id).some(entry => libraryMatches(entry, ['title', 'body', 'url'], query)))],
@@ -350,7 +335,7 @@ export function searchResults(query) {
   ];
   const total = items.length + library.reduce((count, [, rows]) => count + rows.length, 0);
   return total ? '<p class="sb-results-count">' + total + ' 条结果</p>' + groupedRows(items,
-    row => row.type === 'event' ? 'Workshop' : boardSections[boardSection(row)].label) +
+    row => boardSections[boardSection(row)].label) +
     library.filter(([, rows]) => rows.length).map(([type, rows]) => '<section class="sb-group"><h3>' + objectLabels[type] +
       '<small>' + rows.length + '</small></h3><ul class="sb-rows">' + rows.map(row => '<li><a class="sb-row" href="' +
       esc(objectHref(type, row)) + '">' + titleOf(row) + '</a></li>').join('') + '</ul></section>').join('') :
@@ -372,7 +357,7 @@ export function boardResults(route, filter = {}) {
 }
 
 export function boardView(route) {
-  const { section, params, period } = route;
+  const { section, params } = route;
   if (route.view === 'new') {
     const writing = section === 'writing';
     const label = writing ? '新建文章' : '新建文件';
@@ -394,7 +379,7 @@ export function boardView(route) {
       view === 'archived' ? boardRecords(state(), true).filter(row => row.status === 'archived') : items.slice(0, 5);
     content = (archiveViews[view] ? '<div class="sb-list-heading"><h3>' + archiveViews[view] + '</h3></div>' : '') +
       (rows.length ? rowList(rows) : '') +
-      (view === 'recent' ? '<div class="sb-auto">' + autoWidget(period) + '</div>' : '') + shortcuts();
+      (view === 'recent' ? '<div class="sb-auto" data-week-preview>' + weekPreview() + '</div>' : '');
   } else if (section === 'writing') {
     const rows = items.filter(item => boardSection(item) === section &&
       (route.view === 'drafts' ? !isPublished(item) :

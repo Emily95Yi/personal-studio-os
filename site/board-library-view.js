@@ -1,6 +1,6 @@
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
-import { collectionsAddress, collectionItemAddress, discoverAddress, explorationAddress } from './pages.js';
+import { autoSourceAddress, collectionsAddress, collectionItemAddress, discoverAddress, explorationAddress } from './pages.js';
 import { categoryFor, categoryList, entriesFor, explorationEntryTitle, explorationTypes, filterCollections, foldersFor,
   resourceTypes, topicsFor } from './board-library-data.js';
 import { contentTitle, objectFor, studioStore } from './studio-data.js';
@@ -99,7 +99,7 @@ export function topicDetail(topic, relations, editing = false) {
         iconButton('上移', 'entry-up', row.id, 'up', i === 0) +
         iconButton('下移', 'entry-down', row.id, 'down', i === entries.length - 1) +
         iconButton('编辑', 'entry', row.id, 'edit') + iconButton('删除', 'delete-entry', row.id, 'trash') + '</div>' : '';
-      return '<li data-entry="' + esc(row.id) + '"' + (type ? ' data-sb-color="' + esc(type.color) + '"' : '') + '>' +
+      return '<li tabindex="-1" data-entry="' + esc(row.id) + '"' + (type ? ' data-sb-color="' + esc(type.color) + '"' : '') + '>' +
         '<div class="library-entry-heading"><h3>' + esc(explorationEntryTitle(row)) +
         (type ? '<span class="visually-hidden"> · ' + esc(type.title) + '</span>' : '') + '</h3>' + controls + '</div>' +
         (row.body ? markdown(row.body) : '') +
@@ -135,17 +135,22 @@ function iconButton(label, action, id, glyph, disabled = false) {
     '>' + icon(glyph, 16) + '</button>';
 }
 
+function collectionAutoIcon(row) {
+  return '<a class="sb-icon sb-icon-plain library-icon" href="' + esc(autoSourceAddress(row.id)) +
+    '" aria-label="为此收藏设定 Auto" title="为此收藏设定 Auto">' + icon('auto', 16) + '</a>';
+}
+
 function collectionRows(location) {
   const rows = filterCollections(state(), location);
   if (!rows.length) return empty('这里还没有收藏', '点页眉的加号，记录文字或粘贴链接。');
   return '<ul class="sb-rows library-list">' + rows.map(row => {
     const category = categoryFor(state(), row.categoryId)?.title;
     const status = statusLabel(row);
-    return '<li><a class="sb-row" href="' + esc(collectionItemAddress(row.id)) + '"><div class="sb-row-copy">' +
+    return '<li class="sb-row-actions"><a class="sb-row" href="' + esc(collectionItemAddress(row.id)) + '"><div class="sb-row-copy">' +
       '<strong>' + esc(row.title) + '</strong><small>' + esc([category, resourceTypes[row.resourceType]].join(' · ')) + '</small>' +
       (row.description ? '<p>' + esc(row.description) + '</p>' : '') +
       '</div><div class="library-meta">' + (status ? '<span class="library-status">' + esc(status) + '</span>' : '') +
-      tagList(row.tags) + '</div></a></li>';
+      tagList(row.tags) + '</div></a>' + collectionAutoIcon(row) + '</li>';
   }).join('') + '</ul>';
 }
 
@@ -189,7 +194,7 @@ export function collectionDetail(row, relations) {
   const folder = foldersFor(state(), row.categoryId).find(item => item.id === row.folderId);
   return '<article class="work-reading library-reader">' + heading(row.title,
     [category?.title, folder?.title, resourceTypes[row.resourceType], statusLabel(row)].filter(Boolean).join(' · '),
-    libButton('编辑收藏', 'item', row.id, { glyph: 'edit' }) + libButton('移到回收站', 'delete-item', row.id), 1) +
+    collectionAutoIcon(row) + libButton('编辑收藏', 'item', row.id, { glyph: 'edit' }) + libButton('移到回收站', 'delete-item', row.id), 1) +
     readerHeader(row) + (row.description ? markdown(row.description) : '') +
     (row.url ? '<p class="library-links">' + external(row.url, '打开原始链接') + '</p>' : '') +
     (row.notes ? '<section class="library-section"><h3>备注</h3>' + markdown(row.notes) + '</section>' : '') + relations + '</article>';
