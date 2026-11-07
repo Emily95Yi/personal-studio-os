@@ -1,130 +1,260 @@
 import { icon } from './icons.js';
 import { brands, href, publicHref, workspaces, workshopStructure } from './pages.js';
-import { workshopRepository } from './repository.js';
+import { plannerRepository, selfBoardIncludes, studioRepository, workshopRepository } from './repository.js';
+import { addDays, calendarHref, dateKey, formatPeriod, parseDate, periodBounds } from './calendar.js';
 
 export function escapeHtml(value) {
   const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   return String(value).replace(/[&<>"']/g, char => entities[char]);
 }
 
-function heading(label, title, description = '') {
-  return '<header class="page-intro"><div class="eyebrow">' + escapeHtml(label) + '</div><h1>' + escapeHtml(title) + '</h1>' +
-    (description ? '<p>' + escapeHtml(description) + '</p>' : '') + '</header>';
-}
-
 function emptyState(title, description) {
-  return '<section class="empty-state"><h2>' + title + '</h2><p>' + description + '</p></section>';
+  return '<section class="empty-state"><h2>' + escapeHtml(title) + '</h2>' +
+    (description ? '<p>' + escapeHtml(description) + '</p>' : '') + '</section>';
 }
 
 function entry(address, area) {
   return '<a class="workspace-entry ' + area.tone + '" href="' + address + '"><span class="entry-icon">' +
-    icon(area.icon, 20) + '</span><span><strong>' + area.label + '</strong><small>' + area.description + '</small></span>' +
+    icon(area.icon, 20) + '</span><span><strong>' + area.label + '</strong></span>' +
     icon('arrow', 18) + '</a>';
 }
 
 export function landing() {
-  return '<header class="landing-title"><h1>Personal Studio OS</h1></header>' +
+  return '<header class="landing-title"><h1>奕Studio</h1></header>' +
     '<section class="landing-section" aria-labelledby="private-label"><h2 id="private-label">Private Workspace</h2><div class="workspace-entries">' +
     Object.entries(workspaces).map(([id, area]) => entry(href(id), area)).join('') + '</div></section>' +
     '<section class="landing-section" aria-labelledby="public-label"><h2 id="public-label">Public Space</h2><div class="workspace-entries">' +
     Object.entries(brands).map(([id, area]) => entry(publicHref(id), area)).join('') + '</div></section>';
 }
 
-export function workspaceOverview({ workspace, workspaceId }) {
+function contentWidget(id, collection, overview = true) {
+  const entries = studioRepository.list({ domain: 'Self-Board' }).filter(item => selfBoardIncludes(item, id));
+  const title = overview ? '<h2>' + escapeHtml(collection.label) + '</h2>' : '';
+  const style = 'widget widget-' + id;
+  if (!entries.length) {
+    if (!overview) return emptyState('暂无记录');
+    const visual = {
+      discover: '<div class="discover-motifs" aria-hidden="true"><i></i><i></i><i></i></div>',
+      experience: '<div class="experience-motif" aria-hidden="true"></div>',
+      'reflect-create': '<div class="editorial-motif" aria-hidden="true">Aa <span>—</span></div>',
+    }[id];
+    return '<a class="' + style + ' widget-link" href="' + href('self-board', id) + '">' +
+      title + visual + '<p>暂无记录</p></a>';
+  }
+  const limit = 3;
+  const cards = (overview ? entries.slice(0, limit) : entries).map(item => {
+    const src = id !== 'reflect-create' && mediaUrl(item.coverUrl);
+    return '<a class="content-card" href="' + href('self-board', id, item.id) + '">' +
+      (src ? '<img src="' + src + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '') +
+      '<small>' + escapeHtml([item.contentType || item.category, item.date].filter(Boolean).join(' · ')) + '</small><strong>' +
+      escapeHtml(item.title) + '</strong>' +
+      (id === 'reflect-create' && item.description ? '<p>' + escapeHtml(item.description) + '</p>' : '') + '</a>';
+  }).join('');
+  const more = overview && entries.length > limit ? '<a class="return-link" href="' + href('self-board', id) +
+    '" aria-label="全部 ' + escapeHtml(collection.label) + '">全部</a>' : '';
+  return '<section class="' + style + '">' + (overview ? '<div class="section-heading">' + title + more + '</div>' : '') +
+    '<div class="widget-items">' + cards + '</div></section>';
+}
+
+function habitWidget(overview = false) {
+  const today = parseDate(dateKey());
+  const [start, end] = periodBounds(today, 'week');
+  const completed = plannerRepository.checkInsBetween(dateKey(start), dateKey(end));
+  const checked = completed.includes(dateKey(today));
+  return '<section class="widget widget-habits">' + (overview ? '<h2>SOP &amp; Habits</h2>' : '') +
+    '<a class="habit-status" href="' + href('self-board', 'sop-habits', 'focus') + '"><div><strong>今日习惯</strong>' +
+    '<small>演示 · ' + (checked ? '已打卡' : '未打卡') + '</small></div><div><small>本周 ' + completed.length + ' / 7 天</small>' +
+    '<progress max="7" value="' + completed.length + '" aria-label="本周打卡天数"></progress></div></a>' +
+    '<div class="widget-actions"><button type="button" class="action-button secondary" data-check-in>' +
+    (checked ? '撤销打卡' : '打卡') + '</button><a class="return-link" href="' + href('self-board', 'sop-habits', 'sop') + '">SOP</a></div></section>';
+}
+
+export function todoWidget(period = 'week', overview = false) {
+  const today = parseDate(dateKey());
+  const [start, end] = periodBounds(today, period);
+  const tasks = plannerRepository.tasksBetween(dateKey(start), dateKey(end)).sort((a, b) => a.date.localeCompare(b.date));
+  const summary = tasks.length ? '<ul class="task-summary">' + (overview ? tasks.slice(0, 4) : tasks).map(task =>
+    '<li><button type="button" data-task-edit="' + escapeHtml(task.id) + '"><strong>' + escapeHtml(task.title) +
+    '</strong><small>' + escapeHtml(task.date.slice(5)) + (task.done ? ' · 已完成' : '') + '</small></button></li>').join('') + '</ul>' :
+    '<p>暂无待办。</p>';
+  return '<section class="widget widget-todo" data-overview="' + overview + '">' +
+    '<div class="section-heading">' + (overview ? '<h2>To-Do' + (tasks.length ? ' <small class="section-note">演示</small>' : '') + '</h2>' : '<small>' + formatPeriod(today, period) + '</small>') +
+    '<div class="planner-actions"><div class="segmented" aria-label="待办摘要周期">' +
+    [['week', '本周'], ['month', '本月']].map(([mode, label]) => '<button type="button" data-period="' +
+      mode + '" aria-pressed="' + (period === mode) + '">' + label + '</button>').join('') + '</div>' +
+    '<a class="header-icon" href="' + escapeHtml(calendarHref(today, period, 'self-board')) +
+    '" aria-label="在 Calendar 查看' + (period === 'week' ? '本周' : '本月') + '待办">' + icon('calendar', 16) + '</a></div></div>' +
+    summary + '</section>';
+}
+
+const sopSteps = ['确认要执行的流程', '按顺序完成当前步骤', '检查结果并结束流程'];
+
+export function actionPreview({ action, sopStep = 0 }) {
+  const today = dateKey();
+  if (action === 'focus') {
+    const recent = plannerRepository.checkInsBetween(dateKey(addDays(parseDate(today), -6)), today);
+    const checked = recent.includes(today);
+    return '<p class="page-note">演示打卡 · 刷新清除</p>' +
+      '<section class="empty-state"><h2>今日习惯</h2><p>每日一次</p>' +
+      '<button type="button" class="action-button" data-check-in>' + (checked ? '撤销打卡' : '打卡') + '</button></section>' +
+      '<section class="empty-state action-history"><h2>最近 7 天</h2><div class="habit-days">' +
+      Array.from({ length: 7 }, (_, index) => dateKey(addDays(parseDate(today), index - 6))).map(date => {
+        const done = recent.includes(date);
+        return '<span class="' + (done ? 'checked' : '') + '">' + date.slice(5) +
+          (done ? ' <span aria-hidden="true">✓</span>' : '') +
+          '<span class="visually-hidden">' + (done ? ' 已打卡' : ' 未打卡') + '</span></span>';
+      }).join('') + '</div></section>';
+  }
+  const steps = sopSteps.map((step, index) => '<li' + (index === sopStep ? ' aria-current="step"' : '') + '>' +
+    (index < sopStep ? '<span class="visually-hidden">已完成：</span>' : '') + step + '</li>').join('');
+  return '<p class="page-note">流程演示 · 刷新清除</p>' +
+    '<section class="empty-state"><h2>流程结构预览</h2><ol class="sop-steps">' + steps + '</ol>' +
+    '<p aria-live="polite">' + (sopStep === sopSteps.length ? '流程已完成。' : '当前步骤 ' + (sopStep + 1) + ' / ' + sopSteps.length) + '</p>' +
+    '<div class="widget-actions">' + (sopStep ? '<button type="button" class="action-button secondary" data-sop-step="previous">上一步</button>' : '') +
+    (sopStep === sopSteps.length ? '<button type="button" class="action-button" data-sop-step="reset">重新开始</button>' :
+      '<button type="button" class="action-button" data-sop-step="next">' + (sopStep === sopSteps.length - 1 ? '完成流程' : '完成此步') + '</button>') +
+    '</div></section>';
+}
+
+export function workspaceOverview({ workspace, workspaceId, period = 'week' }) {
+  if (workspaceId === 'self-board') {
+    const { collections } = workspace;
+    return '<div class="board-grid">' +
+      ['discover', 'experience', 'reflect-create'].map(id => contentWidget(id, collections[id])).join('') +
+      habitWidget(true) + todoWidget(period, true) + '</div>';
+  }
   const entries = Object.entries(workspace.collections).map(([id, collection]) =>
     '<a href="' + href(workspaceId, id) + '"><strong>' + collection.label + '</strong><span>' + collection.zh + '</span>' +
     icon('arrow', 16) + '</a>').join('');
-  return '<div class="workspace-hero ' + workspace.tone + '">' +
-    heading('PRIVATE WORKSPACE', workspace.label, workspace.description) + '</div>' +
-    '<nav class="module-links" aria-label="' + workspace.label + ' 集合">' + entries + '</nav>';
+  return '<nav class="module-links" aria-label="' + workspace.label + ' 集合">' + entries + '</nav>';
 }
 
-function previewLink(address, label) {
-  return '<a class="return-link preview-link" href="' + address + '">' + label + ' ' + icon('arrow', 15) + '</a>';
+function mediaUrl(value) {
+  if (!value || /[\\\u0000-\u0020]/.test(value)) return null;
+  return /^(https:\/\/|\/(?!\/)|\.\/)/i.test(value) ? escapeHtml(value) : null;
 }
 
-function recordList(records, path) {
-  return '<ul class="record-list">' + records.map(record => '<li><a href="' + href(...path, record.id) + '">' +
-    escapeHtml(record.title) + ' ' + icon('arrow', 16) + '</a></li>').join('') + '</ul>';
+function cover(kind, url, label) {
+  const src = mediaUrl(url);
+  return '<div class="gallery-cover cover-' + kind + '">' +
+    (src ? '<img src="' + src + '" alt="" loading="lazy" referrerpolicy="no-referrer">' :
+      '<span aria-hidden="true" class="cover-mark">' + (kind === 'event' ? 'E' : 'P') + '</span><span class="cover-caption">' + label + '</span>') + '</div>';
 }
 
-export function collectionView({ workspace, workspaceId, collection, collectionId }) {
-  const intro = heading(workspace.label, collection.label);
-  if (workspaceId === 'workshop' && collectionId === 'projects') {
-    const projects = workshopRepository.listProjects();
-    if (projects.length) return intro + recordList(projects, ['workshop', 'projects']);
-    return intro + emptyState(collection.empty, collection.description) +
-      previewLink(href('workshop', 'projects', workshopStructure.previewId), '打开 Project 结构预览');
+function galleryCard({ address, title, detail, kind, url, placeholder }) {
+  return '<a class="gallery-card" href="' + address + '">' + cover(kind, url, placeholder) +
+    '<div class="gallery-copy"><strong>' + escapeHtml(title) + '</strong>' +
+    (detail ? '<p>' + escapeHtml(detail) + '</p>' : '') + '</div></a>';
+}
+
+export function workshopGallery() {
+  const projects = workshopRepository.listProjects();
+  const cards = projects.length ? projects.map(project => galleryCard({
+    address: href('workshop', 'projects', project.id), title: project.title, detail: project.description,
+    kind: 'project', url: project.coverUrl, placeholder: '暂无封面',
+  })).join('') : galleryCard({
+    address: href('workshop', 'projects', workshopStructure.previewId), title: 'Project 结构预览',
+    kind: 'project', placeholder: '结构占位',
+  });
+  return '<section class="gallery-section" aria-label="Projects Gallery"><div class="section-heading"><h2>Projects</h2>' +
+    (!projects.length ? '<span>暂无项目</span>' : '') + '</div><div class="gallery-grid">' + cards + '</div></section>';
+}
+
+export function collectionView({ workspaceId, collection, collectionId, period = 'week' }) {
+  if (workspaceId === 'self-board') {
+    if (collectionId === 'to-do') return todoWidget(period);
+    if (collectionId === 'sop-habits') return habitWidget();
+    return contentWidget(collectionId, collection, false);
   }
-  if (collection.sections) {
-    return intro + '<div class="detail-stack">' + collection.sections.map(section =>
-      '<section class="empty-state"><h2>' + section.label + '</h2><h3>' + section.empty + '</h3><p>' +
-      section.description + '</p></section>').join('') + '</div>';
-  }
-  return intro + emptyState(collection.empty, collection.description);
+  return emptyState(collection.empty);
 }
 
-export function projectOverview({ project, projectPath, projectLabel, preview }) {
-  const entries = Object.entries(workshopStructure.sections).map(([id, section]) =>
-    '<a href="' + href(...projectPath, id) + '"><strong>' + section.label + '</strong><span>' + section.zh + '</span>' +
-    icon('arrow', 16) + '</a>').join('');
-  return heading(preview ? 'WORKSHOP / PROJECT PREVIEW' : 'WORKSHOP / PROJECT', projectLabel,
-    preview ? '这里预览一个长期活动形式的页面结构，暂无真实项目记录。' : project.description) +
-    '<nav class="module-links" aria-label="Project 板块">' + entries + '</nav>';
+export function projectOverview({ project, projectPath, preview }) {
+  const events = preview ? [] : workshopRepository.listEvents(project.id);
+  const cards = events.length ? events.map(event => galleryCard({
+    address: href(...projectPath, 'events', event.id), title: event.theme || event.title, detail: event.date,
+    kind: 'event', url: event.posterUrl, placeholder: '暂无海报',
+  })).join('') : preview ? galleryCard({
+    address: href(...projectPath, 'events', workshopStructure.previewId), title: 'Event 结构预览',
+    kind: 'event', placeholder: '海报占位',
+  }) : '';
+  return (project?.description ? '<p class="page-note">' + escapeHtml(project.description) + '</p>' : '') +
+    '<section class="gallery-section" aria-label="Events Poster Gallery"><div class="section-heading"><h2>Events</h2>' +
+    (!events.length ? '<span>暂无活动</span>' : '') + '</div>' +
+    (cards ? '<div class="gallery-grid poster-grid">' + cards + '</div>' :
+      emptyState(workshopStructure.sections.events.empty, workshopStructure.sections.events.description)) + '</section>' +
+    '<section class="related-panel"><div class="section-heading"><h2>Related Resources</h2></div>' +
+    resourceModules(project, true) + '</section>';
 }
 
-function resourcesView({ project, projectPath, section }) {
+function originalLink(sourceId) {
+  const original = sourceId && studioRepository.get(sourceId);
+  if (!original || !selfBoardIncludes(original)) return '';
+  return '<a class="return-link" href="' + href('self-board', 'discover', original.id) + '">' +
+    escapeHtml(original.title) + ' ' + icon('arrow', 14) + '</a>';
+}
+
+function resourceModules(project, compact = false) {
   const modules = project?.resourceModules ?? workshopStructure.defaultResourceModules;
-  const resources = project ? workshopRepository.listResources(projectPath.at(-1)) : [];
-  const intro = heading('WORKSHOP / PROJECT', section.label, section.description);
-  if (!modules.length) return intro + emptyState('还没有配置资源模块', '此项目可以按需要定义自己的资源分组。');
-  return intro + '<div class="detail-stack">' + modules.map(module => {
+  const resources = project ? workshopRepository.listResources(project.id) : [];
+  if (!modules.length) return emptyState('还没有配置资源模块', '此项目可以按需要定义自己的资源分组。');
+  return '<div class="resource-modules' + (compact ? ' compact-modules' : '') + '">' + modules.map(module => {
     const items = resources.filter(resource => resource.moduleId === module.id);
-    return '<section class="empty-state"><h2>' + escapeHtml(module.label) + '</h2>' +
-      (module.zh ? '<p>' + escapeHtml(module.zh) + '</p>' : '') +
-      (items.length ? '<ul>' + items.map(item => '<li>' + escapeHtml(item.title) + '</li>').join('') + '</ul>' :
-        '<p class="section-note">这个模块还没有资料。</p>') + '</section>';
+    return '<section><h3>' + escapeHtml(module.label) + '</h3>' +
+      (module.zh ? '<p class="section-note">' + escapeHtml(module.zh) + '</p>' : '') +
+      (items.length ? '<ul>' + items.map(item => '<li>' +
+        (originalLink(item.sourceContentId) || escapeHtml(item.title)) + '</li>').join('') + '</ul>' :
+        (compact ? '' : '<p class="section-note">这个模块还没有资料。</p>')) + '</section>';
   }).join('') + '</div>';
 }
 
-export function projectSection(route) {
-  if (route.sectionId === 'resources') return resourcesView(route);
-  const { preview, projectPath, section, sectionPath } = route;
-  const events = preview ? [] : workshopRepository.listEvents(projectPath.at(-1));
-  return heading('WORKSHOP / PROJECT', section.label) +
-    (events.length ? recordList(events, sectionPath) : emptyState(section.empty, section.description)) +
-    (preview ? previewLink(href(...sectionPath, workshopStructure.previewId), '打开 Event 结构预览') : '');
+export function projectSection({ project }) {
+  return resourceModules(project);
 }
 
-export function eventDetail({ event, eventLabel, preview }) {
+export function eventDetail({ event }) {
   const sections = workshopStructure.eventSections.map(section => {
-    const body = section.fields
-      ? '<dl class="event-fields">' + section.fields.map(field => '<div><dt>' + field.label +
-        '</dt><dd>' + escapeHtml(event?.[field.key] ?? '未填写') + '</dd></div>').join('') + '</dl>'
-      : '<p>' + section.empty + '</p>';
+    let body;
+    if (section.fields) {
+      body = '<dl class="event-fields">' + section.fields.map(field => '<div><dt>' + field.label +
+        '</dt><dd>' + escapeHtml(event?.[field.key] ?? '未填写') + '</dd></div>').join('') + '</dl>';
+    } else {
+      const value = section.label === 'Flow' ? event?.flow : section.label === 'Reflection' ? event?.reflection : '';
+      const media = section.label === 'Poster & Media' && mediaUrl(event?.posterUrl);
+      const attachments = section.label === 'Poster & Media' ? (event?.media ?? []).filter(item => mediaUrl(item.url)) : [];
+      body = media || attachments.length ? (media ? '<img class="detail-poster" src="' + media + '" alt="活动海报" referrerpolicy="no-referrer">' : '') +
+        '<ul>' + attachments.map(item => '<li><a class="return-link" href="' + mediaUrl(item.url) + '">' +
+          escapeHtml(item.label) + '</a></li>').join('') + '</ul>' : '<p class="prose">' + escapeHtml(value || section.empty) + '</p>';
+    }
     return '<section class="empty-state"><h2>' + section.label + '</h2><p class="section-note">' +
       section.zh + '</p>' + body + '</section>';
   }).join('');
-  return heading(preview ? 'WORKSHOP / EVENT PREVIEW' : 'WORKSHOP / EVENT', eventLabel,
-    preview ? '这里预览单次活动的独立页面和记录板块。' : '') +
-    '<div class="detail-stack">' + sections + '</div>';
+  const uses = event?.resourceUses ?? [];
+  const related = uses.length ? '<ul>' + uses.map(use => {
+    const resource = workshopRepository.listResources(event.projectId).find(item => item.id === use.resourceId);
+    const title = use.snapshot?.title || resource?.title || '资源记录';
+    return '<li>' + escapeHtml(title) + (use.versionId ? ' · ' + escapeHtml(use.versionId) : '') +
+      (resource?.sourceContentId ? ' ' + originalLink(resource.sourceContentId) : '') + '</li>';
+  }).join('') + '</ul>' : '<p>暂无引用。</p>';
+  return '<div class="detail-stack">' + sections + '<section class="empty-state"><h2>当次引用的资源</h2>' +
+    related + '</section></div>';
 }
 
-export function publicView({ brand, page, pageId }) {
-  const isHome = pageId === 'home';
-  return heading(isHome ? 'PUBLIC SPACE' : brand.label, isHome ? brand.label : page.label,
-    isHome ? brand.description : '') + emptyState(page.empty, page.description);
+export function contentDetail({ record }) {
+  return (record.category ? '<p class="page-note">' + escapeHtml(record.category) + '</p>' : '') + '<div class="empty-state prose">' + escapeHtml(record.description || '暂无说明。') + '</div>';
+}
+
+export function publicView({ page }) {
+  return emptyState(page.empty);
 }
 
 export function searchView() {
-  return heading('PERSONAL STUDIO OS', 'Search', '跨空间搜索内容。') +
-    '<form class="search-form" role="search"><label for="studio-query">关键词</label>' +
+  return '<form class="search-form" role="search"><label for="studio-query">关键词</label>' +
     '<div class="search-field">' + icon('search', 18) + '<input id="studio-query" name="query" type="search" placeholder="输入标题或关键词"></div></form>' +
-    '<section class="empty-state" aria-live="polite"><h2 class="search-status">还没有可搜索的内容</h2><p class="search-note">接入内容后，可以在这里搜索。</p>' +
+    '<section class="empty-state" aria-live="polite"><h2 class="search-status">还没有可搜索的内容</h2>' +
     '<ul class="search-results" hidden></ul></section>';
 }
 
-export function missingView({ parent, parentLabel }) {
-  return heading('PERSONAL STUDIO OS', '页面未找到', '这个地址当前没有可浏览的页面。') +
-    '<a class="return-link" href="' + parent + '">返回 ' + escapeHtml(parentLabel) + ' ' + icon('arrow', 15) + '</a>';
+export function missingView() {
+  return '<p>这个地址当前没有可浏览的页面。</p>';
 }

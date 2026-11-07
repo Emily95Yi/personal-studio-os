@@ -1,4 +1,4 @@
-import { workshopRepository } from './repository.js';
+import { selfBoardIncludes, studioRepository, workshopRepository } from './repository.js';
 
 export const workspaces = {
   workshop: {
@@ -43,10 +43,6 @@ export const workspaces = {
       },
       'sop-habits': {
         label: 'SOP & Habits', zh: '流程与习惯',
-        sections: [
-          { label: 'SOP', empty: '还没有个人流程', description: 'SOP 由多个步骤组成，可以重复使用。' },
-          { label: 'Habits', empty: '还没有习惯', description: '习惯是按一定频率执行或记录的行为。' },
-        ],
       },
       'to-do': {
         label: 'To-Do', zh: '待办与计划', empty: '还没有待办事项',
@@ -127,7 +123,9 @@ function readProjectRoute(collectionRoute, [projectId, sectionId, eventId, ...re
   const section = sections[sectionId];
   const sectionPath = [...projectPath, sectionId];
   const sectionRoute = { ...route, type: 'project-section', section, sectionId, sectionPath };
-  if (!eventId) return sectionRoute;
+  if (!eventId) {
+    return sectionId === 'events' ? { ...route, redirect: href(...projectPath) } : sectionRoute;
+  }
   if (sectionId !== 'events' || rest.length) return missing(href(...sectionPath), section.label);
 
   const event = preview ? undefined : workshopRepository.getEvent(projectId, eventId);
@@ -136,7 +134,7 @@ function readProjectRoute(collectionRoute, [projectId, sectionId, eventId, ...re
 }
 
 export function readRoute(hash) {
-  const [path] = hash.replace(/^#/, '').split('?');
+  const [path, query] = hash.replace(/^#/, '').split('?');
   let segments;
   try {
     segments = path.split('/').filter(Boolean).map(decodeURIComponent);
@@ -147,15 +145,33 @@ export function readRoute(hash) {
   const [root, section, pageId] = segments;
   if (!root || (root === 'home' && !section)) return { type: 'home' };
   if (root === 'search' && !section) return { type: 'search' };
+  if (root === 'calendar' && !section) {
+    const params = new URLSearchParams(query);
+    return params.get('from') === 'self-board'
+      ? { type: 'calendar', params, parent: href('self-board'), parentLabel: 'Self-Board' }
+      : { type: 'calendar', params };
+  }
 
   if (Object.hasOwn(workspaces, root)) {
     const workspace = workspaces[root];
-    if (!section) return { type: 'overview', workspaceId: root, workspace };
+    if (!section) return { type: root === 'workshop' ? 'workshop-gallery' : 'overview', workspaceId: root, workspace };
     if (Object.hasOwn(workspace.collections, section)) {
       const collection = workspace.collections[section];
       const route = { type: 'collection', workspaceId: root, workspace, collectionId: section, collection };
+      if (root === 'workshop' && section === 'projects') {
+        if (segments.length === 2) return { type: 'workshop-gallery', workspaceId: root, workspace, redirect: href(root) };
+        return readProjectRoute(route, segments.slice(2));
+      }
       if (segments.length === 2) return route;
-      if (root === 'workshop' && section === 'projects') return readProjectRoute(route, segments.slice(2));
+      if (root === 'self-board' && section === 'sop-habits' && segments.length === 3 && ['focus', 'sop'].includes(pageId)) {
+        return { ...route, type: 'action-preview', action: pageId, actionLabel: pageId === 'focus' ? 'Habit Focus' : 'SOP 执行' };
+      }
+      if (root === 'self-board' && ['discover', 'experience', 'reflect-create'].includes(section) && segments.length === 3) {
+        const record = studioRepository.get(pageId);
+        if (record && selfBoardIncludes(record, section === 'discover' ? undefined : section)) {
+          return { ...route, type: 'content-detail', record };
+        }
+      }
       return missing(href(root, section), collection.label);
     }
     return { type: 'missing', parent: href(root), parentLabel: workspace.label };

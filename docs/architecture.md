@@ -1,17 +1,19 @@
-# Personal Studio OS 信息架构
+# 奕Studio 信息架构
 
-首页分为 Private Workspace 和 Public Space。私人空间包含 Workshop、Career、Self-Board。公开品牌为「一期一会 in Tokyo」。每个私人空间有独立概览，顶栏保留全局 Search。
+首页分为 Private Workspace 和 Public Space。私人空间包含 Workshop、Career、Self-Board。公开品牌为「一期一会 in Tokyo」。每个私人空间有独立概览。内页顶栏显示当前标题、返回上一级和必要的快捷图标。
 
 ```mermaid
 flowchart TB
-  Home["Personal Studio OS"] --> Private["Private Workspace"]
+  Home["奕Studio"] --> Private["Private Workspace"]
   Home --> Public["Public Space"]
-  Private --> Workshop["Workshop"] --> Projects["Projects"] --> Project["Project Overview"]
-  Project --> Events["Events"] --> Event["Event Detail"]
-  Project --> Resources["Resources"]
-  Event --> Sections["Overview · Flow · Poster & Media · Reflection"]
+  Private --> Workshop["Workshop / Projects Gallery"] --> Project["Project Detail / Events Poster Gallery"]
+  Project --> Event["Event Detail"]
+  Project --> Resources["Related Resources"]
+  Event --> Sections["Overview · Flow · Poster & Media · Reflection · 当次引用"]
   Private --> Career["Career"] --> C["Exams & Practice · Resume & Experience"]
   Private --> Self["Self-Board"] --> S["Discover · Experience · Reflect & Create · SOP & Habits · To-Do"]
+  Home --> Calendar["Calendar · Day / Week / Month"]
+  Self --> Calendar
   Public --> Tokyo["一期一会 in Tokyo"] --> T["Home · Activities · Stories · About"]
 ```
 
@@ -19,36 +21,15 @@ flowchart TB
 |---|---|---|
 | Workshop | `/#/workshop` | Projects。进入 Project 后可打开 Events 与 Resources。 |
 | Career | `/#/career` | Exams & Practice、Resume & Experience |
-| Self-Board | `/#/self-board` | Discover、Experience、Reflect & Create、SOP & Habits、To-Do |
-| 一期一会 in Tokyo | `/#/public/yiqiyihui` | Home、Activities、Stories、About |
+| Self-Board | `/#/self-board` | Self-Board Overview 使用独立 Widget。Discover 用缩略卡片，Experience 用视觉 Gallery，Reflect & Create 用标题和摘要。具体内容可通过 `views` 出现在多个布局中，维持稳定的内容 ID。
 
-## Workshop
+SOP 和 Habit 有各自的执行页面。SOP 显示可推进和回退的步骤。Habit Focus 展示今日打卡和最近七天记录。To-Do 在本周和本月之间切换，可直达 Calendar。
 
-Project 是可反复举办、长期演进的活动形式或系列。每个 Project 可以包含多个主题不同的 Event。Project Overview 提供并列的 Events 与 Resources。Event 的基本信息、流程、海报与媒体、复盘各有独立板块。旧的 Workspace 级 Sessions 或 References 地址可以返回 Workshop 概览。
+## Calendar 与会话数据
 
-| 页面 | 结构预览路径 |
-|---|---|
-| Projects | `/#/workshop/projects` |
-| Project Overview | `/#/workshop/projects/preview` |
-| Events | `/#/workshop/projects/preview/events` |
-| Event Detail | `/#/workshop/projects/preview/events/preview` |
-| Resources | `/#/workshop/projects/preview/resources` |
+`/#/calendar?view=week&date=YYYY-MM-DD` 可直接打开指定日期和视图。Calendar 的 Day、Week、Month 共用同一份日期状态。点击周历或月历的日期会更新当天事项。Calendar 和 To-Do Widget 都可在原处打开待办编辑。日历视图和日期切换更新当前地址，不增加历史记录。Workshop 事件可从已有事件数据按日期投影到日历。
 
-`preview` 是专供结构展示的路由段，业务集合仍为空。所有页面可刷新、直达，通过浏览器返回或面包屑回到上一级。未知 Project、Event 或板块提供返回最近有效上级的入口。
-
-Resources 支持项目专属素材和对 Discover 原始内容的引用。资源模块由 `site/pages.js` 的有序配置驱动。Guiding Questions、Cards、Goals & Expected Outcomes、References 是可替换的默认配置。项目可提供自己的 `resourceModules`，包括空列表。未来可通过调整模块配置新增、删除、重命名和排序，显示名称与稳定模块 ID 分开保存。
-
-## Self-Board
-
-Discover、Experience、Reflect & Create 是内容视图，SOP & Habits、To-Do 是行动视图，五个入口在同一层。一个内容可以出现在多个内容视图，也可以有多个主题和关联领域。
-
-| 入口 | 用途 |
-|---|---|
-| Discover | 阅读、课程、收藏、知识与参考素材 |
-| Experience | 旅行、美食、影视、展览与日常体验 |
-| Reflect & Create | 日记、随笔、思考、文章与创作 |
-| SOP & Habits | SOP 保存可重复使用的流程步骤。Habit 保存有频率的行为。 |
-| To-Do | 一次性任务和计划。后续可与 SOP、Habit 或其他内容建立关联。 |
+Calendar 和 To-Do 共用 `plannerRepository`。Habit Focus 写入的打卡日期也从这里读取。当前 Repository 使用页面内存，路由切换时数据保留，刷新或开启新标签页会使用新的空会话。项目、活动、原始内容和资源集合保持为空。
 
 ## 接入真实数据
 
@@ -57,4 +38,6 @@ Discover、Experience、Reflect & Create 是内容视图，SOP & Habits、To-Do 
 3. 为每个 Event 保留独立记录和历史。实际采用的资源保存资源 ID 与不可变版本 ID，或者保存当时的快照，以便回看。Event 的公开海报或内容未来可通过独立公开投影关联到「一期一会 in Tokyo」。
 4. 保留内容类型、标签、关联、可见性和状态的独立维度。私人接口由服务端验证身份，公开页面只读取批准后的投影。真实数据接入前先验证项目隔离、引用权限和历史版本回放。
 
-当前 Demo 使用空集合与静态页面配置。保留 Search、Repository 双向关联与未来 Inbox / Capture 的扩展位置。
+Calendar 持久化接入时，将待办与打卡替换为同一受控 API，保留现有日期筛选和编辑入口。服务端按用户授权读写，处理时区、并发编辑和版本冲突。
+
+[查看 iCloud Calendar 只读同步评估](icloud-calendar.md)
