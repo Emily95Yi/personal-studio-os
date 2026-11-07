@@ -19,12 +19,48 @@ import { initBoardActions } from './self-board-actions.js';
 import { boardContent, boardSection } from './self-board-data.js';
 import { initLibraryActions } from './board-library-actions.js';
 import { contentTitle, isSelfBoard, studioStore } from './studio-data.js';
+import { beginStudioEdit, closeStudioSync, migrateLocalStudio, onStudioNotice, refreshStudioSync,
+  startStudioSync, studioNotice, studioSync } from './studio-cloud.js';
 
 const app = document.querySelector('#app');
 let period = 'week';
 let studioStorageError = false;
 let mountBoardEditor;
 let mountLibrary;
+let topicLease;
+
+function syncBanner() {
+  return '<div data-studio-sync><p role="status" data-studio-notice' + (studioSync.message ? '' : ' hidden') + '>' +
+    escapeHtml(studioSync.message) + '</p>' + (studioSync.migration
+    ? '<p>此浏览器有尚未上传的 Studio 内容。上传后，可在其他设备用同一账号打开。</p>' +
+      '<button type="button" class="action-button secondary" data-studio-migrate>上传此浏览器的 Studio 内容</button>' : '') + '</div>';
+}
+
+onStudioNotice(() => {
+  const status = app.querySelector('[data-studio-notice]');
+  if (status) {
+    status.textContent = studioSync.message;
+    status.hidden = !studioSync.message;
+  }
+});
+
+async function prepareTopicEdit() {
+  const address = location.hash;
+  if (topicLease?.address === address) return;
+  topicLease?.release();
+  topicLease = undefined;
+  const route = readRoute(address);
+  if (route.entity !== 'topic' || route.params.get('edit') !== '1') return;
+  try {
+    const release = await beginStudioEdit();
+    if (location.hash !== address || topicLease?.address === address) release();
+    else topicLease = { address, release };
+  } catch (error) {
+    if (location.hash !== address) return;
+    history.replaceState(null, '', address.split('?')[0]);
+    studioNotice(error.message);
+  }
+}
 
 function pageContext(route) {
   const ancestors = [[href(), '首页']];
@@ -130,6 +166,7 @@ function render({ focus = false } = {}) {
     history.replaceState(null, '', route.redirect);
     route = readRoute(location.hash);
   }
+  if (route.entity === 'topic' && topicLease?.address !== location.hash) route.params.delete('edit');
   const context = pageContext(route);
   const canEditTasks = route.type === 'calendar' ||
     (route.workspaceId === 'self-board' && ((route.type === 'board' && !route.section) || route.collectionId === 'auto'));
@@ -148,7 +185,8 @@ function render({ focus = false } = {}) {
     '<main id="main" class="page-main" tabindex="-1"' +
     (route.type === 'home' ? '' : ' aria-label="' + escapeHtml(context.title) + '"') + '>' + publicNav(route) +
     (isPlannerPage ? '<div data-private-status>' + statusBanner() + '</div>' : '') +
-    workshopBreadcrumb + storageWarning + views[route.type]({ ...route, period }) + '</main>' +
+    workshopBreadcrumb + storageWarning + (route.type === 'public' ? '' : syncBanner()) +
+    views[route.type]({ ...route, period }) + '</main>' +
     (canEditTasks ? taskDialog() + reviewDialog() + eventDialog() : '') + (canEditPlans ? planDialog() : '');
   if (focus || route.documentId) {
     const target = app.querySelector('[data-work-selected] > summary');
@@ -437,7 +475,7 @@ onPrivateChange(() => {
   if (!feedChanged) return;
   const active = document.activeElement;
   const focusedLink = active?.closest('main') ? active.getAttribute('href') : null;
-  app.querySelector('main').innerHTML = '<div data-private-status>' + statusBanner() + '</div>' + calendarView(route);
+  app.querySelector('main').innerHTML = '<div data-private-status>' + statusBanner() + '</div>' + syncBanner() + calendarView(route);
   const next = focusedLink ? [...app.querySelectorAll('main a')].find(link => link.getAttribute('href') === focusedLink) : null;
   if (!app.querySelector('dialog[open]')) next?.focus({ preventScroll: true });
 });
@@ -451,17 +489,40 @@ initWorkshopActions(app, render);
 mountBoardEditor = initBoardActions(app, render);
 mountLibrary = initLibraryActions(app, render);
 initStudioImport(app);
-window.addEventListener('hashchange', () => {
+app.addEventListener('click', async event => {
+  const button = event.target.closest('[data-studio-migrate]');
+  if (!button) return;
+  button.disabled = true;
+  try {
+    await migrateLocalStudio();
+    render();
+  } catch (error) {
+    studioNotice(error.message);
+    button.disabled = false;
+  }
+});
+window.addEventListener('hashchange', async () => {
+  await prepareTopicEdit();
   window.scrollTo(0, 0);
   render({ focus: true });
   enterPrivateSurface();
 });
+async function pollStudioContent() {
+  if (document.visibilityState !== 'visible' || app.querySelector('dialog[open]')) return;
+  if (await refreshStudioSync() && !app.querySelector('dialog[open]')) render();
+}
+window.addEventListener('focus', pollStudioContent);
+window.addEventListener('pagehide', closeStudioSync);
+window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
 document.addEventListener('visibilitychange', pollVisibleFeed);
 setInterval(pollVisibleFeed, 30_000);
+setInterval(pollStudioContent, 30_000);
 try {
   await studioStore.load();
 } catch {
   studioStorageError = true;
 }
+await startStudioSync();
+await prepareTopicEdit();
 render();
 enterPrivateSurface();

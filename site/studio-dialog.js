@@ -1,4 +1,5 @@
 import { escapeHtml as esc } from './html.js';
+import { beginStudioEdit, studioNotice, watchStudioEditor } from './studio-cloud.js';
 
 export function studioDialog(app, title, fields, save, after, submitLabel = '保存', extraClass = '') {
   const box = document.createElement('dialog');
@@ -31,7 +32,22 @@ export function studioDialog(app, title, fields, save, after, submitLabel = '保
       if (box.open && !submit.disabled) submit.focus();
     }
   });
-  app.append(box);
-  box.showModal();
+  const surface = app.querySelector('main');
+  void beginStudioEdit().then(release => {
+    if (!surface?.isConnected || app.querySelector('dialog[open]')) {
+      release();
+      return;
+    }
+    app.append(box);
+    const cleanup = watchStudioEditor(box, release);
+    box.addEventListener('close', cleanup, { once: true });
+    try {
+      box.showModal();
+    } catch (error) {
+      cleanup();
+      box.remove();
+      throw error;
+    }
+  }).catch(error => studioNotice(error.message));
   return form;
 }

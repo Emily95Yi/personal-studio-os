@@ -396,6 +396,10 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .work-choices { padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; margin: 0; min-width: 0; }
 .work-choices legend { font-size: 13px; }
 .work-error { margin: 7px 0; color: var(--error); overflow-wrap: anywhere; }
+[data-studio-sync]:has(> :not([hidden])) {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  padding: 8px 12px; margin-bottom: 12px; background: var(--tint); border-radius: 7px;
+}
 .work-compare { width: min(850px, calc(100% - 24px)); }
 [data-work-comparison] section { min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; overflow-wrap: anywhere; }
 [data-work-comparison] h3, .work-import-result h3 { margin: 0; font-size: 15px; }

@@ -22,5 +22,11 @@ binding = "DB"
 database_name = "yistudio-private"
 database_id = "00000000-0000-0000-0000-000000000000"
 
+# For an isolated sync preview, bind an R2 bucket named STUDIO_CONTENT.
+# Keep the production bucket name in the ignored deployment config.
+# [[r2_buckets]]
+# binding = "STUDIO_CONTENT"
+# bucket_name = "yistudio-content-preview"
+
 [triggers]
 crons = ["*/5 * * * *"]

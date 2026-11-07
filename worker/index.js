@@ -3,6 +3,7 @@ import { authenticate, isConfigured } from './auth.js';
 import { feedView, getSource, refreshDue, refreshSource, removeSource, saveSource } from './feed.js';
 import { getPlanner, savePlanner, validSnapshot } from './planner.js';
 import { normalizeSource, readText } from './source.js';
+import { studioCloudApi } from './studio-cloud.js';
 
 const privateHeaders = {
   'Cache-Control': 'private, no-store',
@@ -12,8 +13,8 @@ const privateHeaders = {
   'X-Robots-Tag': 'noindex',
 };
 
-function json(value, status = 200) {
-  return Response.json(value, { status, headers: privateHeaders });
+function json(value, status = 200, headers = {}) {
+  return Response.json(value, { status, headers: { ...privateHeaders, ...headers } });
 }
 
 async function body(request, limit) {
@@ -130,6 +131,9 @@ export function createHandler(authorize = authenticate, caldav = createCalDavSer
       return json({ error: 'forbidden' }, 403);
     }
     try {
+      if (url.pathname === '/api/studio' || url.pathname === '/api/studio/lease') {
+        return await studioCloudApi(request, env, ctx, owner, url, { body, json });
+      }
       if (url.pathname === '/api/planner') return await planner(request, env, ctx, owner, caldav);
       if (url.pathname === '/api/calendar/caldav' || url.pathname.startsWith('/api/calendar/caldav/')) {
         return await caldavApi(request, env, ctx, owner, url.pathname, caldav);

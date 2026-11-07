@@ -276,9 +276,12 @@ const normalizeStudio = data => ({ ...emptyStudio(), ...data });
 export function createStudioStore(open = database) {
   let db;
   let state = emptyStudio();
+  let cloud;
   let pending;
   return {
     get state() { return state; },
+    useCloud(save) { cloud = save; },
+    receiveCloud(snapshot, revision) { state = { ...normalizeStudio(snapshot), revision }; },
     load() {
       pending ??= (async () => {
         db ??= await open();
@@ -292,6 +295,14 @@ export function createStudioStore(open = database) {
     },
     async change(update) {
       await this.load();
+      if (cloud) {
+        const revision = state.revision;
+        const next = structuredClone(state);
+        const result = update(next);
+        next.revision = await cloud(next, revision);
+        state = next;
+        return result;
+      }
       return new Promise((resolve, reject) => {
         const transaction = db.transaction('studio', 'readwrite');
         const store = transaction.objectStore('studio');

@@ -59,7 +59,7 @@ Quick Capture 的 Text 可保存到 Reflections 或 Collections。Link 可保存
 | `collectionCategories`、`collectionFolders`、`collectionItems` | 默认分类有稳定 ID；分类配置、顺序、隐藏和默认分类删除标记以覆盖记录保存。Inbox 由空分类 ID 表示。文件夹单独引用分类。收藏的资源类型独立于分类；分类删除会把收藏移到选择的目标，移除文件夹只解除归属。超出当前配置的原状态继续可见且可筛选。 |
 | `relations` | 沿用一条边供两端读取，Project 也能查看 Event 的派生关联。收藏被关联或被 Reference 引用时不能删除。Topic 和收藏移入回收站后可恢复。 |
 
-已保存的链接在 Wiki 与 Collections 之间按规范化 HTTP(S) 地址去重；同一个对象可以被多个主题引用。仍沿用浏览器存储范围，同一浏览器、同一站点重新打开时可读取；不同浏览器、不同站点、不同设备之间不自动同步。生产环境继续使用现有 Cloudflare Access；此次不需要 D1 migration 或新的 Worker 配置。
+已保存的链接在 Wiki 与 Collections 之间按规范化 HTTP(S) 地址去重；同一个对象可以被多个主题引用。未绑定云端存储的环境继续使用浏览器存储。绑定后，由现有 Cloudflare Access 身份决定可读取的云端内容。
 
 现有迁移包支持统一内容、版本、附件及关系的预览、冲突检查、验证和原子导入。既有 Notion 来源字段随记录保留。后续批量迁移应先导出当前快照并在隔离环境预览，记录本批新增 ID，再制定批次撤销方案。
 
@@ -69,3 +69,10 @@ Quick Capture 的 Text 可保存到 Reflections 或 Collections。Link 可保存
 2. Auto 按内容 ID 关联原始资料。Workshop 的资料关联与文档版本分别保存。
 3. 私人接口在服务端鉴权。公开网站只读取批准后的发布投影。内容类型、标签、关联、可见性及创作状态各自独立。
 4. Apple Calendar 使用服务端 ICS 读取及设备 Shortcut 写入。私有部署、确认状态及操作步骤见 [Apple Calendar 集成](apple-calendar-integration.md)。
+
+## Studio 内容同步
+
+- 在现有 D1 应用 `0004_studio_cloud.sql`，并为现有 Worker 绑定专用私有 R2 bucket `STUDIO_CONTENT`。在隔离环境先验证，生产使用已忽略的 `wrangler.production.toml`。没有 R2 绑定时仍可使用原有本地模式。
+- D1 保存每位 Access 用户的内容版本、R2 对象指针和编辑锁。R2 存储包含附件的完整快照，保留当前版及上一版。只有完整对象写入且版本和锁均有效时才提交指针。第一版每次上传最多 24 MiB（含附件编码）。
+- 首次同步时，在已有内容的浏览器上点「上传此浏览器的 Studio 内容」。上传只允许初始化空的云端工作台，保留原 ID 和原浏览器数据。已有云端内容时，通过现有 Studio 导入流程合并其他备份。
+- 编辑锁覆盖整个内容工作台，关闭编辑器释放。每 25 秒续期，失联约两分钟后可由另一端接手。已有页面可重新打开或刷新读取最新版本，前台空闲时也会检查更新。Auto、待办与 Calendar 继续使用原有存储路径。

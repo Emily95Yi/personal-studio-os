@@ -8,6 +8,7 @@ import { boardOptions, boardResults, searchResults, setReflectionOrder } from '.
 import { reviewChanges } from './self-board-review.js';
 import { contentTitle, maxAssetBytes, objectFor, relationCandidates, removeRelation, saveRelation, studioStore } from './studio-data.js';
 import { studioDialog } from './studio-dialog.js';
+import { beginStudioEdit, studioNotice, watchStudioEditor } from './studio-cloud.js';
 import { attachmentInputs, retainedFiles, withAssets } from './workshop-actions.js';
 import { categoryList, entriesFor, foldersFor, resourceAtUrl, saveCollectionItem, saveExplorationEntry, saveExplorationTopic,
   topicsFor, itemsFor } from './board-library-data.js';
@@ -445,8 +446,25 @@ export function initBoardActions(app, render) {
       else if (discover) location.hash = discoverAddress(discoverCategory(saved), saved.folderId);
       else open(saved.id);
     };
-    if (host) inlineEditor(host, fields, save, after, { writing, cancelTo, draftKey });
-    else dialog('新建记录', fields, save, after);
+    if (!host) {
+      dialog('新建记录', fields, save, after);
+      return;
+    }
+    const box = host.querySelector('[data-sb-editor]');
+    if (!box?.hidden || box.dataset.opening) return;
+    box.dataset.opening = 'true';
+    void beginStudioEdit().then(release => {
+      if (!host.isConnected) {
+        release();
+        return;
+      }
+      const form = inlineEditor(host, fields, save, after, { writing, cancelTo, draftKey }) ?? box.querySelector('form');
+      if (form) watchStudioEditor(form, release);
+      else release();
+    }).catch(error => {
+      studioNotice(error.message);
+      if (cancelTo && host.isConnected) location.hash = cancelTo;
+    }).finally(() => { delete box.dataset.opening; });
   }
 
   function editFolder(id, category, parentId) {
