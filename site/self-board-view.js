@@ -1,13 +1,13 @@
 import { autoWidget } from './auto-view.js';
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
-import { boardContentHref, boardHref, boardSections, discoverAddress, href } from './pages.js';
-import { boardContent, boardFolderPath, boardRecords, boardSection, canAddSubfolder, contentTypes, discoverCategory, discoverDirectory, exerciseFields,
+import { boardContentHref, boardHref, boardSections, boardSettingsAddress, discoverAddress, href } from './pages.js';
+import { boardContent, boardFolderPath, boardMoveFolders, boardRecords, boardSection, canAddSubfolder, contentTypes, discoverCategory, discoverDirectory, exerciseFields,
   isPublished, isWriting, matchContent, pinnedBoardFolders, reflectionColors, relationTypes, resourceKey } from './self-board-data.js';
 import { contentTitle, isSelfBoard, objectFor, relatedObjects, studioStore } from './studio-data.js';
 import { attachments, imageUrl, markdown, objectHref, objectLabels, timestamp } from './workshop-view.js';
 import { entriesFor, itemsFor, libraryMatches, topicsFor } from './board-library-data.js';
-import { collectionDetail, collectionsView, discoverTabs, explorationsView, topicDetail } from './board-library-view.js';
+import { collectionDetail, collectionsView, discoverTabs, explorationsView, explorationTypeSettings, topicDetail } from './board-library-view.js';
 
 const state = () => studioStore.state;
 const date = item => (item.date || item.createdAt || item.updatedAt || '').slice(0, 10);
@@ -15,7 +15,7 @@ const changed = item => (item.updatedAt || item.createdAt || item.date || '').sl
 const titleOf = item => esc(contentTitle(item));
 const preview = item => (item.summary || item.body || item.personalNotes || item.sourceInfo || item.sourceUrl || '')
   .replace(/\s+/g, ' ').trim().slice(0, 190);
-const archiveViews = { inbox: 'Inbox', archived: '以往归档', trash: '回收站' };
+const archiveViews = { inbox: 'Inbox', archived: '以往归档' };
 const writingFilters = { drafts: ['未发布', 'unpublished'], published: ['已发布', 'published'] };
 const orderKey = 'studio-reflection-order';
 const randomOrder = new Map();
@@ -74,8 +74,7 @@ function overviewNavigation() {
   return '<nav class="sb-modules" aria-label="Self-Board 模块">' +
     Object.entries(boardSections).map(([id, group]) =>
       '<a href="' + boardHref(id) + '"><span class="sb-nav-icon">' + icon(group.icon, 22) + '</span><span class="sb-module-caption">' +
-        '<strong>' + group.label + '</strong><span>' + group.zh + '</span><small>' + group.description +
-        '</small></span><span class="sb-module-arrow" aria-hidden="true">' + icon('arrow', 17) + '</span></a>').join('') +
+        '<strong>' + group.label + '</strong><span>' + group.zh + '</span></span></a>').join('') +
     '</nav>';
 }
 
@@ -108,6 +107,23 @@ function movePinnedIcon(item) {
   }) : '';
 }
 
+function moveFolderList(item) {
+  const folders = state().boardFolders ?? [];
+  const category = discoverCategory(item);
+  const destinations = boardMoveFolders(state(), item).map(folder => {
+    const path = boardFolderPath(folders, folder).map(row => row.title).join(' / ');
+    return [folder.id, folder.category === category ? path : folder.category + ' / ' + path];
+  });
+  if (item.folderId) destinations.unshift(['', '分类根目录']);
+  if (!destinations.length) return '';
+  const label = '移动文件';
+  return '<details class="sb-more sb-move-folders" data-sb-disclosure data-sb-move-file="' + esc(item.id) + '">' +
+    '<summary class="sb-icon sb-icon-plain" aria-label="' + label + '" title="' + label + '">' + icon('folderMove', 17) + '</summary>' +
+    '<div class="sb-move-destinations" role="group" aria-label="目标文件夹">' + destinations.map(([id, name]) =>
+      '<button type="button" data-sb-move-destination="' + esc(id) + '">' + icon('folder', 15) + '<span>' + esc(name) +
+      '</span></button>').join('') + '<p class="work-error" data-sb-move-error role="alert" hidden></p></div></details>';
+}
+
 function rowList(items, mode) {
   return '<ul class="sb-rows">' + items.map(item => {
     const isEvent = item.type === 'event';
@@ -119,7 +135,7 @@ function rowList(items, mode) {
       discover ? '' : timeLabel(isEvent ? date(item) : changed(item)) + '<small>' + esc(module) + '</small>';
     const title = writing ? item.title?.trim() || '未命名文章' : contentTitle(item);
     const description = discover ? '' : writing ? (item.summary ?? '').replace(/\s+/g, ' ').trim().slice(0, 190) : preview(item);
-    const move = mode === 'discover' ? movePinnedIcon(item) : '';
+    const move = mode === 'discover' ? moveFolderList(item) : '';
     return '<li' + (move ? ' class="sb-row-actions"' : '') + '><a class="sb-row" href="' + (isEvent ? objectHref('event', item) : boardContentHref(item.id)) + '">' +
       '<div class="sb-row-copy"><strong>' + (mode === 'discover' ? icon('file', 15) + ' ' : '') + esc(title) + '</strong>' +
       (description && description !== title ? '<p>' + esc(description) + '</p>' : '') +
@@ -156,16 +172,17 @@ function orderControls() {
       '<button type="button" data-sb-order="' + key + '" aria-pressed="' + (order === key) + '">' + label + '</button>').join('') + '</div>';
 }
 
-function boardSettings() {
+function boardSettings(route) {
   const labels = state().reflectionLabels ?? [];
-  return heading('Self-Board 设置', '') +
+  const trash = boardIcon('回收站', 'trash', { href: boardSettingsAddress(route.parent, 'trash'), className: 'sb-icon-plain' });
+  return heading('Self-Board 设置', '', trash) +
     '<section class="sb-settings"><div class="sb-list-heading"><h3>Reflections 标签</h3>' +
     boardIcon('新建标签', 'add', { data: 'data-sb-label' }) + '</div>' +
     (labels.length ? '<ul class="sb-rows">' + labels.map(label => '<li class="sb-setting-label"><span class="sb-swatch" data-sb-color="' +
       esc(label.color) + '"></span><span>' + esc(label.name) + '</span><div class="sb-view-actions">' +
       boardIcon('编辑标签 ' + label.name, 'edit', { data: 'data-sb-label="' + esc(label.id) + '"', className: 'sb-icon-plain' }) +
       boardIcon('移除标签 ' + label.name, 'trash', { data: 'data-sb-remove-label="' + esc(label.id) + '"', className: 'sb-icon-plain' }) + '</div></li>').join('') +
-      '</ul>' : '<p class="work-meta">添加标签后，可在灵感详情的编辑模式里为卡片选色。</p>') + '</section>';
+      '</ul>' : '<p class="work-meta">添加标签后，可在灵感详情的编辑模式里为卡片选色。</p>') + '</section>' + explorationTypeSettings();
 }
 
 function groupedRows(items, groupFor, mode) {
@@ -248,20 +265,6 @@ function deleteFolderIcon(folder) {
   });
 }
 
-export function wikiSearchResults(route, query) {
-  const text = query.trim();
-  if (!text) return '';
-  const category = route.params.get('category');
-  const folderId = route.params.get('folder');
-  const rows = boardRecords(state()).filter(item => boardSection(item) === 'discover' &&
-    (!category || discoverCategory(item) === category) &&
-    (!folderId || item.folderId === folderId ||
-      (state().boardFolders ?? []).some(folder => folder.id === item.folderId && folder.parentId === folderId)) &&
-    matchContent(item, { query: text }));
-  return rows.length ? '<p class="sb-results-count">' + rows.length + ' 条结果</p>' + rowList(rows, 'discover') :
-    empty('没有匹配的 Wiki 条目', '试试其他关键词，或回到全部知识条目。');
-}
-
 function discoverView(route, items) {
   const folders = state().boardFolders ?? [];
   const directory = discoverDirectory(items, folders);
@@ -289,23 +292,21 @@ function discoverView(route, items) {
   }) : rename;
   const actions = folderAction + boardIcon('导入资料', 'upload',
     { data: 'data-sb-import="resource"' + categoryData + folderData, className }) + newFile;
-  const title = current ? discoverTrail(current.name, folder, { current: true }) : '全部知识条目';
+  const title = current ? discoverTrail(current.name, folder, { current: true }) : '';
   return '<nav class="sb-directory" aria-label="知识目录">' + directory.map(({ name, description, count }) =>
       '<a href="' + esc(discoverAddress(current?.name === name ? '' : name)) + '"' +
       (current?.name === name ? ' aria-current="page"' : '') +
       '><strong>' + esc(name) + '</strong><span>' + esc(description) + '</span><small>' + count + ' 条</small></a>').join('') +
-    '</nav><form class="work-filters library-filters library-wiki-search" data-sb-wiki-search role="search">' +
-    '<input type="search" name="query" placeholder="搜索 Workshop Wiki…" aria-label="搜索 Workshop Wiki"></form>' +
-    '<div data-sb-wiki-results aria-live="polite" hidden></div><div data-sb-wiki-directory>' +
-    '<div class="sb-list-heading sb-section-toolbar"><div class="sb-discover-location"><h3>' + title + '</h3>' +
-    (folder ? pinFolderIcon(folder) : '') +
-    '</div><div class="sb-view-actions">' + actions + '</div></div>' +
+    '</nav>' +
+    '<div class="sb-list-heading sb-section-toolbar">' +
+    (title ? '<div class="sb-discover-location"><h3>' + title + '</h3>' +
+      (folder ? pinFolderIcon(folder) : '') + '</div>' : '') +
+    '<div class="sb-view-actions">' + actions + '</div></div>' +
     (children.length ? '<ul class="sb-rows sb-folders">' + children.map(row => '<li><a class="sb-row" href="' +
       esc(discoverAddress(row.category, row.id)) + '"><span>' + icon('folder', 18) + ' ' + esc(row.title) + '</span>' +
       '<span class="sb-folder-arrow">' + icon('arrow', 14) + '</span></a>' +
       pinFolderIcon(row) + renameFolderIcon(row, '重命名 ' + row.title) + deleteFolderIcon(row) + '</li>').join('') + '</ul>' : '') +
-    (rows.length ? rowList(rows, 'discover') : children.length ? '' :
-      empty('这里还没有文件', '可以新建文件，或导入链接和附件。')) + '</div>';
+    (rows.length ? rowList(rows, 'discover') : '');
 }
 
 function heading(title, description, actions = '') {
@@ -313,11 +314,16 @@ function heading(title, description, actions = '') {
     '</p></div><div class="sb-view-actions">' + actions + '</div></div>';
 }
 
-function homeTools(view) {
-  return '<nav class="sb-utilities" aria-label="Self-Board 工具">' +
-    Object.entries({ recent: '总览', inbox: 'Inbox', trash: '回收站' }).map(([id, label]) =>
-      '<a href="' + boardHref(undefined, id === 'recent' ? '' : id) + '"' + (view === id ? ' aria-current="page"' : '') + '>' + label + '</a>').join('') +
-    '</nav>';
+function boardTrash() {
+  const records = state().content.filter(row => isSelfBoard(row) && row.deletedAt);
+  const content = records.map(row => '<li><strong>' + titleOf(row) + '</strong>' +
+    button('恢复记录', 'data-sb-recover="' + esc(row.id) + '"') + '</li>');
+  const library = [['topic', state().explorationTopics], ['collection-item', state().collectionItems]]
+    .flatMap(([type, rows]) => rows.filter(row => row.deletedAt).map(row =>
+      '<li><strong>' + titleOf(row) + '</strong>' + button('恢复记录', 'data-library="recover" data-type="' +
+        type + '" data-id="' + esc(row.id) + '"') + '</li>'));
+  const rows = [...content, ...library];
+  return rows.length ? '<ul class="sb-relations">' + rows.join('') + '</ul>' : '<p>回收站为空</p>';
 }
 
 function shortcuts() {
@@ -386,16 +392,8 @@ export function boardView(route) {
     const view = Object.hasOwn(archiveViews, requested) ? requested : 'recent';
     const rows = view === 'inbox' ? items.filter(row => row.status === 'inbox') :
       view === 'archived' ? boardRecords(state(), true).filter(row => row.status === 'archived') : items.slice(0, 5);
-    const trash = state().content.filter(row => isSelfBoard(row) && row.deletedAt);
-    const libraryTrash = [['topic', state().explorationTopics], ['collection-item', state().collectionItems]]
-      .flatMap(([type, records]) => records.filter(row => row.deletedAt).map(row =>
-        '<li><strong>' + titleOf(row) + '</strong>' + button('恢复记录', 'data-library="recover" data-type="' + type +
-          '" data-id="' + esc(row.id) + '"') + '</li>')).join('');
-    const trashList = trash.length || libraryTrash ? '<ul class="sb-relations">' + trash.map(row =>
-      '<li><strong>' + titleOf(row) + '</strong>' + button('恢复记录', 'data-sb-recover="' + esc(row.id) + '"') + '</li>').join('') + libraryTrash + '</ul>' :
-      empty('回收站为空', '删除的记录可以在这里恢复。');
-    content = '<div class="sb-list-heading"><h3>' + (archiveViews[view] ?? '最近更新') + '</h3>' + homeTools(view) + '</div>' +
-      (view === 'trash' ? trashList : rows.length ? rowList(rows) : empty('这里还没有记录', '可以从 Quick Capture 开始。')) +
+    content = (archiveViews[view] ? '<div class="sb-list-heading"><h3>' + archiveViews[view] + '</h3></div>' : '') +
+      (rows.length ? rowList(rows) : '') +
       (view === 'recent' ? '<div class="sb-auto">' + autoWidget(period) + '</div>' : '') + shortcuts();
   } else if (section === 'writing') {
     const rows = items.filter(item => boardSection(item) === section &&
@@ -416,7 +414,7 @@ export function boardView(route) {
       orderControls() + create + '</div></div>' +
       (rows.length ? reflectionCards(rows) : empty('这里还没有记录', '可以先记下一句话。'));
   } else if (section === 'discover') {
-    content = discoverTabs(route.tab) + (route.entity ? topicDetail(route.record, libraryRelations('topic', route.record)) :
+    content = discoverTabs(route.tab) + (route.entity ? topicDetail(route.record, libraryRelations('topic', route.record), params.get('edit') === '1') :
       route.tab === 'explorations' ? explorationsView() : discoverView(route, items.filter(item => boardSection(item) === section)));
   } else if (section === 'collections') {
     content = route.entity ? collectionDetail(route.record, libraryRelations('collection-item', route.record)) : collectionsView(route);
@@ -428,7 +426,7 @@ export function boardView(route) {
         boardOptions({ '': '全部关系', ...relationTypes }) + '</select>' : '') + '</form></div>' +
       '<div data-sb-results aria-live="polite">' + boardResults(route) + '</div>';
   } else if (section === 'settings') {
-    content = boardSettings();
+    content = route.view === 'trash' ? boardTrash() : boardSettings(route);
   } else {
     content = heading('全局搜索', '跨文章、灵感、资料与相关活动查找。') +
       searchForm(params.get('q') || '') +

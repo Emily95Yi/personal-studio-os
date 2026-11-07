@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  categoryFor, categoryList, entriesFor, filterCollections, moveCollectionCategory, moveExplorationEntry,
+  categoryFor, categoryList, entriesFor, explorationTypes, filterCollections, moveCollectionCategory, moveExplorationEntry,
   removeCollectionCategory, removeCollectionFolder, removeExplorationEntry, resourceAtUrl, saveCollectionCategory,
-  saveCollectionFolder, saveCollectionItem, saveExplorationEntry, saveExplorationTopic, setLibraryDeleted,
+  saveCollectionFolder, saveCollectionItem, saveExplorationEntry, saveExplorationTopic, saveExplorationType, setLibraryDeleted,
 } from '../site/board-library-data.js';
 import { removeBoardFolder, saveBoardContent, saveBoardFolder } from '../site/self-board-data.js';
 import { collectionItemAddress, explorationAddress, readRoute } from '../site/pages.js';
@@ -64,6 +64,36 @@ test('topic entries and shared relations survive transfer, with protection for r
   assert.equal(filterCollections(target).length, 0);
   setLibraryDeleted(target, 'collection-item', item.id, false);
   assert.equal(filterCollections(target)[0].id, item.id);
+});
+
+test('exploration types keep stable IDs and colors through edits and backups', () => {
+  const state = emptyStudio();
+  const topic = saveExplorationTopic(state, { title: 'Research' });
+  const existing = saveExplorationEntry(state, topic.id, { type: 'note', title: 'Earlier note' });
+  const legacy = studioExport(state);
+  delete legacy.explorationEntryTypes;
+  const legacyRestored = emptyStudio();
+  importMigration(legacyRestored, legacy, 0);
+  assert.equal(entriesFor(legacyRestored, topic.id)[0].id, existing.id);
+  assert.equal(explorationTypes(legacyRestored).find(row => row.id === 'note').color, 'blue');
+
+  const custom = saveExplorationType(state, { title: '观察', color: 'rose' });
+  const entry = saveExplorationEntry(state, topic.id, { type: custom.id, body: 'A new observation' });
+  const renamed = saveExplorationType(state, { id: custom.id, title: '记录', color: 'mint' });
+  saveExplorationType(state, { id: 'note', title: '笔记', color: 'lilac' });
+  assert.throws(() => saveExplorationType(state, { title: '记录', color: 'blue' }), /同名/);
+  assert.throws(() => saveExplorationType(state, { title: '想法', color: 'invalid' }), /颜色/);
+
+  const restored = emptyStudio();
+  const backup = studioExport(state);
+  importMigration(restored, backup, 0);
+  const types = explorationTypes(restored);
+  assert.deepEqual(types.find(row => row.id === custom.id), renamed);
+  assert.equal(types.find(row => row.id === 'note').color, 'lilac');
+  assert.equal(entriesFor(restored, topic.id).find(row => row.id === entry.id).type, custom.id);
+  assert.throws(() => previewMigration(emptyStudio(), {
+    ...backup, explorationEntryTypes: backup.explorationEntryTypes.filter(row => row.id !== custom.id),
+  }), /探索条目的主题、类型或引用无效/);
 });
 
 test('new views leave legacy Wiki folders and hashes intact and share URL identity', () => {

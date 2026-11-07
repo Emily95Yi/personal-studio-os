@@ -1,4 +1,4 @@
-import { boardContentHref, boardHref, boardSections, href, publicHref, readRoute } from './pages.js';
+import { boardContentHref, boardHref, boardSections, boardSettingsAddress, href, publicHref, readRoute } from './pages.js';
 import {
   collectionView, landing, missingView, publicView, searchView, workspaceOverview,
 } from './views.js';
@@ -59,12 +59,15 @@ function header(route, { title, ancestors }) {
   const inBoard = route.workspaceId === 'self-board';
   const section = route.type === 'content-detail' ? boardSection(boardContent(route.record)) : route.section;
   const boardTitle = Object.hasOwn(boardSections, section) ? boardSections[section].label : '';
-  const backLabel = route.section === 'settings' ? '返回上一页' : '返回 ' + label;
+  const backLabel = '返回 ' + label;
   const calendarYear = route.type === 'calendar'
     ? ' <span class="calendar-year" data-calendar-year>' + calendarSelection(route.params).date.getUTCFullYear() + '年</span>' : '';
   const start = '<a class="header-icon back-link" href="' + escapeHtml(address) + '" aria-label="' + escapeHtml(backLabel) +
     '" title="' + escapeHtml(backLabel) + '">' + icon('back', 19) + '</a>' +
     (boardTitle ? boardTitleMenu(section, boardTitle, article) : '<h1>' + escapeHtml(title) + calendarYear + '</h1>');
+  if (inBoard && route.section === 'settings') {
+    return '<header class="studio-top"><div class="masthead sb-masthead">' + start + '</div></header>';
+  }
   const calendar = route.type === 'auto-plan' ? '<a class="header-icon" href="' +
     escapeHtml(calendarHref(todayDate(), 'week', 'auto')) +
     '" aria-label="打开 Calendar" title="Calendar">' + icon('calendar', 18) + '</a>' : '';
@@ -74,9 +77,8 @@ function header(route, { title, ancestors }) {
     '<div class="header-actions">' + calendar + search + (route.type === 'calendar' ? calendarHeaderActions() : '') + (inBoard ?
       '<button type="button" class="header-icon sb-header-button" data-sb-capture aria-label="快速添加" title="快速添加">' + icon('add', 19) + '</button>' +
       '<a class="header-icon" href="' + boardHref('connections') + '" aria-label="Network" title="Network">' + icon('network', 18) + '</a>' +
-      (route.section === 'settings' ? '' : '<a class="header-icon" href="' + boardHref('settings') + '?' +
-        escapeHtml(new URLSearchParams({ from: location.hash || boardHref() }).toString()) +
-        '" aria-label="Self-Board 设置" title="Self-Board 设置">' + icon('settings', 19) + '</a>') : '') +
+      '<a class="header-icon" href="' + escapeHtml(boardSettingsAddress(location.hash || boardHref())) +
+      '" aria-label="Self-Board 设置" title="Self-Board 设置">' + icon('settings', 19) + '</a>' : '') +
     '</div></div></header>';
 }
 

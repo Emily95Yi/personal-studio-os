@@ -1,4 +1,4 @@
-import { boardRecords, boardSection, resourceKey } from './self-board-data.js';
+import { boardRecords, boardSection, reflectionColors, resourceKey } from './self-board-data.js';
 import { canRelate, objectFor, saveRecord } from './studio-data.js';
 
 const defaults = [
@@ -14,7 +14,12 @@ const defaults = [
 const initial = new Map(defaults.map(([key, title, statuses], order) =>
   ['default-' + key, { id: 'default-' + key, title, statuses, order, hidden: false }]));
 export const inbox = { id: '', title: 'Inbox', statuses: [] };
-export const entryTypes = { question: 'Question', note: 'Note', insight: 'Insight', reference: 'Reference' };
+const defaultEntryTypes = [
+  { id: 'question', title: 'Question', color: 'peach' },
+  { id: 'note', title: 'Note', color: 'blue' },
+  { id: 'insight', title: 'Insight', color: 'mint' },
+  { id: 'reference', title: 'Reference', color: 'lilac' },
+];
 export const resourceTypes = {
   link: 'Link', book: 'Book', article: 'Article', film: 'Film', audio: 'Audio', video: 'Video',
   exhibition: 'Exhibition', place: 'Place', course: 'Course', experience: 'Experience', other: 'Other',
@@ -158,6 +163,32 @@ export function saveExplorationTopic(state, input) {
   return saveRecord(rows, { id, title, description: clean(description), tags: distinct(tags), coverUrl: coverField(coverUrl), icon: clean(icon) });
 }
 
+export function explorationTypes(state) {
+  const rows = new Map(defaultEntryTypes.map(row => [row.id, row]));
+  for (const row of list(state, 'explorationEntryTypes')) rows.set(row.id, row);
+  return [...rows.values()];
+}
+
+export function explorationEntryTitle(entry) {
+  // Earlier versions filled an empty title with the built-in type name.
+  return entry.title === defaultEntryTypes.find(type => type.id === entry.type)?.title ? '未命名条目' : entry.title;
+}
+
+export function saveExplorationType(state, { id, title, color }) {
+  const types = explorationTypes(state);
+  title = clean(title);
+  if (!title || title.length > 40 || !Object.hasOwn(reflectionColors, color) || (id && !find(types, id))) {
+    fail('请输入条目类型名称并选择颜色。');
+  }
+  if (types.some(row => row.id !== id && sameName(row.title, title))) fail('已经有同名的条目类型。');
+  const rows = state.explorationEntryTypes ??= [];
+  const record = { id: id || crypto.randomUUID(), title, color };
+  const index = rows.findIndex(row => row.id === record.id);
+  if (index === -1) rows.push(record);
+  else rows[index] = record;
+  return record;
+}
+
 export function entriesFor(state, topicId) {
   return list(state, 'explorationEntries').filter(row => row.topicId === topicId).sort(byOrder);
 }
@@ -172,7 +203,7 @@ export function saveExplorationEntry(state, topicId, input) {
   const previous = input.id && find(rows, input.id);
   if (!topic || topic.deletedAt || (input.id && previous?.topicId !== topicId)) fail('探索条目已不可用。');
   const { id, type, title = '', body = '', url = '', reference = null } = input;
-  if (!Object.hasOwn(entryTypes, type) || clean(title).length > 200 ||
+  if (!find(explorationTypes(state), type) || clean(title).length > 200 ||
       (type === 'reference' && reference && (!validEntryTarget(state, topicId, reference) ||
         (objectFor(state, reference.type, reference.id).deletedAt &&
         (previous?.reference?.type !== reference.type || previous.reference.id !== reference.id))))) {
@@ -182,7 +213,7 @@ export function saveExplorationEntry(state, topicId, input) {
   if (!clean(title) && !clean(body) && !source && !(type === 'reference' && reference)) {
     fail('请输入标题、正文或引用。');
   }
-  const record = saveRecord(rows, { id, topicId, type, title: clean(title) || entryTypes[type], body: clean(body), url: source,
+  const record = saveRecord(rows, { id, topicId, type, title: clean(title) || '未命名条目', body: clean(body), url: source,
     reference: type === 'reference' ? reference : null, order: previous?.order ?? ((entriesFor(state, topicId).at(-1)?.order ?? -1) + 1) });
   topic.updatedAt = record.updatedAt;
   return record;

@@ -156,6 +156,24 @@ export function pinnedBoardFolders(state, currentId) {
   return (state.boardFolders ?? []).filter(folder => folder.pinned && folder.id !== currentId);
 }
 
+export function boardMoveFolders(state, item) {
+  const category = discoverCategory(item);
+  return (state.boardFolders ?? []).filter(folder => folder.id !== item.folderId &&
+    (folder.category === category || folder.pinned))
+    .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)));
+}
+
+export function moveBoardFile(state, id, folderId) {
+  const stored = objectFor(state, 'discover', id);
+  if (!isSelfBoard(stored) || stored.deletedAt || boardSection(boardContent(stored)) !== 'discover') {
+    throw new Error('请选择一条 Discover 条目。');
+  }
+  if (folderId === '') return saveBoardContent(state, { id, folderId });
+  const folder = boardMoveFolders(state, boardContent(stored)).find(row => row.id === folderId);
+  if (!folder) throw new Error('这个目标文件夹已不可用。');
+  return saveBoardContent(state, { id, discoverCategory: folder.category, folderId });
+}
+
 export function moveBoardContentToPinnedFolder(state, id, folderId) {
   const stored = objectFor(state, 'discover', id);
   if (!isSelfBoard(stored) || stored.deletedAt || boardSection(boardContent(stored)) !== 'discover') {

@@ -1,7 +1,7 @@
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
 import { collectionsAddress, collectionItemAddress, discoverAddress, explorationAddress } from './pages.js';
-import { categoryFor, categoryList, entriesFor, entryTypes, filterCollections, foldersFor,
+import { categoryFor, categoryList, entriesFor, explorationEntryTitle, explorationTypes, filterCollections, foldersFor,
   resourceTypes, topicsFor } from './board-library-data.js';
 import { contentTitle, objectFor, studioStore } from './studio-data.js';
 import { resourceKey } from './self-board-data.js';
@@ -17,8 +17,9 @@ const unique = values => [...new Set(values.filter(Boolean))].sort((a, b) => a.l
 const tagList = tags => tags?.length ? '<ul class="library-tags" aria-label="标签">' +
   tags.map(tag => '<li>' + esc(tag) + '</li>').join('') + '</ul>' : '';
 const dateFormat = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo', dateStyle: 'short' });
+const dateText = value => Number.isFinite(Date.parse(value)) ? dateFormat.format(new Date(value)) : value.slice(0, 10);
 const time = (value, label) => value ? '<time class="work-meta" datetime="' + esc(value) + '">' + label + ' ' +
-  esc(Number.isFinite(Date.parse(value)) ? dateFormat.format(new Date(value)) : value.slice(0, 10)) + '</time>' : '';
+  esc(dateText(value)) + '</time>' : '';
 const image = (row, css) => {
   const url = imageUrl(row);
   return url ? '<img class="' + css + '" src="' + esc(url) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '';
@@ -39,22 +40,22 @@ export function discoverTabs(tab) {
 export function explorationResults(tag = '') {
   const topics = topicsFor(state());
   const rows = topics.filter(row => !tag || row.tags.includes(tag));
-  if (!rows.length) return topics.length ? empty('没有匹配的探索主题', '试试其他标签。') :
-    empty('从一个想探索的问题开始', '新建主题后，可以陆续加入问题、笔记、心得和参考资料。');
-  return '<p class="sb-results-count">' + rows.length + ' 个主题 · 最近更新优先</p><div class="library-grid">' + rows.map(row =>
+  const newTopic = '<button type="button" class="library-card library-card-add" data-library="topic" data-id="" ' +
+    'aria-label="新建主题" title="新建主题">' + icon('add', 25) + '</button>';
+  return (!rows.length && tag ? '<p class="work-meta">没有匹配的探索主题</p>' : '') +
+    '<div class="library-grid">' + rows.map(row =>
     '<a class="library-card" href="' + esc(explorationAddress(row.id)) + '">' + image(row, 'library-cover') +
     '<div class="library-card-copy"><strong>' + (row.icon ? '<span aria-hidden="true">' + esc(row.icon) + '</span> ' : '') +
     esc(row.title) + '</strong>' + (row.description ? '<p>' + esc(row.description) + '</p>' : '') + tagList(row.tags) +
     '<div class="library-meta">' + entriesFor(state(), row.id).length + ' 条记录 · ' + time(row.updatedAt, '更新于') +
-    '</div></div></a>').join('') + '</div>';
+    '</div></div></a>').join('') + newTopic + '</div>';
 }
 
 export function explorationsView() {
   const tags = unique(topicsFor(state()).flatMap(row => row.tags));
-  return '<div class="sb-list-heading library-topic-tools">' +
-    (tags.length ? '<div class="work-filters"><select data-library-topic-tag aria-label="主题标签">' +
-      optionsHtml([['', '所有标签'], ...tags.map(tag => [tag, tag])]) + '</select></div>' : '') +
-    libButton('New Topic', 'topic', '', { primary: true, glyph: 'add' }) + '</div>' +
+  return (tags.length ? '<div class="sb-list-heading library-topic-tools"><div class="work-filters">' +
+    '<select data-library-topic-tag aria-label="主题标签">' +
+    optionsHtml([['', '所有标签'], ...tags.map(tag => [tag, tag])]) + '</select></div></div>' : '') +
     '<div data-library-results aria-live="polite">' + explorationResults() + '</div>';
 }
 
@@ -76,23 +77,44 @@ function readerHeader(record) {
     tagList(record.tags) + image(record, 'library-reader-cover');
 }
 
-export function topicDetail(topic, relations) {
+export function topicDetail(topic, relations, editing = false) {
   const entries = entriesFor(state(), topic.id);
-  return '<article class="work-reading library-reader">' + heading((topic.icon ? topic.icon + ' ' : '') + topic.title, '',
-    libButton('编辑主题', 'topic', topic.id, { glyph: 'edit' }) + libButton('移到回收站', 'delete-topic', topic.id), 1) +
-    readerHeader(topic) + (topic.description ? markdown(topic.description) : '') +
-    '<section class="library-section"><div class="sb-list-heading"><h3>Entries</h3>' +
-    libButton('New Entry', 'entry', '', { primary: true, glyph: 'add' }) + '</div>' +
-    (entries.length ? '<ol class="library-entries">' + entries.map((row, i) => '<li data-entry="' + esc(row.id) +
-      '"><div class="library-entry-heading"><div><span class="library-type">' + entryTypes[row.type] +
-      '</span><h4>' + esc(row.title) + '</h4></div><div class="sb-view-actions">' +
-      libButton('上移', 'entry-up', row.id, { disabled: i === 0 }) +
-      libButton('下移', 'entry-down', row.id, { disabled: i === entries.length - 1 }) +
-      libButton('编辑', 'entry', row.id) + libButton('删除', 'delete-entry', row.id) + '</div></div>' +
-      (row.body ? markdown(row.body) : '') +
-      (row.url || row.reference ? '<div class="library-links">' + external(row.url) + entryReference(row) + '</div>' : '') +
-      '</li>').join('') + '</ol>' : empty('还没有条目', '从 Question、Note、Insight 或 Reference 中选一种即可。')) +
-    '</section>' + relations + '</article>';
+  const types = new Map(explorationTypes(state()).map(row => [row.id, row]));
+  const address = explorationAddress(topic.id);
+  const modeLabel = editing ? '完成编辑' : '编辑主题';
+  const mode = '<a class="sb-icon sb-icon-plain library-icon" href="' + esc(address + (editing ? '' : '?edit=1')) +
+    '" aria-label="' + modeLabel + '" title="' + modeLabel + '">' + icon(editing ? 'published' : 'edit', 16) + '</a>';
+  const actions = iconButton('新建条目', 'entry', '', 'add') + mode +
+    (editing ? iconButton('编辑主题资料', 'topic', topic.id, 'file') : '') +
+    iconButton('移到回收站', 'delete-topic', topic.id, 'trash');
+  const created = topic.createdAt ? '<time class="work-meta" datetime="' + esc(topic.createdAt) + '">' +
+    esc(dateText(topic.createdAt).replaceAll('-', '.')) + '</time>' : '';
+  return '<article class="work-reading library-reader library-topic-reader">' +
+    heading((topic.icon ? topic.icon + ' ' : '') + topic.title, '', actions, 1) +
+    (created ? '<div class="library-meta">' + created + '</div>' : '') +
+    tagList(topic.tags) + image(topic, 'library-reader-cover') + (topic.description ? markdown(topic.description) : '') +
+    (entries.length ? '<section class="library-section" aria-label="探索条目"><ol class="library-entries">' + entries.map((row, i) => {
+      const type = types.get(row.type);
+      const controls = editing ? '<div class="sb-view-actions">' +
+        iconButton('上移', 'entry-up', row.id, 'up', i === 0) +
+        iconButton('下移', 'entry-down', row.id, 'down', i === entries.length - 1) +
+        iconButton('编辑', 'entry', row.id, 'edit') + iconButton('删除', 'delete-entry', row.id, 'trash') + '</div>' : '';
+      return '<li data-entry="' + esc(row.id) + '"' + (type ? ' data-sb-color="' + esc(type.color) + '"' : '') + '>' +
+        '<div class="library-entry-heading"><h3>' + esc(explorationEntryTitle(row)) +
+        (type ? '<span class="visually-hidden"> · ' + esc(type.title) + '</span>' : '') + '</h3>' + controls + '</div>' +
+        (row.body ? markdown(row.body) : '') +
+        (row.url || row.reference ? '<div class="library-links">' + external(row.url) + entryReference(row) + '</div>' : '') +
+        '</li>';
+    }).join('') + '</ol></section>' : '') + relations + '</article>';
+}
+
+export function explorationTypeSettings() {
+  return '<section class="sb-settings"><div class="sb-list-heading"><h3>探索条目类型</h3>' +
+    iconButton('新建条目类型', 'entry-type', '', 'add') + '</div><ul class="sb-rows">' +
+    explorationTypes(state()).map(row => '<li class="sb-setting-label"><span class="sb-swatch" data-sb-color="' +
+      esc(row.color) + '" aria-hidden="true"></span><span>' + esc(row.title) + '</span><div class="sb-view-actions">' +
+      iconButton('编辑条目类型 ' + row.title, 'entry-type', row.id, 'edit') + '</div></li>').join('') +
+    '</ul></section>';
 }
 
 export function collectionLocation(route) {

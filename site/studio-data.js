@@ -27,7 +27,7 @@ export const eventSections = {
 
 export const reusableSections = ['flow', 'facilitation', 'questions', 'visual', 'playbook', 'session'];
 export const collections = ['projects', 'events', 'content', 'sessions', 'relations', 'assets', 'boardFolders', 'reflectionLabels',
-  'collectionCategories', 'collectionFolders', 'collectionItems', 'explorationTopics', 'explorationEntries'];
+  'collectionCategories', 'collectionFolders', 'collectionItems', 'explorationTopics', 'explorationEntries', 'explorationEntryTypes'];
 export const relationObjectTypes = ['discover', 'topic', 'collection-item', 'project', 'event'];
 const objectCollections = { project: 'projects', event: 'events', discover: 'content',
   topic: 'explorationTopics', 'collection-item': 'collectionItems' };

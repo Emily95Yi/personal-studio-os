@@ -1,10 +1,11 @@
 import { escapeHtml as esc } from './html.js';
 import { collectionsAddress, explorationAddress, readRoute } from './pages.js';
-import { categoryFor, categoryList, entriesFor, entryTypes, foldersFor, moveCollectionCategory, moveExplorationEntry,
+import { categoryFor, categoryList, entriesFor, explorationTypes, foldersFor, moveCollectionCategory, moveExplorationEntry,
   removeCollectionCategory, removeCollectionFolder, removeExplorationEntry, resourceAtUrl, resourceTypes, saveCollectionCategory,
-  saveCollectionFolder, saveCollectionItem, saveExplorationEntry, saveExplorationTopic, setLibraryDeleted } from './board-library-data.js';
+  saveCollectionFolder, saveCollectionItem, saveExplorationEntry, saveExplorationTopic, saveExplorationType, setLibraryDeleted } from './board-library-data.js';
 import { collectionLocation, explorationResults, optionsHtml } from './board-library-view.js';
 import { contentTitle, objectFor, relationCandidates, studioStore, studioTags } from './studio-data.js';
+import { reflectionColors } from './self-board-data.js';
 import { studioDialog } from './studio-dialog.js';
 import { objectHref, objectLabels } from './workshop-view.js';
 
@@ -132,7 +133,7 @@ export function initLibraryActions(app, render) {
     const row = id ? entriesFor(state(), topic.id).find(entry => entry.id === id) : null;
     const ref = (type, key) => JSON.stringify([type, key]);
     let selected = row?.reference ? ref(row.reference.type, row.reference.id) : '';
-    const form = dialog(row ? '编辑条目' : 'New Entry', select('type', '条目类型', Object.entries(entryTypes), row?.type ?? 'note') +
+    const form = dialog(row ? '编辑条目' : '新建条目', select('type', '条目类型', explorationTypes(state()).map(type => [type.id, type.title]), row?.type ?? 'note') +
       field('title', '标题（可选）', row?.title, 'maxlength="200" autofocus') + text('body', '正文 · Markdown', row?.body, 6) +
       '<fieldset class="work-form-fields library-reference-fields" data-entry-reference>' +
       field('url', '外部资料链接', row?.url, 'type="url"') + field('query', '搜索现有内容', '', 'type="search"') +
@@ -172,6 +173,18 @@ export function initLibraryActions(app, render) {
     toggle();
   }
 
+  function editEntryType(id) {
+    const type = explorationTypes(state()).find(row => row.id === id);
+    const colors = '<fieldset class="work-choices"><legend>卡片右侧颜色</legend><div class="sb-palette">' +
+      Object.entries(reflectionColors).map(([key, name]) => '<label><input type="radio" name="color" value="' + key +
+        '"' + ((type?.color ?? 'blue') === key ? ' checked' : '') + '><span class="sb-swatch" data-sb-color="' + key +
+        '" aria-hidden="true"></span>' + esc(name) + '</label>').join('') + '</div></fieldset>';
+    dialog(type ? '编辑条目类型' : '新建条目类型',
+      field('title', '类型名称', type?.title, 'required maxlength="40" autofocus') + colors,
+      data => save(snapshot => saveExplorationType(snapshot, { id, title: data.get('title'), color: data.get('color') })),
+      saved => refresh('entry-type', saved.id));
+  }
+
   function applyTopicTag(tag) {
     explorationTag = tag;
     app.querySelector('[data-library-results]').innerHTML = explorationResults(tag);
@@ -189,6 +202,7 @@ export function initLibraryActions(app, render) {
     if (action === 'item') editItem(route.record);
     if (action === 'topic') editTopic(id);
     if (action === 'entry') editEntry(route.record, id);
+    if (action === 'entry-type') editEntryType(id);
     if (action === 'category') editCategory(id);
     if (action === 'folder') editFolder(id, route);
     if (action === 'delete-category') deleteCategory(id, route);

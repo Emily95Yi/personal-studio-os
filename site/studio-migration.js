@@ -2,7 +2,7 @@ import { canRelate, collections, currentVersion, eventSections, imageTypes, isSe
   objectFor, projectSections, relationKey, validImage } from './studio-data.js';
 import { boardRecords, boardSection, canAddSubfolder, contentTypes, discoverCategory, exerciseFields, isDiscoverType,
   reflectionColors, provenances, resourceKey, statuses, visibilities } from './self-board-data.js';
-import { categoryFor, categoryList, entryTypes, isDefaultCategory, resourceTypes, validEntryTarget } from './board-library-data.js';
+import { categoryFor, categoryList, explorationTypes, isDefaultCategory, resourceTypes, validEntryTarget } from './board-library-data.js';
 import { safeUrl } from './html.js';
 
 export const transferFormat = 'yistudio-transfer-v1';
@@ -157,11 +157,20 @@ function validateLibrary(state) {
     require(Array.isArray(row.tags) && (!row.icon || row.icon.length <= 16) &&
       (!row.coverUrl || resourceKey(row.coverUrl).startsWith('https:')), '探索主题的标签、图标或封面无效：' + row.title);
   }
+  const entryTypeNames = new Set();
+  const entryTypeIds = new Set();
+  for (const row of explorationTypes(state)) {
+    title(row, 40);
+    const name = row.title.trim().toLowerCase();
+    require(has(reflectionColors, row.color) && !entryTypeNames.has(name), '探索条目类型缺少有效颜色或名称重复：' + row.title);
+    entryTypeNames.add(name);
+    entryTypeIds.add(row.id);
+  }
   for (const row of state.explorationEntries) {
     title(row, 200);
     rank(row);
     optionalFields(row, ['body', 'url', 'createdAt', 'updatedAt'], row.title);
-    require(objectFor(state, 'topic', row.topicId) && has(entryTypes, row.type) &&
+    require(objectFor(state, 'topic', row.topicId) && entryTypeIds.has(row.type) &&
       (!row.url || (row.type === 'reference' && resourceKey(row.url))) &&
       (!row.reference || (row.type === 'reference' && plain(row.reference) && validEntryTarget(state, row.topicId, row.reference))),
     '探索条目的主题、类型或引用无效：' + row.title);
