@@ -14,6 +14,21 @@ const defaults = [
 const initial = new Map(defaults.map(([key, title, statuses], order) =>
   ['default-' + key, { id: 'default-' + key, title, statuses, order, hidden: false }]));
 export const inbox = { id: '', title: 'Inbox', statuses: [] };
+const categoryLabels = {
+  'Books & Reading': '书籍与阅读',
+  'Films & Audio': '影视与音频',
+  'Art & Exhibitions': '艺术与展览',
+  'Food & Places': '美食与地点',
+  Travel: '旅行',
+  'Health & Wellness': '健康与生活',
+  'Experiences & Courses': '体验与课程',
+  Other: '其他',
+};
+export function collectionCategoryLabel(row) {
+  if (!row.id) return '待分类';
+  return initial.get(row.id)?.title === row.title ? categoryLabels[row.title] : row.title;
+}
+
 const defaultEntryTypes = [
   { id: 'question', title: 'Question', color: 'peach' },
   { id: 'note', title: 'Note', color: 'blue' },

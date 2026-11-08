@@ -11,12 +11,12 @@
 
 | 模块 | 手机选择 | 现有业务记录 |
 | --- | --- | --- |
-| Reflections | 设置中的现有卡片标签，单选 | `content` 的 thought，`reflectionLabelId` |
-| Collection | 可见一级分类下的现有文件夹 | `collectionItems.categoryId` / `folderId` |
+| Reflections | 「标签待定」或现有卡片标签，单选 | `content` 的 thought，`reflectionLabelId` |
+| Collection | 「待分类」或可见分类，文件夹可选 | `collectionItems.categoryId` / `folderId` |
 | Discover → Workshop Wiki | Tools & Methods、Prompts & Facilitation、Concepts & Principles、Resources | `content`，映射原有类型和 `discoverCategory` |
 | Discover → Personal Explorations | 现有 Topic，外加同级的「待分类」 | `explorationEntries.topicId` |
 
-没有二级文件夹的 Collection 一级分类需要先在 Studio 建文件夹。Quick Save 始终写入 Self-board Inbox。「待分类」在私有 Studio 云端加载时补齐，下次原编辑器保存时写入旧快照。分类将同一 D1 收藏的正文转换成原模块的记录字段。读取 Studio 时合并，原编辑器保存时将它拆回 D1。D1 批处理同步提交云端修订号和收藏变化。需要先结束正在运行的 Studio 编辑租约，才能跨模块分类。遇到目标模块内的重复链接、引用关系或目标无法表示的编辑字段时，界面会返回冲突并保留原记录。
+Collection 的「待分类」指 Collections 自己的未分类位置。选定分类后，可以存入分类本身，也可以选择该分类已有的文件夹。Quick Save 始终写入 Self-board Inbox。「待分类」在私有 Studio 云端加载时补齐，下次原编辑器保存时写入旧快照。分类将同一 D1 收藏的正文转换成原模块的记录字段。读取 Studio 时合并，原编辑器保存时将它拆回 D1。D1 批处理同步提交云端修订号和收藏变化。需要先结束正在运行的 Studio 编辑租约，才能跨模块分类。遇到目标模块内的重复链接、引用关系或目标无法表示的编辑字段时，界面会返回冲突并保留原记录。
 
 ## 云端配置
 

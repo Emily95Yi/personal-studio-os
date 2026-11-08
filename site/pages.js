@@ -104,7 +104,7 @@ function boardRoute(workspace, section, id, params) {
   if (section === 'inbox') {
     const parent = id ? inboxAddress(undefined, params) : boardHref();
     return { ...base, type: 'capture', captureId: id, parent, parentLabel: id ? 'Inbox' : 'Self-Board',
-      recordTitle: id ? '收藏详情' : 'Inbox' };
+      recordTitle: id ? 'Inbox Detail' : 'Inbox' };
   }
   if (section === 'search' && !id) return { ...base, type: 'board', view: section };
   if (section === 'settings' && !id) {

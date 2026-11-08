@@ -2,8 +2,8 @@ import { storedCaptureAttachment } from './capture-client.js';
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
 import { autoSourceAddress, collectionsAddress, collectionItemAddress, discoverAddress, explorationAddress } from './pages.js';
-import { categoryFor, categoryList, entriesFor, explorationEntryTitle, explorationTypes, filterCollections, foldersFor,
-  isDefaultCategory, resourceTypes, topicsFor } from './board-library-data.js';
+import { categoryFor, categoryList, collectionCategoryLabel, entriesFor, explorationEntryTitle, explorationTypes, filterCollections, foldersFor,
+  inbox, resourceTypes, topicsFor } from './board-library-data.js';
 import { contentTitle, objectFor, studioStore } from './studio-data.js';
 import { resourceKey } from './self-board-data.js';
 import { imageUrl, markdown, objectHref, objectLabels } from './workshop-view.js';
@@ -157,19 +157,6 @@ function collectionRows(location) {
   }).join('') + '</ul>';
 }
 
-const categoryMenuLabels = {
-  'Books & Reading': '书籍与阅读',
-  'Films & Audio': '影视与音频',
-  'Art & Exhibitions': '艺术与展览',
-  'Food & Places': '美食与地点',
-  Travel: '旅行',
-  'Health & Wellness': '健康与生活',
-  'Experiences & Courses': '体验与课程',
-  Other: '其他',
-};
-const categoryMenuLabel = row => isDefaultCategory(row.id) && Object.hasOwn(categoryMenuLabels, row.title)
-  ? categoryMenuLabels[row.title] : row.title;
-
 export function collectionsView(route) {
   const location = collectionLocation(route);
   const { category, folder } = location;
@@ -195,9 +182,9 @@ export function collectionsView(route) {
     '</div>' : '';
   return '<div class="library-category-bar"><details class="library-sidebar" data-library-sidebar data-sb-disclosure>' +
     '<summary class="sb-icon sb-icon-plain library-icon" aria-label="分类导航" title="' +
-    esc(selected ? '分类导航 · ' + categoryMenuLabel(selected) : '分类导航') + '">' + icon('folder', 17) + '</summary>' +
-    '<div class="library-category-menu"><nav aria-label="收藏分类">' + categories.filter(row => !row.hidden || row.id === category)
-      .map(row => link(collectionsAddress({ category: row.id }), categoryMenuLabel(row), category === row.id)).join('') + '</nav>' +
+    esc(selected ? '分类导航 · ' + collectionCategoryLabel(selected) : '分类导航') + '">' + icon('folder', 17) + '</summary>' +
+    '<div class="library-category-menu"><nav aria-label="收藏分类">' + [inbox, ...categories].filter(row => !row.hidden || row.id === category)
+      .map(row => link(collectionsAddress({ category: row.id }), collectionCategoryLabel(row), category === row.id)).join('') + '</nav>' +
     '<div class="library-sidebar-actions">' + iconButton('新建分类', 'category', '', 'add') +
     iconButton('管理分类', 'categories', '', 'settings') + '</div></div></details>' +
     (selected ? '<a class="sb-icon sb-icon-plain library-icon" href="' + collectionsAddress() +

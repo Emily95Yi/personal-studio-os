@@ -1,6 +1,6 @@
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
-import { api, attachmentView, captureTypes, installTargets, targetFields } from './capture-client.js';
+import { api, attachmentView, captureTypes, installInboxTargets, installSegments, segmentRow, targetFields } from './capture-client.js';
 import { boardContentHref, collectionItemAddress, explorationAddress, inboxAddress } from './pages.js';
 import { studioStore } from './studio-data.js';
 
@@ -10,13 +10,7 @@ const bytes = size => size >= 1e9 ? (size / 1e9).toFixed(2) + ' GB' :
   size >= 1e6 ? (size / 1e6).toFixed(2) + ' MB' : (size / 1000).toFixed(1) + ' KB';
 const button = (label, attr = '') => '<button type="button" class="action-button secondary" ' + attr + '>' + label + '</button>';
 const status = (element, error) => { element.textContent = error instanceof Error ? error.message : error; };
-const filters = '<form class="capture-filters" data-capture-filters>' +
-  '<input name="q" type="search" maxlength="150" aria-label="搜索 Inbox" placeholder="搜索标题、正文或备注">' +
-  '<select name="status" aria-label="状态"><option value="inbox">待整理</option><option value="organized">已分类</option>' +
-  '<option value="archived">已归档</option></select><select name="type" aria-label="内容类型"><option value="">所有类型</option>' +
-  Object.entries(captureTypes).map(([key, label]) => '<option value="' + key + '">' + label + '</option>').join('') +
-  '</select><select name="sort" aria-label="收藏时间排序"><option value="recent">最近收藏</option><option value="oldest">最早收藏</option>' +
-  '</select><button class="action-button secondary">筛选</button></form>';
+const typeChoices = Object.entries(captureTypes).map(([key, label]) => [key, label.split(' ')[1]]);
 
 export function inboxView() {
   return '<section class="capture-inbox" data-capture-inbox aria-label="Inbox">' +
@@ -91,7 +85,7 @@ async function mountDetail(app, route, changed) {
         /^(image\/(png|jpeg|gif|webp|avif))$/.test(row.attachment.mime)) : '') +
       (link ? '<p><a href="' + esc(link) + '">在原模块查看和编辑</a></p>' : '') + '</div>';
     const form = panel.querySelector('form');
-    installTargets(form.querySelector('[data-capture-target]'), options.modules, row.target);
+    installInboxTargets(form.querySelector('[data-capture-target]'), options.modules, row.target);
     status(notice, '');
     save.disabled = remove.disabled = false;
     async function write(method, value) {
@@ -141,68 +135,77 @@ async function mountDetail(app, route, changed) {
 function mountList(app, route, changed) {
   const panel = app.querySelector('[data-capture-body]');
   const notice = app.querySelector('[data-capture-status]');
-  panel.innerHTML = filters + '<div data-capture-list></div><div class="capture-controls">' +
-    button('上一页', 'data-capture-prev disabled') + button('下一页', 'data-capture-next disabled') + '</div>' +
-    '<form class="capture-form"><p class="work-meta">每次最多选择 20 条。</p>' +
-    targetFields + '<div><button class="action-button secondary" type="submit">批量分类</button></div></form>';
-  const [filterForm, batch] = panel.querySelectorAll('form');
+  const arrow = (name, label, glyph) => '<button type="button" class="header-icon capture-page-icon" data-capture-' + name +
+    ' aria-label="' + label + '" title="' + label + '" disabled>' + icon(glyph, 18) + '</button>';
+  panel.innerHTML = '<div class="capture-toolbar">' + segmentRow('data-capture-types', '内容类型') +
+    '<div class="capture-page-controls">' + arrow('prev', '上一页', 'back') + arrow('next', '下一页', 'arrow') +
+    '<button class="action-button secondary" type="submit" form="capture-batch">批量分类</button></div></div>' +
+    '<div data-capture-list></div><form id="capture-batch" class="capture-form">' + targetFields + '</form>';
+  const batch = panel.querySelector('form');
+  const submit = panel.querySelector('button[type="submit"]');
   const listPanel = panel.querySelector('[data-capture-list]');
   const prev = panel.querySelector('[data-capture-prev]');
   const next = panel.querySelector('[data-capture-next]');
   const limit = 20;
-  const offset = Math.max(0, Math.min(100000, Number.parseInt(route.params.get('offset'), 10) || 0));
-  for (const control of filterForm.elements) {
-    if (control.name && route.params.has(control.name)) control.value = route.params.get(control.name);
-  }
-  const paramsAt = (start, filters = route.params) => {
-    const params = new URLSearchParams(filters);
-    if (start) params.set('offset', start);
-    else params.delete('offset');
+  let type = Object.hasOwn(captureTypes, route.params.get('type')) ? route.params.get('type') : '';
+  let offset = Math.max(0, Math.min(100000, Number.parseInt(route.params.get('offset'), 10) || 0));
+  let request = 0;
+  let saving = false;
+  const paramsAt = () => {
+    const params = new URLSearchParams();
+    if (type) params.set('type', type);
+    if (offset) params.set('offset', offset);
     return params;
   };
-  const go = (start, filters) => { location.hash = inboxAddress(undefined, paramsAt(start, filters)); };
+  const go = start => {
+    offset = start;
+    history.replaceState(history.state, '', inboxAddress(undefined, paramsAt()));
+    void load();
+  };
   async function load() {
+    const current = ++request;
+    prev.disabled = next.disabled = submit.disabled = true;
+    listPanel.replaceChildren();
     status(notice, '正在读取…');
     try {
-      const params = paramsAt(offset);
+      const params = paramsAt();
       params.set('limit', limit);
       const { items, total } = await api('/items?' + params);
-      if (!panel.isConnected) return;
+      if (current !== request || !panel.isConnected) return;
       if (!items.length && offset > 0) return go(Math.max(0, Math.ceil(total / limit) * limit - limit));
-      listPanel.innerHTML = list(items, paramsAt(offset));
+      listPanel.innerHTML = list(items, paramsAt());
       prev.disabled = offset === 0;
       next.disabled = offset + limit >= total;
-      status(notice, '共 ' + total + ' 条');
+      submit.disabled = !items.length || saving;
+      status(notice, '');
     } catch (error) {
-      status(notice, error);
+      if (current === request) status(notice, error);
     }
   }
+  installSegments(panel.querySelector('[data-capture-types]'), typeChoices, type, value => {
+    type = value;
+    go(0);
+  });
   prev.onclick = () => go(Math.max(0, offset - limit));
   next.onclick = () => go(offset + limit);
-  filterForm.onsubmit = event => {
-    event.preventDefault();
-    const filters = new URLSearchParams(new FormData(filterForm));
-    if (location.hash === inboxAddress(undefined, filters)) void load();
-    else go(0, filters);
-  };
   batch.onsubmit = async event => {
     event.preventDefault();
+    if (saving) return;
     const ids = [...listPanel.querySelectorAll('input:checked')].map(input => input.value);
     const target = new FormData(batch).get('target');
     if (!ids.length || !target) return status(notice, '请选择记录和分类。');
-    const submit = batch.querySelector('button[type="submit"]');
-    submit.disabled = true;
+    saving = submit.disabled = true;
     try {
       await api('/items/batch', { method: 'PATCH', value: { ids, target } });
       await changed();
+      saving = false;
       if (panel.isConnected) await load();
     } catch (error) {
+      saving = submit.disabled = false;
       status(notice, error);
-    } finally {
-      submit.disabled = false;
     }
   };
-  void api('/options').then(result => installTargets(batch.querySelector('[data-capture-target]'), result.modules))
+  void api('/options').then(result => installInboxTargets(batch.querySelector('[data-capture-target]'), result.modules))
     .catch(error => status(notice, error));
   void load();
 }

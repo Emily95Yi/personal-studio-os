@@ -1,7 +1,7 @@
 import { ensureCaptureTopic } from '../site/capture-topic.js';
 import { emptyStudio } from '../site/studio-data.js';
 import { boardSection, initialDiscoverCategories, resourceKey } from '../site/self-board-data.js';
-import { categoryList, foldersFor, topicsFor } from '../site/board-library-data.js';
+import { categoryList, collectionCategoryLabel, foldersFor, inbox, topicsFor } from '../site/board-library-data.js';
 import { previewMigration, studioExport } from '../site/studio-migration.js';
 
 export const sql = (db, query, ...args) => db.prepare(query).bind(...args);
@@ -34,14 +34,22 @@ export async function readStudio(env, owner, requestedRevision) {
 export function captureOptions(state) {
   const group = (label, options) => ({ label, options });
   const option = (module, branch, id, label) => ({ label, target: JSON.stringify([module, branch, id]) });
+  const topics = topicsFor(state);
+  const topicOrder = [...topics.filter(row => row.title === '待分类'), ...topics.filter(row => row.title !== '待分类')];
   return [
-    { label: 'Reflections', groups: [group('标签', state.reflectionLabels.map(row => option('reflections', 'tag', row.id, row.name)))] },
-    { label: 'Collection', groups: categoryList(state).filter(row => !row.hidden).map(row =>
-      group(row.title, foldersFor(state, row.id).map(folder => option('collection', row.id, folder.id, folder.title))))
-      .filter(row => row.options.length) },
+    { label: 'Reflections', groups: [group('标签', [
+      option('reflections', 'tag', '', '标签待定'),
+      ...state.reflectionLabels.map(row => option('reflections', 'tag', row.id, row.name)),
+    ])] },
+    { label: 'Collection', groups: [inbox, ...categoryList(state).filter(row => !row.hidden)].map(row => {
+      const root = option('collection', row.id, '', row.id ? '不指定文件夹' : '待分类');
+      return { label: collectionCategoryLabel(row), target: root.target, options: [
+        root, ...foldersFor(state, row.id).map(folder => option('collection', row.id, folder.id, folder.title)),
+      ] };
+    }) },
     { label: 'Discover', groups: [
       group('Workshop Wiki', initialDiscoverCategories.map(([name]) => option('discover', 'wiki', name, name))),
-      group('Personal Explorations', topicsFor(state).map(row => option('discover', 'personal', row.id, row.title))),
+      group('Personal Explorations', topicOrder.map(row => option('discover', 'personal', row.id, row.title))),
     ] },
   ];
 }
@@ -51,9 +59,9 @@ function hasTarget(state, target) {
 }
 
 export function nativeTarget(state, collection, record) {
-  const choices = collection === 'collectionItems' ? ['collection', record.categoryId, record.folderId] :
+  const choices = collection === 'collectionItems' ? ['collection', record.categoryId, record.folderId ?? ''] :
     collection === 'explorationEntries' ? ['discover', 'personal', record.topicId] :
-    boardSection(record) === 'reflections' ? ['reflections', 'tag', record.reflectionLabelId] :
+    boardSection(record) === 'reflections' ? ['reflections', 'tag', record.reflectionLabelId ?? ''] :
     ['discover', 'wiki', record.discoverCategory];
   const target = JSON.stringify(choices);
   return hasTarget(state, target) ? target : null;

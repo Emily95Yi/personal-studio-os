@@ -1,4 +1,4 @@
-import { api, captureMessage, installTargets } from './capture-client.js';
+import { api, captureMessage, installCaptureSelects } from './capture-client.js';
 
 const form = document.querySelector('form');
 const { type, mode, file, sourceUrl, originalText, userNote, target } = form.elements;
@@ -25,7 +25,7 @@ function update() {
   targets.hidden = mode.value !== 'organize';
   noteField.hidden = targets.hidden;
   if (!targets.hidden && !options) {
-    options = api('/options').then(data => installTargets(targets, data.modules)).catch(error => {
+    options = api('/options').then(data => installCaptureSelects(targets, data.modules)).catch(error => {
       options = undefined;
       notice.textContent = error.message;
     });

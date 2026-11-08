@@ -35,8 +35,14 @@ await call('/studio/lease', { method: 'DELETE', value: { token: lease } });
 const { modules } = await cap('/options');
 const [reflection, collection, discover] = modules;
 assert.deepEqual(modules.map(module => module.label), ['Reflections', 'Collection', 'Discover']);
-assert.equal(reflection.groups[0].options[0].label, '测试标签');
-assert.equal(collection.groups[0].options[0].label, '测试书架');
+const [pendingTag, namedTag] = reflection.groups[0].options;
+assert.deepEqual([pendingTag.label, namedTag.label], ['标签待定', '测试标签']);
+const [uncategorized, books] = collection.groups;
+assert.equal(uncategorized.label, '待分类');
+assert.equal(books.label, '书籍与阅读');
+const folder = books.options.find(option => option.label === '测试书架').target;
+const otherCategory = collection.groups.find(group => group.label === '其他');
+assert.deepEqual(otherCategory.options.map(row => row.target), [otherCategory.target]);
 assert.equal(discover.groups[0].options.length, 4);
 const topic = discover.groups[1].options.find(row => row.label === '待分类');
 assert.ok(topic);
@@ -56,11 +62,10 @@ const retry = await create({ requestKey, type: 'url', sourceUrl: url }, a.token,
 const duplicate = await create({ type: 'url', sourceUrl: 'https://example.org/saved' }, b.token, 200);
 assert.equal(retry.id, first.id);
 assert.equal(duplicate.id, first.id);
-const folder = collection.groups[0].options[0].target;
 const categorized = await create({ type: 'url', sourceUrl: 'https://example.org/collection', target: folder }, a.token);
 assert.equal(categorized.status, 'organized');
 
-const tag = reflection.groups[0].options[0].target;
+const tag = namedTag.target;
 const excerpts = await Promise.all(['摘录一', '摘录二'].map(originalText =>
   create({ type: 'text', originalText, userNote: '我的备注', sourceUrl: url, target: tag }, b.token)));
 assert.notEqual(excerpts[0].id, excerpts[1].id);
@@ -72,6 +77,10 @@ for (const item of excerpts) {
 }
 const personal = await create({ type: 'text', originalText: '剪贴板内容', target: topic.target }, a.token);
 assert.equal(personal.status, 'organized');
+const unlabeled = await create({ type: 'text', originalText: '标签待定', target: pendingTag.target });
+const unfiled = await create({ type: 'text', originalText: '收藏待分类', target: uncategorized.target });
+const categoryRoot = await create({ type: 'text', originalText: '类别根目录', target: otherCategory.target });
+assert.ok([unlabeled, unfiled, categoryRoot].every(row => row.status === 'organized'));
 const inbox = await cap('/items');
 assert.equal(inbox.inboxCount, 1);
 assert.equal(inbox.items[0].title, 'Saved page');
@@ -85,6 +94,10 @@ const snapshotResponse = await fetch(origin + '/api/studio', { headers: { 'X-Stu
 const revision = snapshotResponse.headers.get('X-Studio-Revision');
 const snapshot = await snapshotResponse.json();
 assert.equal(snapshot.collectionItems.find(row => row.id === categorized.id).folderId, 'folder-one');
+assert.equal(snapshot.content.find(row => row.id === unlabeled.id).reflectionLabelId, '');
+assert.equal(snapshot.collectionItems.find(row => row.id === unfiled.id).categoryId, '');
+assert.equal(snapshot.collectionItems.find(row => row.id === categoryRoot.id).categoryId, 'default-other');
+assert.equal(snapshot.collectionItems.find(row => row.id === categoryRoot.id).folderId, '');
 assert.equal(snapshot.explorationEntries.find(row => row.id === personal.id).body, '剪贴板内容');
 assert.equal(snapshot.content.find(row => row.id === excerpts[0].id).personalNotes, '我的备注');
 saveBoardContent(snapshot, { id: excerpts[0].id, body: '从原编辑器修改' });
