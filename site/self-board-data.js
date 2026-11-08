@@ -300,6 +300,47 @@ export function developThought(state, id, type) {
   return record;
 }
 
+export function boardTrashRecords(state) {
+  return [
+    ...state.content.filter(item => isSelfBoard(item) && item.deletedAt).map(item => ({ type: 'discover', item })),
+    ...state.explorationTopics.filter(item => item.deletedAt).map(item => ({ type: 'topic', item })),
+    ...state.collectionItems.filter(item => item.deletedAt).map(item => ({ type: 'collection-item', item })),
+  ];
+}
+
+export function clearBoardTrash(state) {
+  const trash = boardTrashRecords(state);
+  if (!trash.length) return;
+  const removed = { discover: new Set(), topic: new Set(), 'collection-item': new Set() };
+  const orphanAssets = new Set();
+  const assetIds = row => [row.coverAssetId, ...(row.assetIds ?? []),
+    ...(row.revisions ?? []).flatMap(version => version.assetIds ?? [])];
+  for (const { type, item } of trash) {
+    removed[type].add(item.id);
+    if (type === 'discover') assetIds(item).forEach(id => orphanAssets.add(id));
+  }
+  const deleted = (type, id) => Object.hasOwn(removed, type) && removed[type].has(id);
+  state.content = state.content.filter(row => !deleted('discover', row.id));
+  state.explorationTopics = state.explorationTopics.filter(row => !deleted('topic', row.id));
+  state.collectionItems = state.collectionItems.filter(row => !deleted('collection-item', row.id));
+  state.relations = state.relations.filter(edge => !deleted(edge.sourceType, edge.sourceId) && !deleted(edge.targetType, edge.targetId));
+  state.explorationEntries = state.explorationEntries.filter(entry => !deleted('topic', entry.topicId));
+  for (const entry of state.explorationEntries) {
+    if (deleted(entry.reference?.type, entry.reference?.id)) entry.reference = null;
+  }
+  for (const row of state.content) {
+    if (deleted('discover', row.parentContentId)) {
+      if (row.fragment && boardSection(row) === 'writing') row.fragment = false;
+      delete row.parentContentId;
+      row.revisionGroupId = row.id;
+    }
+  }
+  for (const row of [...state.content, ...state.projects, ...state.events, ...state.sessions.flatMap(session => session.versions)]) {
+    assetIds(row).forEach(id => orphanAssets.delete(id));
+  }
+  state.assets = state.assets.filter(asset => !orphanAssets.has(asset.id));
+}
+
 export function markBoardContent(state, id, action) {
   const row = objectFor(state, 'discover', id);
   if (!isSelfBoard(row) || (row.deletedAt && action !== 'recover')) throw new Error('这条记录已不可用。');

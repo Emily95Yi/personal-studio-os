@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { boardHref, readRoute } from '../site/pages.js';
-import { boardRecords, boardSection, developThought, discoverDirectory, existingResource, markBoardContent, matchContent, moveBoardContentToPinnedFolder,
+import { boardRecords, boardSection, boardTrashRecords, clearBoardTrash, developThought, discoverDirectory, existingResource, markBoardContent, matchContent, moveBoardContentToPinnedFolder,
   removeReflectionLabel, saveBoardContent, saveBoardFolder, saveReflectionLabel, toggleBoardFolderPin } from '../site/self-board-data.js';
 import { addAsset, emptyStudio, relatedObjects, removeRelation, saveEvent, saveProject, saveRelation,
   studioStore } from '../site/studio-data.js';
 import { compareLines, reviewChanges } from '../site/self-board-review.js';
-import { importMigration, studioExport } from '../site/studio-migration.js';
+import { importMigration, previewMigration, studioExport } from '../site/studio-migration.js';
 
 test('legacy routes and records keep their IDs and legacy fields when edited', () => {
   const state = studioStore.state;
@@ -136,4 +136,35 @@ test('moving to a pinned folder keeps the content ID, source link and Workshop r
   assert.equal(state.content.length, 1);
   assert.equal(relatedObjects(state, 'project', project.id).direct[0].edge.id, edge.id);
   assert.equal(studioExport(state).boardFolders[0].pinned, true);
+});
+
+test('emptying the trash removes trashed records and exclusive assets while keeping live references valid', () => {
+  const state = emptyStudio();
+  const file = name => addAsset(state, { name, mime: 'text/plain', data: 'dGVzdA==' });
+  const removedAsset = file('removed.txt');
+  const sharedAsset = file('shared.txt');
+  const live = saveBoardContent(state, { type: 'thought', title: 'Live', assetIds: [sharedAsset] });
+  const removed = saveBoardContent(state, { type: 'article', title: 'Trash', assetIds: [removedAsset, sharedAsset] });
+  const draft = saveBoardContent(state, { type: 'draft', title: 'Draft', parentContentId: removed.id });
+  state.explorationTopics.push({ id: 'live-topic', title: 'Live topic', tags: [] },
+    { id: 'removed-topic', title: 'Removed topic', tags: [], deletedAt: '2026-01-01' });
+  state.explorationEntries.push(
+    { id: 'live-entry', topicId: 'live-topic', title: 'Keep the entry', type: 'reference', order: 0,
+      reference: { type: 'discover', id: removed.id } },
+    { id: 'removed-entry', topicId: 'removed-topic', title: 'Remove the entry', type: 'note', order: 0 });
+  state.collectionItems.push({ id: 'removed-collection', title: 'Removed collection', categoryId: '', resourceType: 'other',
+    tags: [], deletedAt: '2026-01-01' });
+  saveRelation(state, { sourceType: 'discover', sourceId: live.id, targetType: 'discover', targetId: removed.id });
+  markBoardContent(state, removed.id, 'delete');
+  assert.equal(boardTrashRecords(state).length, 3);
+
+  clearBoardTrash(state);
+
+  assert.equal(boardTrashRecords(state).length, 0);
+  assert.deepEqual(state.content.map(row => row.id), [live.id, draft.id]);
+  assert.equal(draft.parentContentId, undefined);
+  assert.deepEqual(state.explorationEntries.map(row => [row.id, row.reference]), [['live-entry', null]]);
+  assert.deepEqual(state.assets.map(asset => asset.id), [sharedAsset]);
+  assert.equal(state.relations.length, 0);
+  assert.doesNotThrow(() => previewMigration(emptyStudio(), studioExport(state)));
 });

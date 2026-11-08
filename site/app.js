@@ -17,7 +17,7 @@ import { initWorkshopActions } from './workshop-actions.js';
 import { initStudioImport, studioImportView } from './studio-import-view.js';
 import { boardDetail, boardView } from './self-board-view.js';
 import { initBoardActions, refreshHeaderSearch } from './self-board-actions.js';
-import { boardContent, boardSection } from './self-board-data.js';
+import { boardContent, boardSection, boardTrashRecords } from './self-board-data.js';
 import { initLibraryActions } from './board-library-actions.js';
 import { contentTitle, isSelfBoard, studioStore } from './studio-data.js';
 import { beginStudioEdit, closeStudioSync, migrateLocalStudio, onStudioNotice, refreshStudioSync,
@@ -105,7 +105,14 @@ function header(route, { title, ancestors }) {
   if (inBoard && route.section === 'settings') {
     const editing = route.view === 'edit';
     const modeLabel = editing ? '完成编辑' : '编辑设置';
-    const actions = route.view === 'trash' ? '' : '<div class="header-actions"><a class="header-icon" href="' +
+    if (route.view === 'trash') {
+      const disabled = boardTrashRecords(studioStore.state).length ? '' : ' disabled';
+      return '<header class="studio-top"><div class="masthead sb-masthead">' + start +
+        '<div class="header-actions"><button type="button" class="header-icon sb-header-button" ' +
+        'aria-label="清空回收站" title="清空回收站" data-sb-clear-trash' + disabled + '>' +
+        icon('trash', 19) + '</button></div></div></header>';
+    }
+    const actions = '<div class="header-actions"><a class="header-icon" href="' +
       escapeHtml(boardSettingsAddress(route.parent, editing ? '' : 'edit')) + '" aria-label="' + modeLabel +
       '" title="' + modeLabel + '">' + icon(editing ? 'check' : 'edit', 19) + '</a>' +
       '<a class="header-icon" href="' + escapeHtml(boardSettingsAddress(route.parent, 'trash')) +

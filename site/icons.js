@@ -12,6 +12,7 @@ const paths = {
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/>',
   calendarAdd: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-9 3v5m-2.5-2.5h5"/>',
   taskAdd: '<rect x="3" y="5" width="18" height="15" rx="2"/><path d="m6 11 1.5 1.5L10 10m5 2v5m-2.5-2.5h5"/>',
+  undo: '<path d="M9 5 4 10l5 5M4 10h10a5 5 0 0 1 0 10h-2"/>',
   refresh: '<path d="M20 10a8 8 0 0 0-14-4L3 9m0-5v5h5m-4 5a8 8 0 0 0 14 4l3-3m0 5v-5h-5"/>',
   add: '<path d="M12 5v14M5 12h14"/>',
   edit: '<path d="m14 6 4 4M4 20l4-1 12-12-4-4L4 15v5Z"/>',

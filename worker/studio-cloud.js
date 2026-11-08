@@ -1,7 +1,9 @@
 import { nativeTarget, readCloud, readProjections, readStudio, sql } from './capture-state.js';
 import { ensureCaptureTopic } from '../site/capture-topic.js';
 import { emptyStudio } from '../site/studio-data.js';
-import { previewMigration } from '../site/studio-migration.js';
+import { clearBoardTrash } from '../site/self-board-data.js';
+import { cleanupUploads } from './capture-files.js';
+import { previewMigration, studioExport } from '../site/studio-migration.js';
 
 const leaseDuration = 120_000;
 const validToken = token => typeof token === 'string' && /^[0-9a-f-]{36}$/.test(token);
@@ -50,7 +52,16 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
   }
   const revision = request.headers.get('X-Studio-Revision');
   if (revision !== String(row.revision)) return json({ error: 'conflict' }, 409);
-  const transfer = await body(request, 24 * 1024 * 1024);
+  const clearTrash = url.searchParams.get('clear-trash') === '1';
+  let transfer;
+  if (clearTrash) {
+    const current = await readStudio(env, owner);
+    if (current.row?.revision !== row.revision) return json({ error: 'conflict' }, 409);
+    clearBoardTrash(current.state);
+    transfer = studioExport(current.state);
+  } else {
+    transfer = await body(request, 24 * 1024 * 1024);
+  }
   let checked;
   try {
     checked = previewMigration(emptyStudio(), transfer).next;
@@ -61,12 +72,14 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
   const { results: projections } = await readProjections(db, owner).all();
   const key = 'studio/' + crypto.randomUUID() + '.json';
   const updates = [];
+  const purged = [];
   const guard = ' AND EXISTS (SELECT 1 FROM studio_cloud WHERE owner = ? AND object_key = ?)';
   for (const projection of projections) {
     const records = checked[projection.native_collection];
     const index = records.findIndex(record => record.id === projection.id);
     if (index === -1) {
-      updates.push(sql(db, "UPDATE capture_items SET version = version + 1, status = 'archived', updated_at = ? WHERE id = ?" + guard,
+      if (clearTrash) purged.push(projection.id);
+      else updates.push(sql(db, "UPDATE capture_items SET version = version + 1, status = 'archived', updated_at = ? WHERE id = ?" + guard,
         new Date().toISOString(), projection.id, owner, key));
     } else {
       const [record] = records.splice(index, 1);
@@ -79,6 +92,15 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
           document, nativeTarget(checked, projection.native_collection, record), record.updatedAt ?? new Date().toISOString(), projection.id, owner, key));
       }
     }
+  }
+  if (purged.length) {
+    const selected = 'owner = ? AND id IN (SELECT value FROM json_each(?))' + guard;
+    const args = [owner, JSON.stringify(purged), owner, key];
+    updates.push(sql(db, "UPDATE capture_uploads SET status = 'deleting' WHERE id IN " +
+      '(SELECT attachment_id FROM capture_items WHERE ' + selected + ')', ...args));
+    updates.push(sql(db, "UPDATE capture_items SET status = 'deleted', version = version + 1, updated_at = ?, " +
+      "target = NULL, native_collection = NULL, document = '{}', source_url = '', normalized_url = '', " +
+      "metadata = '{}', attachment_id = NULL WHERE " + selected, new Date().toISOString(), ...args));
   }
   await storage.put(key, JSON.stringify(checked), { httpMetadata: { contentType: 'application/json' } });
   // The new R2 snapshot and updated D1 documents become visible at the same revision.
@@ -100,5 +122,6 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
     return json({ error: 'conflict' }, 409);
   }
   if (row.previous_key) ctx.waitUntil(storage.delete(row.previous_key).catch(() => {}));
+  if (purged.length) ctx.waitUntil(cleanupUploads(env).catch(() => {}));
   return json(result.results[0]);
 }

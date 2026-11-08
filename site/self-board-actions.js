@@ -1,6 +1,6 @@
 import { escapeHtml as esc } from './html.js';
 import { boardContentHref, boardHref, boardSections, discoverAddress, readRoute } from './pages.js';
-import { boardContent, boardFolderPath, boardRecords, boardSection, contentTypes, developThought, discoverCategory, discoverDirectory,
+import { boardContent, boardFolderPath, boardRecords, boardSection, clearBoardTrash, contentTypes, developThought, discoverCategory, discoverDirectory,
   initialDiscoverCategories, isPublished, markBoardContent, moveBoardContentToPinnedFolder, moveBoardFile, pinnedBoardFolders, reflectionColors,
   relationTypes, removeBoardFolder, removeReflectionLabel, resourceKey, resourcesCategory, saveBoardContent, saveBoardFolder,
   saveReflectionLabel, toggleBoardFolderPin } from './self-board-data.js';
@@ -762,6 +762,10 @@ export function initBoardActions(app, render) {
       dialog(label, '<p>' + esc(contentTitle(route.record)) + '</p>',
         () => studioStore.change(state => markBoardContent(state, route.record.id, sbMark)),
         () => sbMark === 'delete' ? (location.hash = boardHref(undefined, 'trash')) : refresh(), label);
+    }
+    if (button.hasAttribute('data-sb-clear-trash')) {
+      dialog('清空回收站', '<p>回收站里的所有记录将被永久删除，无法通过回收站恢复。</p>',
+        () => studioStore.change(clearBoardTrash, { clearTrash: true }), () => refresh(), '清空回收站');
     }
     if (sbRecover) {
       const item = objectFor(studioStore.state, 'discover', sbRecover);

@@ -4,7 +4,7 @@ import { weekPreview } from './planner-view.js';
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
 import { boardContentHref, boardHref, boardSections, discoverAddress, href } from './pages.js';
-import { boardContent, boardFolderPath, boardMoveFolders, boardRecords, boardSection, canAddSubfolder, contentTypes, discoverCategory, discoverDirectory, exerciseFields,
+import { boardContent, boardFolderPath, boardMoveFolders, boardRecords, boardSection, boardTrashRecords, canAddSubfolder, contentTypes, discoverCategory, discoverDirectory, exerciseFields,
   isPublished, isWriting, matchContent, pinnedBoardFolders, reflectionColors, relationTypes, resourceKey } from './self-board-data.js';
 import { contentTitle, isSelfBoard, objectFor, relatedObjects, studioStore } from './studio-data.js';
 import { attachments, imageUrl, markdown, objectHref, objectLabels, timestamp } from './workshop-view.js';
@@ -316,15 +316,14 @@ function heading(title, description, actions = '') {
 }
 
 function boardTrash() {
-  const records = state().content.filter(row => isSelfBoard(row) && row.deletedAt);
-  const content = records.map(row => '<li><strong>' + titleOf(row) + '</strong>' +
-    button('恢复记录', 'data-sb-recover="' + esc(row.id) + '"') + '</li>');
-  const library = [['topic', state().explorationTopics], ['collection-item', state().collectionItems]]
-    .flatMap(([type, rows]) => rows.filter(row => row.deletedAt).map(row =>
-      '<li><strong>' + titleOf(row) + '</strong>' + button('恢复记录', 'data-library="recover" data-type="' +
-        type + '" data-id="' + esc(row.id) + '"') + '</li>'));
-  const rows = [...content, ...library];
-  return rows.length ? '<ul class="sb-relations">' + rows.join('') + '</ul>' : '<p>回收站为空</p>';
+  const rows = boardTrashRecords(state());
+  if (!rows.length) return '<p>回收站为空</p>';
+  return '<ul class="sb-trash-list">' + rows.map(({ type, item }) => {
+    const data = type === 'discover' ? 'data-sb-recover="' + esc(item.id) + '"' :
+      'data-library="recover" data-type="' + type + '" data-id="' + esc(item.id) + '"';
+    return '<li><span>' + titleOf(item) + '</span>' +
+      boardIcon('恢复记录 ' + contentTitle(item), 'undo', { data, className: 'sb-icon-plain' }) + '</li>';
+  }).join('') + '</ul>';
 }
 
 export function searchResults(query) {

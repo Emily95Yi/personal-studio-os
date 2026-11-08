@@ -132,19 +132,19 @@ export function watchStudioEditor(element, release) {
   };
 }
 
-async function put(transfer, expected) {
+async function put(transfer, expected, path = '') {
   const token = currentLease?.token;
-  const response = await request('', {
+  const response = await request(path, {
     method: 'PUT', value: transfer, headers: { 'X-Studio-Revision': String(expected), 'X-Studio-Lease': token },
   });
   revision = (await response.json()).revision;
   return revision;
 }
 
-async function saveCloud(next, expected) {
+async function saveCloud(next, expected, { clearTrash = false } = {}) {
   const release = await beginStudioEdit();
   try {
-    return await put(studioExport(next), expected);
+    return clearTrash ? await put(undefined, expected, '?clear-trash=1') : await put(studioExport(next), expected);
   } finally {
     release();
   }

@@ -293,13 +293,13 @@ export function createStudioStore(open = database) {
       })().catch(error => { pending = undefined; throw error; });
       return pending;
     },
-    async change(update) {
+    async change(update, options) {
       await this.load();
       if (cloud) {
         const revision = state.revision;
         const next = structuredClone(state);
         const result = update(next);
-        next.revision = await cloud(next, revision);
+        next.revision = await cloud(next, revision, options);
         state = next;
         return result;
       }

@@ -523,6 +523,9 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .sb-empty .action-button { margin-top: 3px; }
 .sb-auto { margin-top: 20px; }
 .sb-network-tools { justify-content: space-between; margin-bottom: 8px; }
+.sb-trash-list { padding: 0; margin: 0; list-style: none; }
+.sb-trash-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 0; }
+[data-sb-clear-trash]:disabled { opacity: .4; cursor: default; background: transparent; }
 .sb-relations { padding: 0; margin: 0; list-style: none; }
 .sb-relations { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .sb-relations li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px; }
