@@ -296,7 +296,7 @@ svg { flex: none; vertical-align: middle; }
 .task-dialog [hidden] { display: none; }
 .task-dialog [data-form-error] { color: var(--error); margin-top: 8px; }
 .task-dialog fieldset { border: 1px solid var(--line); margin: 8px 0 0; }
-.task-dialog label.check-label { display: flex; align-items: center; gap: 6px; }
+.task-dialog label.check-label:not([hidden]) { display: flex; align-items: center; gap: 6px; }
 button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 
 @media (max-width: 880px) {
@@ -333,6 +333,7 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .plan-dialog { max-height: calc(100% - 24px); }
 .plan-dialog-heading { display: flex; align-items: center; gap: 8px; }
 .plan-dialog-heading .header-icon { width: 36px; height: 36px; }
+.plan-unit-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
 
 .caldav-settings { margin-bottom: 14px; }
 .caldav-settings select { width: 100%; border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; color: var(--ink); background: var(--paper); font: inherit; }

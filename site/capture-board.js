@@ -2,7 +2,7 @@ import { canEdit } from './apple-view.js';
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
 import { api, attachmentView, captureTypes, installInboxTargets, installSegments, segmentRow, targetFields } from './capture-client.js';
-import { boardContentHref, collectionItemAddress, explorationAddress, inboxAddress } from './pages.js';
+import { boardContentHref, collectionItemAddress, explorationAddress, href, inboxAddress } from './pages.js';
 import { imageTypes, studioStore } from './studio-data.js';
 
 const timeFormat = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Tokyo', dateStyle: 'short', timeStyle: 'short' });
@@ -88,7 +88,9 @@ async function mountDetail(app, route, changed) {
         : '<h2>' + esc(row.title) + '</h2>' + (content ? '<p class="capture-text">' + esc(content) + '</p>' : '')) +
       '</form><div class="capture-details"><p class="work-meta">' + captureTypes[row.type] + ' · ' + esc(time(row.capturedAt)) +
       (row.device ? ' · ' + esc(row.device) : '') + '</p>' +
-      (row.sourceUrl ? '<p><a target="_blank" rel="noreferrer" href="' + esc(row.sourceUrl) + '">' + esc(row.sourceUrl) + '</a></p>' : '') +
+      (row.planId ? '<p><a class="return-link" href="' + esc(href('self-board', 'auto', row.planId)) + '">' +
+        icon('link', 16) + '打开 Auto 计划</a></p>' :
+        row.sourceUrl ? '<p><a target="_blank" rel="noreferrer" href="' + esc(row.sourceUrl) + '">' + esc(row.sourceUrl) + '</a></p>' : '') +
       (row.attachment ? attachmentView(id, row.type === 'image' ? '下载原图' :
         row.attachment.filename + ' · ' + bytes(row.attachment.size), imageTypes.includes(row.attachment.mime)) : '') +
       (link ? '<p><a href="' + esc(link) + '">在原模块查看和编辑</a></p>' : '') + '</div>';

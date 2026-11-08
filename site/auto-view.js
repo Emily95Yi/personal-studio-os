@@ -137,19 +137,20 @@ export function autoPlanView({ plan }) {
 export function planDialog() {
   const action = (label, glyph, attrs) => '<button class="header-icon capture-page-icon" aria-label="' + label +
     '" title="' + label + '" ' + attrs + '>' + icon(glyph, 18) + '</button>';
+  const dayInput = (label, name, field) => '<label ' + field + ' hidden>' + label +
+    '<span class="plan-unit-input"><input required type="number" min="1" step="1" name="' + name +
+    '" value="1"><span data-plan-unit>日</span></span></label>';
   return '<dialog class="task-dialog plan-dialog" aria-labelledby="plan-dialog-title"><form data-plan-form>' +
     '<div class="plan-dialog-heading"><h2 id="plan-dialog-title">新建计划</h2><div class="header-actions">' +
     action('取消', 'remove', 'type="button" data-dialog-cancel') + action('保存计划', 'check', 'type="submit"') + '</div></div>' +
     '<p data-plan-preview hidden>本机预览 · 刷新清除</p><input type="hidden" name="id">' +
     '<label>名称<input required maxlength="120" name="title"></label><label>类型<select name="kind">' +
     Object.entries(kinds).map(([value, label]) => '<option value="' + value + '">' + label + '</option>').join('') +
-    '</select></label><p data-plan-kind-help hidden></p><label data-rule hidden>周期单位<select name="period">' +
-    '<option value="day">日</option></select></label>' +
-    '<label data-frequency hidden>间隔数<input required type="number" min="1" step="1" name="interval" value="1"></label>' +
-    '<label data-quota-days hidden>周期天数<input required type="number" min="1" step="1" name="periodDays" value="1"></label>' +
+    '</select></label><p data-plan-kind-help hidden></p>' +
+    dayInput('间隔数', 'interval', 'data-frequency') + dayInput('周期长度', 'periodDays', 'data-quota-days') +
     '<label data-quota hidden>每周期目标次数<input required type="number" min="1" max="999" name="target" value="1"></label>' +
     '<label>备注<input name="reminder" maxlength="100"></label>' +
-    '<label class="check-label"><input type="checkbox" name="syncInbox">同步Inbox</label>' +
+    '<label class="check-label" data-plan-sync><input type="checkbox" name="syncInbox">同步Inbox</label>' +
     '<p data-form-error role="alert" hidden></p></form></dialog>';
 }
 

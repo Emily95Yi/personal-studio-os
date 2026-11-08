@@ -321,12 +321,20 @@ function updatePlanFields(form) {
   const help = form.querySelector('[data-plan-kind-help]');
   help.textContent = planKindHelp(kind);
   help.hidden = !help.textContent;
-  for (const [selector, show] of [['[data-rule]', kind !== 'one-off'], ['[data-frequency]', kind === 'recurring'],
-    ['[data-quota]', kind === 'quota'], ['[data-quota-days]', kind === 'quota' && form.elements.period.value === 'day']]) {
+  const period = planFormPeriod(form);
+  for (const unit of form.querySelectorAll('[data-plan-unit]')) unit.textContent = planPeriodLabel(period);
+  form.elements.periodDays.readOnly = period !== 'day';
+  for (const [selector, show] of [['[data-frequency]', kind === 'recurring'],
+    ['[data-quota]', kind === 'quota'], ['[data-quota-days]', kind === 'quota']]) {
     const field = form.querySelector(selector);
     field.hidden = !show;
-    field.querySelector('input, select').disabled = !show;
+    field.querySelector('input').disabled = !show;
   }
+}
+
+// Preserve existing weekly/monthly plans when editing the same kind.
+function planFormPeriod(form) {
+  return form.elements.kind.value === form.dataset.savedKind ? form.dataset.savedPeriod || 'day' : 'day';
 }
 
 function openPlanDialog(id, source) {
@@ -339,17 +347,17 @@ function openPlanDialog(id, source) {
   form.elements.id.value = plan?.id ?? '';
   form.elements.title.value = plan?.title ?? source?.title.slice(0, 120) ?? '';
   form.elements.kind.value = plan?.kind ?? 'one-off';
-  const legacyUnit = plan?.period && plan.period !== 'day' ? planPeriodLabel(plan.period) : '';
-  form.elements.period.replaceChildren(new Option('日', 'day'),
-    ...(legacyUnit ? [new Option(legacyUnit, plan.period)] : []));
-  form.elements.period.value = legacyUnit ? plan.period : 'day';
+  form.dataset.savedKind = plan?.kind ?? '';
+  form.dataset.savedPeriod = plan?.period ?? 'day';
   form.elements.periodDays.value = plan?.periodDays ?? 1;
   form.elements.interval.value = plan?.interval ?? 1;
   form.elements.target.value = plan?.target ?? 1;
   form.elements.reminder.value = plan?.reminder ?? '';
   form.dataset.sourceId = source?.record?.id ?? '';
   form.dataset.inboxId = source?.inboxId ?? '';
-  form.elements.syncInbox.disabled = connection.mode !== 'private';
+  const linkedInbox = Boolean(source?.inboxId || plan?.inboxId);
+  form.querySelector('[data-plan-sync]').hidden = linkedInbox;
+  form.elements.syncInbox.disabled = linkedInbox || connection.mode !== 'private';
   form.querySelector('[data-plan-preview]').hidden = connection.mode !== 'preview';
   form.elements.title.setCustomValidity('');
   form.querySelector('[data-form-error]').hidden = true;
@@ -360,7 +368,7 @@ function openPlanDialog(id, source) {
 
 app.addEventListener('change', event => {
   const field = event.target;
-  if (['kind', 'period'].includes(field.name) && field.form?.matches('[data-plan-form]')) updatePlanFields(field.form);
+  if (field.name === 'kind' && field.form?.matches('[data-plan-form]')) updatePlanFields(field.form);
   if (!canEdit() || !field.dataset.taskCheck) return;
   const task = plannerRepository.getTask(field.dataset.taskCheck);
   if (!task) return;
@@ -397,7 +405,7 @@ app.addEventListener('submit', async event => {
     const sourceIds = previous?.sourceIds ?? (form.dataset.sourceId ? [form.dataset.sourceId] : []);
     const plan = plannerRepository.savePlan({
       id: form.elements.id.value || undefined, title, kind: form.elements.kind.value,
-      period: form.elements.period.value, interval: Number(form.elements.interval.value),
+      period: planFormPeriod(form), interval: Number(form.elements.interval.value),
       periodDays: Number(form.elements.periodDays.value),
       target: Number(form.elements.target.value), reminder: form.elements.reminder.value.trim(),
       sourceIds, inboxId,
@@ -421,8 +429,6 @@ app.addEventListener('submit', async event => {
         if (connection.save !== 'idle') throw new Error('计划尚未保存，未同步 Inbox。');
         await captureApi('', { method: 'POST', value: {
           requestKey: 'auto-plan-' + plan.id, type: 'text', title: plan.title,
-          originalText: 'Auto 计划：' + plan.title, userNote: plan.reminder,
-          sourceUrl: new URL(address, location.origin).href,
         } });
       } catch (failure) {
         error.textContent = '未能同步 Inbox。' + failure.message;

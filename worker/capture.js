@@ -1,6 +1,7 @@
 import { resourceKey } from '../site/self-board-data.js';
 import { captureError, captureOptions, checkPortable, detachProjection, projectCapture, readStudio, sql, unpack, verifyCaptureState } from './capture-state.js';
 import { cleanupUploads, downloadCapture, filesApi, fileType, requestKey, sha256, uuid } from './capture-files.js';
+import { getPlanner } from './planner.js';
 
 const types = ['url', 'text', 'image', 'pdf', 'file'];
 const maxJSON = 192 * 1024;
@@ -75,6 +76,12 @@ async function devicesApi(request, db, owner, path, body, json) {
   throw captureError('not_found', 404);
 }
 
+const planKey = 'web:auto-plan-';
+function linkedPlanId(key) {
+  const id = key?.startsWith(planKey) ? key.slice(planKey.length) : '';
+  return uuid.test(id) ? id : undefined;
+}
+
 function captureView(row) {
   const values = unpack(row);
   if (!resourceKey(values.sourceUrl)) values.sourceUrl = '';
@@ -83,6 +90,7 @@ function captureView(row) {
     ...values, sourceDomain: values.sourceUrl ? new URL(values.sourceUrl).hostname : '',
     normalizedUrl: row.normalized_url, metadata: JSON.parse(row.metadata), capturedAt: row.captured_at, updatedAt: row.updated_at,
     device: row.device_name, nativeCollection: row.native_collection,
+    planId: row.type === 'text' ? linkedPlanId(row.request_key) : undefined,
     ...(row.filename ? { attachment: { filename: row.filename, mime: row.mime, size: row.size } } : {}),
   };
 }
@@ -214,9 +222,16 @@ async function create(env, owner, actor, device, input) {
   } else if (attachment) {
     throw captureError('invalid_capture');
   }
-  if ((type === 'url' && (!sourceUrl || originalText)) || (type === 'text' && !originalText)) throw captureError('invalid_content');
+  const planId = type === 'text' ? linkedPlanId(key) : undefined;
+  const submittedTitle = text(input.title, 200);
+  if (planId && (!submittedTitle || !(await getPlanner(db, owner)).snapshot?.plans.some(plan => plan.id === planId))) {
+    throw captureError('invalid_content');
+  }
+  if ((type === 'url' && (!sourceUrl || originalText)) || (type === 'text' && !originalText && !planId)) {
+    throw captureError('invalid_content');
+  }
 
-  const title = text(input.title, 200) || (metadata.pageTitle || file?.filename || originalText.split('\n')[0] ||
+  const title = submittedTitle || (metadata.pageTitle || file?.filename || originalText.split('\n')[0] ||
     new URL(sourceUrl).hostname).slice(0, 200);
   const now = stamp();
   const row = await sql(db, "INSERT INTO capture_items (id, owner, device_id, request_key, type, source_url, normalized_url, " +
