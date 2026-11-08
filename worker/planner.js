@@ -16,9 +16,11 @@ function validPlan(row) {
   return text(row.title, 120) && typeof row.paused === 'boolean' &&
     ['one-off', 'recurring', 'quota'].includes(row.kind) &&
     (row.kind === 'one-off' || ['day', 'week', 'month'].includes(row.period)) &&
-    (row.kind !== 'recurring' || Number.isInteger(row.interval) && row.interval >= 1 && row.interval <= 999) &&
+    (row.kind !== 'recurring' || Number.isSafeInteger(row.interval) && row.interval >= 1) &&
     (row.kind !== 'quota' || Number.isInteger(row.target) && row.target >= 1 && row.target <= 999) &&
-    optional(row.reminder, value => text(value, 100)) && Array.isArray(row.sourceIds) &&
+    (row.periodDays === undefined && row.periodStart === undefined || row.kind === 'quota' && row.period === 'day' &&
+      Number.isSafeInteger(row.periodDays) && row.periodDays >= 1 && day(row.periodStart)) &&
+    optional(row.inboxId, id) && optional(row.reminder, value => text(value, 100)) && Array.isArray(row.sourceIds) &&
     row.sourceIds.length <= 100 && row.sourceIds.every(value => text(value, 256));
 }
 

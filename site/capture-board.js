@@ -1,3 +1,4 @@
+import { canEdit } from './apple-view.js';
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
 import { api, attachmentView, captureTypes, installInboxTargets, installSegments, segmentRow, targetFields } from './capture-client.js';
@@ -35,8 +36,14 @@ const iconControl = (label, glyph, attributes) => '<button class="header-icon ca
   '" title="' + label + '" ' + attributes + '>' + icon(glyph, 18) + '</button>';
 
 export function captureActions() {
-  return '<div class="header-actions">' + iconControl('保存', 'check', 'type="submit" form="' + detailForm + '" data-capture-save disabled') +
+  return '<div class="header-actions">' + iconControl('新增Auto', 'auto', 'type="button" data-capture-plan disabled') +
+    iconControl('保存', 'check', 'type="submit" form="' + detailForm + '" data-capture-save disabled') +
     iconControl('删除', 'trash', 'type="button" data-capture-delete disabled') + '</div>';
+}
+
+export function updateCapturePlanAction(app) {
+  const action = app.querySelector('[data-capture-plan]');
+  if (action) action.disabled = !action.dataset.inboxId || !canEdit() || app.querySelector('#' + detailForm)?.inert;
 }
 
 export function captureView() {
@@ -68,6 +75,7 @@ async function mountDetail(app, route, changed) {
   const notice = app.querySelector('[data-capture-status]');
   const save = app.querySelector('[data-capture-save]');
   const remove = app.querySelector('[data-capture-delete]');
+  const plan = app.querySelector('[data-capture-plan]');
   try {
     const [row, options] = await Promise.all([api(path), api('/options')]);
     if (!panel.isConnected) return;
@@ -87,10 +95,13 @@ async function mountDetail(app, route, changed) {
     const form = panel.querySelector('form');
     installInboxTargets(form.querySelector('[data-capture-target]'), options.modules, row.target);
     status(notice, '');
+    plan.dataset.inboxId = id;
+    plan.dataset.inboxTitle = row.title;
     save.disabled = remove.disabled = false;
+    updateCapturePlanAction(app);
     async function write(method, value) {
       if (save.disabled) return;
-      save.disabled = remove.disabled = true;
+      save.disabled = remove.disabled = plan.disabled = true;
       form.inert = true;
       status(notice, method === 'DELETE' ? '正在删除…' : '正在保存…');
       try {
@@ -102,6 +113,7 @@ async function mountDetail(app, route, changed) {
       } finally {
         save.disabled = remove.disabled = false;
         form.inert = false;
+        if (panel.isConnected) updateCapturePlanAction(app);
       }
     }
     form.onsubmit = event => {

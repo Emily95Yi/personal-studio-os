@@ -1,16 +1,17 @@
-import { captureActions, captureView, mountCaptureBoard } from './capture-board.js';
+import { captureActions, captureView, mountCaptureBoard, updateCapturePlanAction } from './capture-board.js';
+import { api as captureApi } from './capture-client.js';
 import { boardContentHref, boardHref, boardSections, boardSettingsAddress, href, publicHref, readRoute } from './pages.js';
 import {
   collectionView, landing, missingView, publicView, searchView, workspaceOverview,
 } from './views.js';
 import { icon } from './icons.js';
 import { escapeHtml } from './html.js';
-import { autoPlanView, originalSource, planDialog, planKindHelp } from './auto-view.js';
+import { autoPlanView, originalSource, planDialog, planKindHelp, planPeriodLabel } from './auto-view.js';
 import { plannerRepository, studioRepository } from './repository.js';
 import { calendarHref, calendarSelection, dateKey, parseDate, todayDate } from './calendar.js';
 import { calendarHeaderActions, calendarRefreshState, calendarView, taskDialog, weekPreview } from './planner-view.js';
 import { allCalendarEvents, canEdit, eventDialog, reviewDialog, settingsView, showEvent, statusBanner } from './apple-view.js';
-import { connection, loadCalDav, loadFeed, loadPlanner, onPrivateChange } from './private-api.js';
+import { connection, loadCalDav, loadFeed, loadPlanner, onPrivateChange, saveChanges } from './private-api.js';
 import { initAppleActions } from './apple-actions.js';
 import { eventDetail, projectOverview, workshopGallery } from './workshop-view.js';
 import { initWorkshopActions } from './workshop-actions.js';
@@ -191,8 +192,8 @@ function render({ focus = false } = {}) {
   if (route.entity === 'topic' && topicLease?.address !== location.hash) route.params.delete('edit');
   const context = pageContext(route);
   const canEditTasks = route.type === 'calendar' || route.collectionId === 'auto';
-  const canEditPlans = route.collectionId === 'auto';
-  const isPlannerPage = canEditTasks || isBoardOverview(route) || route.type === 'home';
+  const canEditPlans = route.collectionId === 'auto' || (route.type === 'capture' && Boolean(route.captureId));
+  const isPlannerPage = canEditPlans || canEditTasks || isBoardOverview(route) || route.type === 'home';
   document.title = context.title;
   app.dataset.page = route.type;
   app.dataset.space = route.type === 'public' ? 'public' : 'private';
@@ -257,6 +258,7 @@ app.addEventListener('click', event => {
   if (!canEdit()) return;
   if (button.dataset.taskNew || button.dataset.taskEdit || button.dataset.planSchedule) openTaskDialog(button);
   if (button.hasAttribute('data-plan-new') || button.dataset.planEdit) openPlanDialog(button.dataset.planEdit);
+  if (button.dataset.inboxId) openPlanDialog(undefined, { inboxId: button.dataset.inboxId, title: button.dataset.inboxTitle });
   if (button.dataset.planPause) {
     plannerRepository.togglePause(button.dataset.planPause);
     refreshFocus('[data-plan-pause]');
@@ -316,9 +318,11 @@ function openTaskDialog(button) {
 
 function updatePlanFields(form) {
   const kind = form.elements.kind.value;
-  form.querySelector('[data-plan-kind-help]').textContent = planKindHelp(kind);
+  const help = form.querySelector('[data-plan-kind-help]');
+  help.textContent = planKindHelp(kind);
+  help.hidden = !help.textContent;
   for (const [selector, show] of [['[data-rule]', kind !== 'one-off'], ['[data-frequency]', kind === 'recurring'],
-    ['[data-quota]', kind === 'quota']]) {
+    ['[data-quota]', kind === 'quota'], ['[data-quota-days]', kind === 'quota' && form.elements.period.value === 'day']]) {
     const field = form.querySelector(selector);
     field.hidden = !show;
     field.querySelector('input, select').disabled = !show;
@@ -335,13 +339,18 @@ function openPlanDialog(id, source) {
   form.elements.id.value = plan?.id ?? '';
   form.elements.title.value = plan?.title ?? source?.title.slice(0, 120) ?? '';
   form.elements.kind.value = plan?.kind ?? 'one-off';
-  form.elements.period.value = plan?.period ?? 'month';
+  const legacyUnit = plan?.period && plan.period !== 'day' ? planPeriodLabel(plan.period) : '';
+  form.elements.period.replaceChildren(new Option('日', 'day'),
+    ...(legacyUnit ? [new Option(legacyUnit, plan.period)] : []));
+  form.elements.period.value = legacyUnit ? plan.period : 'day';
+  form.elements.periodDays.value = plan?.periodDays ?? 1;
   form.elements.interval.value = plan?.interval ?? 1;
   form.elements.target.value = plan?.target ?? 1;
   form.elements.reminder.value = plan?.reminder ?? '';
-  const sourceIds = plan?.sourceIds ?? (source ? [source.record.id] : []);
-  form.querySelectorAll('[name="sourceId"]').forEach(field => { field.checked = sourceIds.includes(field.value); });
-  filterPlanSources(form, '');
+  form.dataset.sourceId = source?.record?.id ?? '';
+  form.dataset.inboxId = source?.inboxId ?? '';
+  form.elements.syncInbox.disabled = connection.mode !== 'private';
+  form.querySelector('[data-plan-preview]').hidden = connection.mode !== 'preview';
   form.elements.title.setCustomValidity('');
   form.querySelector('[data-form-error]').hidden = true;
   updatePlanFields(form);
@@ -349,25 +358,9 @@ function openPlanDialog(id, source) {
   form.elements.title.focus();
 }
 
-function filterPlanSources(form, input) {
-  const query = input.trim().toLowerCase();
-  let matches = 0;
-  for (const group of form.querySelectorAll('[data-plan-source-group]')) {
-    let groupMatches = 0;
-    for (const item of group.querySelectorAll('[data-plan-source-option]')) {
-      item.hidden = !item.textContent.toLowerCase().includes(query);
-      if (!item.hidden) groupMatches++;
-    }
-    group.hidden = groupMatches === 0;
-    matches += groupMatches;
-  }
-  const empty = form.querySelector('[data-plan-source-empty]');
-  if (empty) empty.hidden = matches > 0;
-}
-
 app.addEventListener('change', event => {
   const field = event.target;
-  if (field.name === 'kind' && field.form?.matches('[data-plan-form]')) updatePlanFields(field.form);
+  if (['kind', 'period'].includes(field.name) && field.form?.matches('[data-plan-form]')) updatePlanFields(field.form);
   if (!canEdit() || !field.dataset.taskCheck) return;
   const task = plannerRepository.getTask(field.dataset.taskCheck);
   if (!task) return;
@@ -375,7 +368,11 @@ app.addEventListener('change', event => {
   refreshFocus('[data-task-check="' + task.id + '"]');
 });
 
-app.addEventListener('submit', event => {
+app.addEventListener('cancel', event => {
+  if (event.target.matches('.plan-dialog[aria-busy="true"]')) event.preventDefault();
+}, true);
+
+app.addEventListener('submit', async event => {
   if (event.target.matches('.search-form')) {
     event.preventDefault();
     return;
@@ -393,25 +390,51 @@ app.addEventListener('submit', event => {
   }
   const error = form.querySelector('[data-form-error]');
   if (planForm) {
-    const sourceIds = new FormData(form).getAll('sourceId');
-    if (sourceIds.length > 100) {
-      error.textContent = '每个计划最多关联 100 条内容。';
-      error.hidden = false;
-      return;
-    }
+    const submit = form.querySelector('[type="submit"]');
+    if (submit.disabled) return;
+    const previous = plannerRepository.getPlan(form.elements.id.value);
+    const inboxId = previous?.inboxId ?? (form.dataset.inboxId || undefined);
+    const sourceIds = previous?.sourceIds ?? (form.dataset.sourceId ? [form.dataset.sourceId] : []);
     const plan = plannerRepository.savePlan({
       id: form.elements.id.value || undefined, title, kind: form.elements.kind.value,
       period: form.elements.period.value, interval: Number(form.elements.interval.value),
+      periodDays: Number(form.elements.periodDays.value),
       target: Number(form.elements.target.value), reminder: form.elements.reminder.value.trim(),
-      sourceIds,
+      sourceIds, inboxId,
     });
     if (!plan) {
-      error.textContent = '无法保存。请检查计划类型和已有安排。';
+      error.textContent = '无法保存。请检查周期天数、间隔数或已有安排。';
       error.hidden = false;
       return;
     }
-    form.closest('dialog').close();
+    // Retain the saved ID in the dialog so retrying Inbox sync cannot create a second plan.
+    form.elements.id.value = plan.id;
     const address = href('self-board', 'auto', plan.id);
+    const dialog = form.closest('dialog');
+    if (form.elements.syncInbox.checked && !inboxId) {
+      const cancel = form.querySelector('[data-dialog-cancel]');
+      submit.disabled = cancel.disabled = true;
+      dialog.setAttribute('aria-busy', 'true');
+      error.hidden = true;
+      try {
+        await saveChanges();
+        if (connection.save !== 'idle') throw new Error('计划尚未保存，未同步 Inbox。');
+        await captureApi('', { method: 'POST', value: {
+          requestKey: 'auto-plan-' + plan.id, type: 'text', title: plan.title,
+          originalText: 'Auto 计划：' + plan.title, userNote: plan.reminder,
+          sourceUrl: new URL(address, location.origin).href,
+        } });
+      } catch (failure) {
+        error.textContent = '未能同步 Inbox。' + failure.message;
+        error.hidden = false;
+        return;
+      } finally {
+        submit.disabled = cancel.disabled = false;
+        dialog.removeAttribute('aria-busy');
+      }
+      if (!dialog.open || !form.isConnected) return;
+    }
+    dialog.close();
     if (location.hash !== address) location.hash = address;
     else refreshFocus('[data-plan-edit]');
     return;
@@ -441,7 +464,6 @@ app.addEventListener('submit', event => {
 });
 
 app.addEventListener('input', event => {
-  if (event.target.matches('[data-plan-source-filter]')) filterPlanSources(event.target.form, event.target.value);
   if (event.target.name === 'title' && event.target.form?.matches('[data-task-form], [data-plan-form]')) event.target.setCustomValidity('');
   if (event.target.id !== 'studio-query') return;
   const query = event.target.value.trim();
@@ -500,6 +522,7 @@ onPrivateChange(() => {
   lastFeed = connection.feed;
   lastSave = connection.save;
   if (route.type === 'public') return;
+  if (modeChanged) updateCapturePlanAction(app);
   const status = app.querySelector('[data-private-status]');
   if (status) status.innerHTML = statusBanner();
   if ((modeChanged && route.workspaceId !== 'workshop' &&

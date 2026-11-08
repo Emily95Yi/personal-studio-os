@@ -1,3 +1,4 @@
+import { dateKey } from './calendar.js';
 import { isDiscover, objectFor, relatedObjects, studioStore } from './studio-data.js';
 
 const activities = [];
@@ -43,7 +44,7 @@ export const workshopRepository = {
 /**
  * Session-only sandbox. Plans, occurrences and completion history have separate identities.
  * @typedef {{ id: string, title: string, kind: 'one-off'|'recurring'|'quota', paused: boolean,
- * period?: 'day'|'week'|'month', interval?: number, target?: number, reminder?: string, sourceIds: string[] }} AutoPlan
+ * period?: 'day'|'week'|'month', interval?: number, target?: number, periodDays?: number, periodStart?: string, reminder?: string, inboxId?: string, sourceIds: string[] }} AutoPlan
  * @typedef {{ id: string, title: string, date: string, done: boolean, skipped?: boolean,
  * planId?: string, sourceContentId?: string }} PlannedTask
  * @typedef {{ id: string, planId: string, date: string, taskId?: string }} Completion
@@ -133,10 +134,17 @@ export const plannerRepository = {
     if (!title || !['one-off', 'recurring', 'quota'].includes(input.kind)) return undefined;
     if (input.kind === 'one-off' && input.id && this.tasksForPlan(input.id).filter(task => !task.skipped).length > 1) return undefined;
     if (input.kind !== 'one-off' && !['day', 'week', 'month'].includes(input.period)) return undefined;
-    if (input.kind === 'recurring' && (!Number.isInteger(input.interval) || input.interval < 1 || input.interval > 999)) return undefined;
+    if (input.kind === 'recurring' && (!Number.isSafeInteger(input.interval) || input.interval < 1)) return undefined;
     if (input.kind === 'quota' && (!Number.isInteger(input.target) || input.target < 1 || input.target > 999)) return undefined;
+    const { periodDays = 1, periodStart: _periodStart, ...fields } = input;
+    const previous = plans[index];
+    let cycle;
+    if (input.kind === 'quota' && input.period === 'day') {
+      if (!Number.isSafeInteger(periodDays) || periodDays < 1) return undefined;
+      cycle = { periodDays, periodStart: previous?.periodDays === periodDays ? previous.periodStart : dateKey() };
+    }
     const plan = {
-      ...input, title, id: input.id ?? crypto.randomUUID(),
+      ...fields, ...cycle, title, id: input.id ?? crypto.randomUUID(),
       paused: plans[index]?.paused ?? false, sourceIds: [...new Set(input.sourceIds ?? [])],
     };
     if (index === -1) plans.unshift(plan);

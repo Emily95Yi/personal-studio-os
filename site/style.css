@@ -331,10 +331,8 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
   .apple-fields { grid-template-columns: minmax(0, 1fr); }
 }
 .plan-dialog { max-height: calc(100% - 24px); }
-.plan-dialog fieldset { min-width: 0; }
-.plan-sources { max-height: min(34vh, 240px); overflow: auto; margin-block: 8px; overflow-wrap: anywhere; }
-.plan-sources > div + div { margin-top: 10px; }
-.plan-sources [data-plan-source-option][hidden] { display: none; }
+.plan-dialog-heading { display: flex; align-items: center; gap: 8px; }
+.plan-dialog-heading .header-icon { width: 36px; height: 36px; }
 
 .caldav-settings { margin-bottom: 14px; }
 .caldav-settings select { width: 100%; border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; color: var(--ink); background: var(--paper); font: inherit; }

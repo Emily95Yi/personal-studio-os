@@ -45,6 +45,18 @@ export function periodBounds(date, mode) {
   return [start, addDays(start, 6)];
 }
 
+// Compare period indexes to support long cycles without creating dates outside the calendar range.
+export function inQuotaPeriod(key, plan, today = todayDate()) {
+  const anchor = parseDate(plan.periodStart);
+  if (plan.period !== 'day' || !anchor || !plan.periodDays) {
+    const [start, end] = periodBounds(today, plan.period).map(dateKey);
+    return key >= start && key <= end;
+  }
+  const day = parseDate(key);
+  const index = value => Math.floor((value - anchor) / 86_400_000 / plan.periodDays);
+  return Boolean(day && day >= anchor && today >= anchor && index(day) === index(today));
+}
+
 export function calendarDays(date, mode) {
   const [start, end] = periodBounds(date, mode);
   const first = mode === 'month' ? weekStart(start) : start;

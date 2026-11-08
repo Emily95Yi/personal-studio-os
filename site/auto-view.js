@@ -1,7 +1,7 @@
-import { calendarHref, dateKey, periodBounds, todayDate } from './calendar.js';
+import { calendarHref, inQuotaPeriod, todayDate } from './calendar.js';
 import { escapeHtml } from './html.js';
 import { icon } from './icons.js';
-import { boardContentHref, boardSections, collectionItemAddress, explorationAddress, href } from './pages.js';
+import { boardContentHref, boardSections, collectionItemAddress, explorationAddress, href, inboxAddress } from './pages.js';
 import { plannerRepository, selfBoardIncludes, studioRepository } from './repository.js';
 import { connection } from './private-api.js';
 import { contentTitle, studioStore } from './studio-data.js';
@@ -60,15 +60,15 @@ export function taskSourceLink(task) {
 function planSummary(plan) {
   if (plan.kind === 'one-off') return kinds[plan.kind] + (plan.paused ? ' · 已暂停' : '');
   if (plan.paused) return kinds[plan.kind] + ' · 已暂停';
-  const unit = periods[plan.period];
+  const unit = plan.periodDays > 1 ? plan.periodDays + ' 日' : periods[plan.period];
   return plan.kind === 'quota' ? '周期目标 · 每' + unit + ' ' + plan.target + ' 次' :
     '重复规则 · 每 ' + plan.interval + ' ' + unit;
 }
 
 function quotaProgress(plan) {
   if (plan.kind !== 'quota') return '';
-  const [start, end] = periodBounds(todayDate(), plan.period).map(dateKey);
-  const count = plannerRepository.completionsForPlan(plan.id).filter(item => item.date >= start && item.date <= end).length;
+  const today = todayDate();
+  const count = plannerRepository.completionsForPlan(plan.id).filter(item => inQuotaPeriod(item.date, plan, today)).length;
   return '<div class="quota-progress"><progress max="' + plan.target + '" value="' + Math.min(count, plan.target) +
     '" aria-label="本周期完成次数"></progress><small>' + count + ' / ' + plan.target + ' 次</small></div>';
 }
@@ -104,7 +104,9 @@ export function autoView() {
 }
 
 function resourceLinks(plan) {
-  const links = plan.sourceIds.map(originalSource).filter(Boolean).map(({ title, url }) =>
+  const sources = plan.sourceIds.map(originalSource).filter(Boolean);
+  if (plan.inboxId) sources.push({ title: 'Inbox 原文', url: inboxAddress(plan.inboxId) });
+  const links = sources.map(({ title, url }) =>
     '<li><a class="return-link" href="' + escapeHtml(url) + '">' + escapeHtml(title) + '</a></li>');
   return links.length ? '<ul class="auto-resources">' + links.join('') + '</ul>' : '<p class="subtle">暂无关联资源。</p>';
 }
@@ -129,27 +131,27 @@ export function autoPlanView({ plan }) {
       escapeHtml(item.date) + (item.taskId ? ' · 安排完成' : ' · 手动记录') + '</li>').join('') + '</ul>' :
       '<p class="subtle">暂无完成记录。</p>') + completionActions + '</section>' +
     '<section class="auto-section"><h2>关联资源</h2>' + resourceLinks(plan) + '</section>' +
-    (plan.reminder ? '<p class="subtle">提醒偏好 · ' + escapeHtml(plan.reminder) + '</p>' : '');
+    (plan.reminder ? '<p class="subtle">备注 · ' + escapeHtml(plan.reminder) + '</p>' : '');
 }
 
 export function planDialog() {
-  const groups = sourceGroups();
+  const action = (label, glyph, attrs) => '<button class="header-icon capture-page-icon" aria-label="' + label +
+    '" title="' + label + '" ' + attrs + '>' + icon(glyph, 18) + '</button>';
   return '<dialog class="task-dialog plan-dialog" aria-labelledby="plan-dialog-title"><form data-plan-form>' +
-    '<h2 id="plan-dialog-title">新建计划</h2>' + (connection.mode === 'preview' ? '<p>本机预览 · 刷新清除</p>' : '') + '<input type="hidden" name="id">' +
-    '<label>名称<input required maxlength="120" name="title"></label><label>类型<select name="kind" aria-describedby="plan-kind-help">' +
+    '<div class="plan-dialog-heading"><h2 id="plan-dialog-title">新建计划</h2><div class="header-actions">' +
+    action('取消', 'remove', 'type="button" data-dialog-cancel') + action('保存计划', 'check', 'type="submit"') + '</div></div>' +
+    '<p data-plan-preview hidden>本机预览 · 刷新清除</p><input type="hidden" name="id">' +
+    '<label>名称<input required maxlength="120" name="title"></label><label>类型<select name="kind">' +
     Object.entries(kinds).map(([value, label]) => '<option value="' + value + '">' + label + '</option>').join('') +
-    '</select></label><p id="plan-kind-help" data-plan-kind-help></p><label data-rule hidden>周期<select name="period">' +
-    Object.entries(periods).map(([value, label]) => '<option value="' + value + '">' + label + '</option>').join('') +
-    '</select></label><label data-frequency hidden>间隔周期数<input required type="number" min="1" max="999" name="interval" value="1"></label>' +
+    '</select></label><p data-plan-kind-help hidden></p><label data-rule hidden>周期单位<select name="period">' +
+    '<option value="day">日</option></select></label>' +
+    '<label data-frequency hidden>间隔数<input required type="number" min="1" step="1" name="interval" value="1"></label>' +
+    '<label data-quota-days hidden>周期天数<input required type="number" min="1" step="1" name="periodDays" value="1"></label>' +
     '<label data-quota hidden>每周期目标次数<input required type="number" min="1" max="999" name="target" value="1"></label>' +
-    '<label>提醒偏好（可选）<input name="reminder" maxlength="100" placeholder="仅记录偏好"></label>' +
-    (groups.size ? '<fieldset><legend>关联 Self-Board 内容</legend><label>筛选内容<input type="search" data-plan-source-filter></label>' +
-      '<div class="plan-sources">' + [...groups].map(([group, sources]) => '<div data-plan-source-group><strong>' + escapeHtml(group) +
-        '</strong>' + sources.map(({ record, title }) => '<label class="check-label" data-plan-source-option>' +
-        '<input type="checkbox" name="sourceId" value="' + escapeHtml(record.id) + '"><span>' + escapeHtml(title) + '</span></label>').join('') +
-        '</div>').join('') + '<p data-plan-source-empty hidden>没有匹配的内容。</p></div></fieldset>' : '<p>暂无可关联内容。</p>') +
-    '<p data-form-error role="alert" hidden></p><div class="widget-actions"><button type="button" class="action-button secondary" data-dialog-cancel>取消</button>' +
-    '<button type="submit" class="action-button">保存计划</button></div></form></dialog>';
+    '<label>备注<input name="reminder" maxlength="100"></label>' +
+    '<label class="check-label"><input type="checkbox" name="syncInbox">同步Inbox</label>' +
+    '<p data-form-error role="alert" hidden></p></form></dialog>';
 }
 
-export const planKindHelp = kind => kindHelp[kind];
+export const planKindHelp = kind => kind === 'recurring' ? '' : kindHelp[kind];
+export const planPeriodLabel = period => periods[period];
