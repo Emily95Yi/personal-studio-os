@@ -42,7 +42,7 @@ export function captureOptions(state) {
       ...state.reflectionLabels.map(row => option('reflections', 'tag', row.id, row.name)),
     ])] },
     { label: 'Collection', groups: [inbox, ...categoryList(state).filter(row => !row.hidden)].map(row => {
-      const root = option('collection', row.id, '', row.id ? '不指定文件夹' : '待分类');
+      const root = option('collection', row.id, '', row.id ? '不指定' : '待分类');
       return { label: collectionCategoryLabel(row), target: root.target, options: [
         root, ...foldersFor(state, row.id).map(folder => option('collection', row.id, folder.id, folder.title)),
       ] };

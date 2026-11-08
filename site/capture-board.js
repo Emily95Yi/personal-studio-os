@@ -31,11 +31,12 @@ export function captureSettingsView() {
 
 const detailForm = 'capture-detail-form';
 
+const iconControl = (label, glyph, attributes) => '<button class="header-icon capture-page-icon" aria-label="' + label +
+  '" title="' + label + '" disabled ' + attributes + '>' + icon(glyph, 18) + '</button>';
+
 export function captureActions() {
-  const action = (label, glyph, attributes) => '<button class="header-icon capture-page-icon" aria-label="' + label +
-    '" title="' + label + '" disabled ' + attributes + '>' + icon(glyph, 19) + '</button>';
-  return '<div class="header-actions">' + action('保存', 'check', 'type="submit" form="' + detailForm + '" data-capture-save') +
-    action('删除', 'trash', 'type="button" data-capture-delete') + '</div>';
+  return '<div class="header-actions">' + iconControl('保存', 'check', 'type="submit" form="' + detailForm + '" data-capture-save') +
+    iconControl('删除', 'trash', 'type="button" data-capture-delete') + '</div>';
 }
 
 export function captureView() {
@@ -135,12 +136,11 @@ async function mountDetail(app, route, changed) {
 function mountList(app, route, changed) {
   const panel = app.querySelector('[data-capture-body]');
   const notice = app.querySelector('[data-capture-status]');
-  const arrow = (name, label, glyph) => '<button type="button" class="header-icon capture-page-icon" data-capture-' + name +
-    ' aria-label="' + label + '" title="' + label + '" disabled>' + icon(glyph, 18) + '</button>';
   panel.innerHTML = '<div class="capture-toolbar">' + segmentRow('data-capture-types', '内容类型') +
-    '<div class="capture-page-controls">' + arrow('prev', '上一页', 'back') + arrow('next', '下一页', 'arrow') +
-    '<button class="action-button secondary" type="submit" form="capture-batch">批量分类</button></div></div>' +
-    '<div data-capture-list></div><form id="capture-batch" class="capture-form">' + targetFields + '</form>';
+    '<div class="capture-page-controls">' + iconControl('上一页', 'back', 'type="button" data-capture-prev') +
+    iconControl('下一页', 'arrow', 'type="button" data-capture-next') +
+    iconControl('批量分类', 'folderMove', 'type="submit" form="capture-batch"') + '</div></div>' +
+    '<form id="capture-batch" class="capture-form">' + targetFields + '</form><div data-capture-list></div>';
   const batch = panel.querySelector('form');
   const submit = panel.querySelector('button[type="submit"]');
   const listPanel = panel.querySelector('[data-capture-list]');

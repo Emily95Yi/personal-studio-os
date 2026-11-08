@@ -149,7 +149,7 @@ export function installInboxTargets(container, modules, selected = '') {
 export const targetFields = '<div class="capture-target" data-capture-target>' +
   segmentRow('data-capture-modules', '模块') + segmentRow('data-capture-groups', '分组') +
   segmentRow('data-capture-options', '分类') +
-  '<label class="capture-folder" hidden>文件夹<select aria-label="文件夹"></select></label>' +
+  '<div class="capture-folder" hidden><select aria-label="文件夹"></select></div>' +
   '<input type="hidden" name="target"></div>';
 
 export function attachmentView(id, name = '下载原始附件', image = false) {
