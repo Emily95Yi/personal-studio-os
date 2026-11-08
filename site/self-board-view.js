@@ -1,3 +1,5 @@
+import { inboxView, captureSettingsView } from './capture-board.js';
+import { storedCaptureAttachment } from './capture-client.js';
 import { weekPreview } from './planner-view.js';
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
@@ -181,7 +183,7 @@ function boardSettings(route) {
       esc(label.color) + '"></span><span>' + esc(label.name) + '</span><div class="sb-view-actions">' +
       boardIcon('编辑标签 ' + label.name, 'edit', { data: 'data-sb-label="' + esc(label.id) + '"', className: 'sb-icon-plain' }) +
       boardIcon('移除标签 ' + label.name, 'trash', { data: 'data-sb-remove-label="' + esc(label.id) + '"', className: 'sb-icon-plain' }) + '</div></li>').join('') +
-      '</ul>' : '<p class="work-meta">添加标签后，可在灵感详情的编辑模式里为卡片选色。</p>') + '</section>' + explorationTypeSettings();
+      '</ul>' : '<p class="work-meta">添加标签后，可在灵感详情的编辑模式里为卡片选色。</p>') + '</section>' + explorationTypeSettings() + captureSettingsView();
 }
 
 function groupedRows(items, groupFor, mode) {
@@ -330,8 +332,8 @@ export function searchResults(query) {
   const items = boardRecords(state(), true).filter(row => matchContent(row, { query }));
   const library = [
     ['topic', topicsFor(state()).filter(row => libraryMatches(row, ['title', 'description'], query) ||
-      entriesFor(state(), row.id).some(entry => libraryMatches(entry, ['title', 'body', 'url'], query)))],
-    ['collection-item', itemsFor(state()).filter(row => libraryMatches(row, ['title', 'description', 'notes', 'url'], query))],
+      entriesFor(state(), row.id).some(entry => libraryMatches(entry, ['title', 'body', 'url', 'captureSourceUrl', 'captureNote'], query)))],
+    ['collection-item', itemsFor(state()).filter(row => libraryMatches(row, ['title', 'description', 'notes', 'url', 'captureSourceUrl'], query))],
   ];
   const total = items.length + library.reduce((count, [, rows]) => count + rows.length, 0);
   return total ? '<p class="sb-results-count">' + total + ' 条结果</p>' + groupedRows(items,
@@ -378,8 +380,9 @@ export function boardView(route) {
     const rows = view === 'inbox' ? items.filter(row => row.status === 'inbox') :
       view === 'archived' ? boardRecords(state(), true).filter(row => row.status === 'archived') : items.slice(0, 5);
     content = (archiveViews[view] ? '<div class="sb-list-heading"><h3>' + archiveViews[view] + '</h3></div>' : '') +
-      (rows.length ? rowList(rows) : '') +
-      (view === 'recent' ? '<div class="sb-auto" data-week-preview>' + weekPreview() + '</div>' : '');
+      (view === 'recent' ? inboxView() + '<div class="sb-auto" data-week-preview>' + weekPreview() + '</div>' +
+        (!requested ? overviewNavigation() : '') : '') +
+      (rows.length ? rowList(rows) : '');
   } else if (section === 'writing') {
     const rows = items.filter(item => boardSection(item) === section &&
       (route.view === 'drafts' ? !isPublished(item) :
@@ -417,8 +420,7 @@ export function boardView(route) {
       searchForm(params.get('q') || '') +
       '<div data-sb-results aria-live="polite">' + boardResults(route) + '</div>';
   }
-  const navigation = !section && !params.get('view') ? overviewNavigation() : '';
-  return '<section class="sb" data-sb>' + navigation + '<section class="sb-content">' + content + '</section></section>';
+  return '<section class="sb" data-sb><section class="sb-content">' + content + '</section></section>';
 }
 
 function boardRelations(item, ownerType = 'discover') {
@@ -464,7 +466,7 @@ export function boardDetail({ record }) {
   const writing = section === 'writing';
   const cover = imageUrl(item);
   const folder = section === 'discover' && (state().boardFolders ?? []).find(row => row.id === item.folderId);
-  const source = resourceKey(item.sourceUrl) && item.sourceUrl;
+  const source = resourceKey(item.sourceUrl || item.captureSourceUrl) && (item.sourceUrl || item.captureSourceUrl);
   const id = esc(item.id);
   const className = 'sb-icon-plain';
   const reflection = section === 'reflections';
@@ -499,7 +501,7 @@ export function boardDetail({ record }) {
       (item.notionPageId ? '<p>Notion · ' + esc(item.notionPageId) + '</p>' : '') + '</section>' : '') +
     Object.entries(extra).filter(([key]) => item[key]).map(([key, label]) =>
       '<section class="sb-detail-field"><h3>' + label + '</h3>' + markdown(item[key]) + '</section>').join('') +
-    attachments(item.assetIds) +
+    attachments(item.assetIds) + storedCaptureAttachment(item) +
     '</div><div data-sb-editor hidden></div>' +
     '<details class="sb-related" data-sb-related><summary>相关内容 <span>' + relatedTo(item.id).length + '</span></summary>' +
     boardRelations(item) + '</details></article></section>';

@@ -207,7 +207,7 @@ export function boardRecords(state, includeArchived = false) {
 export function matchContent(row, { query = '', type = '', status = '', topic = '', visibility = '' } = {}) {
   return (!type || type === row.type) && (!status || status === (row.status || 'unset')) &&
     (!topic || row.topics.includes(topic)) && (!visibility || visibility === row.visibility) &&
-    [row.title, row.body, row.summary, row.sourceInfo, row.sourceUrl, row.excerpt, row.personalNotes, row.aiNotes, row.discoverCategory, ...row.topics].join(' ').toLowerCase().includes(query.trim().toLowerCase());
+    [row.title, row.body, row.summary, row.sourceInfo, row.sourceUrl, row.captureSourceUrl, row.excerpt, row.personalNotes, row.aiNotes, row.discoverCategory, ...row.topics].join(' ').toLowerCase().includes(query.trim().toLowerCase());
 }
 
 export function resourceKey(value) {

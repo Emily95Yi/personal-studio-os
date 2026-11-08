@@ -22,3 +22,5 @@ Workshop 和 Self-Board（包括探索与收藏）保存到当前站点、当前
 Apple Calendar 的使用、私有部署和设备验收见 [集成指南](docs/apple-calendar-integration.md)。使用 Node.js 22.13 或更新版本执行 `npm ci` 和 `npm test`。
 
 CalDAV 双日历测试步骤见 [测试与迁移](docs/icloud-caldav.md)。
+
+Mobile Capture、iPhone 快捷指令和生产验收见 [Mobile Capture 指南](docs/mobile-capture.md)。

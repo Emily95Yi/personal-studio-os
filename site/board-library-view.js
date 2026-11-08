@@ -1,3 +1,4 @@
+import { storedCaptureAttachment } from './capture-client.js';
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
 import { autoSourceAddress, collectionsAddress, collectionItemAddress, discoverAddress, explorationAddress } from './pages.js';
@@ -103,7 +104,9 @@ export function topicDetail(topic, relations, editing = false) {
         '<div class="library-entry-heading"><h3>' + esc(explorationEntryTitle(row)) +
         (type ? '<span class="visually-hidden"> · ' + esc(type.title) + '</span>' : '') + '</h3>' + controls + '</div>' +
         (row.body ? markdown(row.body) : '') +
-        (row.url || row.reference ? '<div class="library-links">' + external(row.url) + entryReference(row) + '</div>' : '') +
+        (row.captureNote ? '<div class="library-section"><strong>我的备注</strong>' + markdown(row.captureNote) + '</div>' : '') +
+        (row.url || row.captureSourceUrl || row.reference ? '<div class="library-links">' +
+          external(row.url || row.captureSourceUrl) + entryReference(row) + '</div>' : '') + storedCaptureAttachment(row) +
         '</li>';
     }).join('') + '</ol></section>' : '') + relations + '</article>';
 }
@@ -196,6 +199,7 @@ export function collectionDetail(row, relations) {
     [category?.title, folder?.title, resourceTypes[row.resourceType], statusLabel(row)].filter(Boolean).join(' · '),
     collectionAutoIcon(row) + libButton('编辑收藏', 'item', row.id, { glyph: 'edit' }) + libButton('移到回收站', 'delete-item', row.id), 1) +
     readerHeader(row) + (row.description ? markdown(row.description) : '') +
-    (row.url ? '<p class="library-links">' + external(row.url, '打开原始链接') + '</p>' : '') +
+    (row.url || row.captureSourceUrl ? '<p class="library-links">' + external(row.url || row.captureSourceUrl, '打开原始链接') + '</p>' : '') +
+    storedCaptureAttachment(row) +
     (row.notes ? '<section class="library-section"><h3>备注</h3>' + markdown(row.notes) + '</section>' : '') + relations + '</article>';
 }

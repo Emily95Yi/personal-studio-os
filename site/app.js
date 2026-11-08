@@ -1,3 +1,4 @@
+import { mountCaptureBoard } from './capture-board.js';
 import { boardContentHref, boardHref, boardSections, boardSettingsAddress, href, publicHref, readRoute } from './pages.js';
 import {
   collectionView, landing, missingView, publicView, searchView, workspaceOverview,
@@ -27,6 +28,7 @@ let studioStorageError = false;
 let mountBoardEditor;
 let mountLibrary;
 let topicLease;
+let refreshInbox;
 
 function syncBanner() {
   return '<div data-studio-sync><p role="status" data-studio-notice' + (studioSync.message ? '' : ' hidden') + '>' +
@@ -197,6 +199,7 @@ function render({ focus = false } = {}) {
   }
   mountBoardEditor?.(route);
   mountLibrary?.(route);
+  refreshInbox = mountCaptureBoard(app, pollStudioContent);
   if (route.entity === 'topic' && route.params.has('entry')) {
     const id = route.params.get('entry');
     const entry = [...app.querySelectorAll('[data-entry]')].find(node => node.dataset.entry === id);
@@ -550,6 +553,7 @@ window.addEventListener('hashchange', async () => {
 async function pollStudioContent() {
   if (document.visibilityState !== 'visible' || app.querySelector('dialog[open]')) return;
   if (await refreshStudioSync() && !app.querySelector('dialog[open]')) render();
+  else void refreshInbox?.();
 }
 window.addEventListener('focus', pollStudioContent);
 window.addEventListener('pagehide', closeStudioSync);

@@ -135,6 +135,7 @@ export function initLibraryActions(app, render) {
     let selected = row?.reference ? ref(row.reference.type, row.reference.id) : '';
     const form = dialog(row ? '编辑条目' : '新建条目', select('type', '条目类型', explorationTypes(state()).map(type => [type.id, type.title]), row?.type ?? 'note') +
       field('title', '标题（可选）', row?.title, 'maxlength="200" autofocus') + text('body', '正文 · Markdown', row?.body, 6) +
+      (row?.captureNote != null ? text('captureNote', '我的备注', row.captureNote, 3) : '') +
       '<fieldset class="work-form-fields library-reference-fields" data-entry-reference>' +
       field('url', '外部资料链接', row?.url, 'type="url"') + field('query', '搜索现有内容', '', 'type="search"') +
       select('reference', '引用对象（可选）', []) + '</fieldset>', data => {

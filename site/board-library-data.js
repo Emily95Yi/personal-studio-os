@@ -214,6 +214,7 @@ export function saveExplorationEntry(state, topicId, input) {
     fail('请输入标题、正文或引用。');
   }
   const record = saveRecord(rows, { id, topicId, type, title: clean(title) || '未命名条目', body: clean(body), url: source,
+    ...(previous?.captureNote != null ? { captureNote: clean(input.captureNote ?? previous.captureNote) } : {}),
     reference: type === 'reference' ? reference : null, order: previous?.order ?? ((entriesFor(state, topicId).at(-1)?.order ?? -1) + 1) });
   topic.updatedAt = record.updatedAt;
   return record;

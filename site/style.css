@@ -825,3 +825,44 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
   .sb-title-switcher[open] .sb-title-links { animation: none; }
   .library-card:hover { transform: none; }
 }
+
+.capture-inbox { margin-block: 0 1rem; }
+.capture-inbox > summary { cursor: pointer; padding-block: .25rem; }
+.capture-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-block: .5rem; }
+.capture-list li { display: flex; align-items: center; gap: .5rem; }
+.capture-list button {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .55rem;
+  flex: 1; min-width: 0; padding: .5rem .35rem; border: 0; background: transparent;
+  color: inherit; text-align: start; font: inherit; cursor: pointer; min-height: 40px;
+}
+.capture-list button:hover { background: #edf4fb; border-radius: .45rem; }
+.capture-list strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.capture-list small, .capture-capacity small { color: #526277; }
+.capture-filters, .capture-target {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  align-items: end; gap: .5rem; margin-block: .5rem;
+}
+.capture-form, .capture-form label, .capture-target label { display: grid; gap: .45rem; min-width: 0; }
+.capture-form input, .capture-form textarea, .capture-form select, .capture-filters input,
+.capture-filters select, [data-capture-devices] input {
+  width: 100%; box-sizing: border-box; min-height: 44px; border: 1px solid #cfdbe7;
+  border-radius: .45rem; padding: .45rem .6rem; color: inherit; background: #fff; font: inherit;
+}
+.capture-form [hidden] { display: none; }
+.capture-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.capture-dialog { width: min(720px, calc(100% - 1.5rem)); max-height: calc(100dvh - 1.5rem); overflow: auto; }
+.capture-dialog-body { padding: 1rem; overflow-wrap: anywhere; }
+.capture-dialog-body h2 { margin: 0; }
+.capture-attachment { margin-block: .75rem; }
+.capture-attachment img { display: block; max-width: 100%; max-height: 240px; object-fit: contain; }
+.capture-capacity { margin-block: 1rem; }
+.capture-capacity h4, .capture-capacity p { margin-block: .25rem; }
+.capture-capacity progress, .capture-page progress { width: 100%; accent-color: #5077a0; }
+.capture-capacity[data-level="Notice"] progress { accent-color: #8b681d; }
+.capture-capacity[data-level="Warning"] progress { accent-color: #a34c17; }
+.capture-capacity[data-level="Critical"] progress { accent-color: #b02c33; }
+.capture-page { max-width: 36rem; margin: auto; padding: 1rem 1rem 3rem; }
+@media (max-width: 480px) {
+  .capture-list button { grid-template-columns: auto minmax(0, 1fr); }
+  .capture-list small { grid-column: 2; }
+}

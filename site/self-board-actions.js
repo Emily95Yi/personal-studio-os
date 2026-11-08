@@ -414,7 +414,7 @@ export function initBoardActions(app, render) {
     const fields = field('title', writing ? '文章标题' : '标题（可选）', item.title, 'autofocus maxlength="200"') +
       (writing ? field('summary', '摘要（可选）', item.summary) : '') +
       text('body', '正文 · Markdown', item.body, writing ? 14 : 7) +
-      (discover ? text('personalNotes', '我的笔记', item.personalNotes) : '') +
+      (discover || item.personalNotes != null ? text('personalNotes', '我的笔记', item.personalNotes) : '') +
       (writing ? select('publication', '发布状态', { unpublished: '未发布', published: '已发布' },
         isPublished(item) ? 'published' : 'unpublished') : '') +
       (section === 'reflections' && labels.length ? select('reflectionLabelId', '卡片颜色', reflectionLabelOptions(labels), item.reflectionLabelId) : '') +
@@ -435,6 +435,7 @@ export function initBoardActions(app, render) {
           if (creating) input.status = 'draft';
         }
         if (data.has('reflectionLabelId')) input.reflectionLabelId = data.get('reflectionLabelId');
+        if (data.has('personalNotes')) input.personalNotes = data.get('personalNotes');
         if (discover) {
           if (creating) {
             input.discoverCategory = chooseCategory ? data.get('discoverCategory').trim() : category;
@@ -445,7 +446,6 @@ export function initBoardActions(app, render) {
           }
           input.sourceInfo = data.get('sourceInfo').trim();
           input.sourceUrl = data.get('sourceUrl').trim();
-          input.personalNotes = data.get('personalNotes');
           input.assetIds = withAssets(state, data, attachments);
           if (input.sourceUrl !== (item.sourceUrl || '')) input.sourceType = sourceType(input.sourceUrl);
         }

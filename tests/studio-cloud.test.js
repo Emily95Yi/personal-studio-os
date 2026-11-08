@@ -9,20 +9,38 @@ import { studioExport } from '../site/studio-migration.js';
 
 test('private Studio sync migrates existing IDs and gives one device at a time permission to edit', async () => {
   const db = new DatabaseSync(':memory:');
-  db.exec(readFileSync(new URL('../migrations/0004_studio_cloud.sql', import.meta.url), 'utf8'));
+  for (const filename of ['0004_studio_cloud.sql', '0005_mobile_capture.sql']) {
+    db.exec(readFileSync(new URL('../migrations/' + filename, import.meta.url), 'utf8'));
+  }
+  const binding = {
+    prepare: sql => ({ bind: (...args) => ({
+      first: async () => db.prepare(sql).get(...args),
+      run: async () => db.prepare(sql).run(...args),
+      all: async () => ({ results: db.prepare(sql).all(...args) }),
+    }) }),
+    async batch(statements) {
+      db.exec('BEGIN');
+      try {
+        const result = [];
+        for (const statement of statements) result.push(await statement.all());
+        db.exec('COMMIT');
+        return result;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    },
+  };
   const objects = new Map();
   const origin = 'https://studio.example';
   const handler = createHandler(request => request.headers.get('X-Test-Owner'));
   const jobs = [];
   const env = {
     STUDIO_ORIGIN: origin, ACCESS_TEAM: 'studio.cloudflareaccess.com', ACCESS_AUD: 'test', ICAL_ENCRYPTION_KEY: 'test',
-    DB: { prepare: sql => ({ bind: (...args) => ({
-      first: async () => db.prepare(sql).get(...args),
-      run: async () => db.prepare(sql).run(...args),
-    }) }) },
+    DB: binding,
     STUDIO_CONTENT: {
       put: async (key, value) => objects.set(key, value),
-      get: async key => objects.has(key) ? { body: objects.get(key) } : null,
+      get: async key => objects.has(key) ? { json: async () => JSON.parse(objects.get(key)) } : null,
       delete: async key => objects.delete(key),
     },
   };

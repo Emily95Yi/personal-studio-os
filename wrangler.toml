@@ -7,6 +7,8 @@ keep_vars = true
 
 [vars]
 STUDIO_ORIGIN = "https://yistudio-private.cho-eki0915.workers.dev"
+# Enable only after configuring the exact /api/capture/mobile Access paths.
+# CAPTURE_MOBILE = "1"
 
 [assets]
 directory = "./site"

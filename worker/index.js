@@ -1,3 +1,6 @@
+import { authenticateCapture, captureApi } from './capture.js';
+import { cleanupUploads } from './capture-files.js';
+import { storageUsage } from './capture-storage.js';
 import { caldavEnabled, createCalDavService } from './caldav-sync.js';
 import { authenticate, isConfigured } from './auth.js';
 import { feedView, getSource, refreshDue, refreshSource, removeSource, saveSource } from './feed.js';
@@ -117,20 +120,37 @@ export function createHandler(authorize = authenticate, caldav = createCalDavSer
     const url = new URL(request.url);
     if (!isConfigured(env)) return json({ error: 'unavailable' }, 503);
     if (url.origin !== env.STUDIO_ORIGIN) return json({ error: 'forbidden' }, 403);
+    const path = url.pathname;
+    if (path === '/api/capture/mobile' || path.startsWith('/api/capture/mobile/')) {
+      try {
+        const device = await authenticateCapture(request, env);
+        if (!device) return json({ error: 'unauthorized' }, 401);
+        return await captureApi(request, env, ctx, device.owner, url, { body, json }, device);
+      } catch (error) {
+        return json({ error: error.captureCode ?? 'unavailable' }, error.status ?? 503);
+      }
+    }
     const owner = await authorize(request, env);
     if (!owner) return json({ error: 'unauthorized' }, 401);
 
-    if (!url.pathname.startsWith('/api/')) {
+    if (!path.startsWith('/api/')) {
       const asset = await env.ASSETS.fetch(request);
       const headers = new Headers(asset.headers);
       for (const [name, value] of Object.entries(privateHeaders)) headers.set(name, value);
       return new Response(asset.body, { status: asset.status, headers });
     }
-    if (request.headers.get('X-Studio-Request') !== '1' ||
+    const captureDownload = request.method === 'GET' && /^\/api\/capture\/items\/[0-9a-f-]{36}\/attachment$/.test(path);
+    if ((!captureDownload && request.headers.get('X-Studio-Request') !== '1') ||
         (request.method !== 'GET' && request.headers.get('Origin') !== env.STUDIO_ORIGIN)) {
       return json({ error: 'forbidden' }, 403);
     }
     try {
+      if (path === '/api/capture' || path.startsWith('/api/capture/')) {
+        return await captureApi(request, env, ctx, owner, url, { body, json });
+      }
+      if (path === '/api/storage' && ['GET', 'POST'].includes(request.method)) {
+        return json(await storageUsage(env, request.method === 'POST'));
+      }
       if (url.pathname === '/api/studio' || url.pathname === '/api/studio/lease') {
         return await studioCloudApi(request, env, ctx, owner, url, { body, json });
       }
@@ -139,8 +159,8 @@ export function createHandler(authorize = authenticate, caldav = createCalDavSer
         return await caldavApi(request, env, ctx, owner, url.pathname, caldav);
       }
       return await calendar(request, env, ctx, owner, url.pathname);
-    } catch {
-      return json({ error: 'unavailable' }, 503);
+    } catch (error) {
+      return json({ error: error.captureCode ?? 'unavailable' }, error.status ?? 503);
     }
   };
 }
@@ -150,5 +170,6 @@ export default {
   fetch: createHandler(authenticate, caldavService),
   scheduled(_controller, env, ctx) {
     if (caldavEnabled(env)) syncLater(ctx, caldavService.drain(env));
+    syncLater(ctx, cleanupUploads(env));
   },
 };

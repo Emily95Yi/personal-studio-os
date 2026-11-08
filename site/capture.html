@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8fbff">
+  <title>存入奕 Studio</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./capture-page.js"></script>
+</head>
+<body>
+  <main class="capture-page">
+    <p><a href="/#/self-board">返回 Self-Board</a></p>
+    <h1>存入奕 Studio</h1>
+    <form class="capture-form">
+      <label>内容类型<select name="type"><option value="url">网址</option><option value="text">文字</option>
+        <option value="attachment">照片、PDF 或文件</option></select></label>
+      <label data-url>原始网址<input type="url" name="sourceUrl" maxlength="4096" placeholder="https://"></label>
+      <label data-text hidden>原文<textarea name="originalText" maxlength="40000" rows="6"></textarea></label>
+      <label data-file hidden>选择附件<input type="file" name="file"></label>
+      <label>保存方式<select name="mode"><option value="quick">快速保存到 Inbox</option>
+        <option value="organize">选择分类</option></select></label>
+      <div class="capture-target" data-capture-target hidden>
+        <label>模块<select aria-label="模块"></select></label>
+        <label>分组<select aria-label="分组"></select></label>
+        <label>分类<select name="target" aria-label="分类"></select></label>
+      </div>
+      <label data-note hidden>我的备注（可选）<textarea name="userNote" maxlength="12000" rows="3"></textarea></label>
+      <div class="capture-controls">
+        <button class="action-button">保存</button>
+        <button type="button" class="action-button secondary" data-cancel hidden>取消上传</button>
+      </div>
+      <progress value="0" max="1" aria-label="上传进度" hidden></progress>
+      <p role="status" data-notice></p>
+    </form>
+  </main>
+</body>
+</html>

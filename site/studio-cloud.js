@@ -1,4 +1,5 @@
-import { collections, studioStore } from './studio-data.js';
+import { ensureCaptureTopic } from './capture-topic.js';
+import { collections, emptyStudio, studioStore } from './studio-data.js';
 import { studioExport } from './studio-migration.js';
 
 export const studioSync = { mode: 'loading', migration: false, message: '' };
@@ -43,7 +44,11 @@ async function fetchSnapshot() {
   if (!Number.isSafeInteger(next) || next < 0 || (next > 0 && !snapshot)) throw new Error('云端内容读取失败。');
   revision = next;
   studioSync.migration = next === 0 && Boolean(localTransfer);
-  if (!studioSync.migration) studioStore.receiveCloud(snapshot, next);
+  if (!studioSync.migration) {
+    const state = snapshot ?? emptyStudio();
+    ensureCaptureTopic(state);
+    studioStore.receiveCloud(state, next);
+  }
   return true;
 }
 
