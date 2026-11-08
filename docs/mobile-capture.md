@@ -56,7 +56,22 @@ D1 从 Worker 绑定返回的 `meta.size_after` 读取当前数据库字节数�
 
 ## iPhone 配置模板
 
-交付形式为可复现的 Shortcuts 动作配置。可在一台手机先制作空凭证模板，再分享模板到另一台。两台手机各自在 Safari 登录同一个 Studio 账户，打开 Self-board → Settings → Capture Devices。分别创建 iPhone A 和 iPhone B，复制当次显示的凭证到各自快捷指令。凭证有效期 180 天。换机或轮换时签发新的凭证，替换手机中的值后撤销旧设备。分享模板之前清除凭证变量。手机的 Apple ID 可以不同。
+### 安装已签名的快捷指令
+
+1. 部署手机接口后，两台手机各自在 Safari 登录同一个 Studio 账户，打开 Self-board → Settings → Capture Devices。分别创建 iPhone A 和 iPhone B，并在各自设备上复制当次显示的凭证。
+2. 将 [存入奕 Studio.shortcut](../deliverables/存入奕%20Studio.shortcut) 通过 AirDrop 或「文件」App 发到两台手机。在 iPhone 上点开文件，添加快捷指令，并在导入设置中粘贴本机凭证。若未出现设置问题，编辑快捷指令顶部的「文本」动作并替换占位文字。
+3. 模板已配置在共享表单中显示。如分享菜单里没有该入口，检查快捷指令详情中的「在共享表单中显示」。在 Safari 分享一个网址，选择「快速保存 · Inbox」，然后回 Self-board 核对。也可以直接在「快捷指令」App 中运行，测试手动输入或剪贴板。
+
+同一份已签名模板可发给不同 Apple ID 的设备。凭证有效期 180 天。换机或轮换时签发新凭证，替换手机中的值后撤销旧设备。分享时使用未填凭证的安装文件。
+
+如需重新生成，在 macOS 运行以下命令。签名时 Apple 会验证这份未填写凭证的模板。[Apple 快捷指令签名说明](https://support.apple.com/guide/shortcuts-mac/run-shortcuts-from-the-command-line-apd455c82f02/mac)
+
+```sh
+python3 scripts/build-capture-shortcut.py "/tmp/存入奕 Studio.shortcut"
+shortcuts sign --mode anyone --input "/tmp/存入奕 Studio.shortcut" --output "/tmp/存入奕 Studio 已签名.shortcut"
+```
+
+以下是需要自行调整或重建动作时的手动配置参考。
 
 ### 主流程
 
