@@ -154,8 +154,9 @@ export const targetFields = '<div class="capture-target" data-capture-target>' +
 
 export function attachmentView(id, name = '下载原始附件', image = false) {
   const path = '/api/capture/items/' + encodeURIComponent(id) + '/attachment';
-  return '<div class="capture-attachment">' + (image ? '<img alt="" loading="lazy" src="' + path + '?preview">' : '') +
-    '<a href="' + path + '">' + esc(name) + '</a></div>';
+  const link = image ? '<a class="capture-thumbnail" href="' + path + '" aria-label="' + esc(name) + '" title="' + esc(name) +
+    '"><img alt="图片缩略图" loading="lazy" src="' + path + '?preview"></a>' : '<a href="' + path + '">' + esc(name) + '</a>';
+  return '<div class="capture-attachment">' + link + '</div>';
 }
 
 export function storedCaptureAttachment(row) {

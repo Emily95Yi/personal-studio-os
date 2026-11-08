@@ -2,7 +2,7 @@ import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
 import { api, attachmentView, captureTypes, installInboxTargets, installSegments, segmentRow, targetFields } from './capture-client.js';
 import { boardContentHref, collectionItemAddress, explorationAddress, inboxAddress } from './pages.js';
-import { studioStore } from './studio-data.js';
+import { imageTypes, studioStore } from './studio-data.js';
 
 const timeFormat = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Tokyo', dateStyle: 'short', timeStyle: 'short' });
 const time = value => value && Number.isFinite(+new Date(value)) ? timeFormat.format(new Date(value)) : '—';
@@ -81,9 +81,8 @@ async function mountDetail(app, route, changed) {
       '</form><div class="capture-details"><p class="work-meta">' + captureTypes[row.type] + ' · ' + esc(time(row.capturedAt)) +
       (row.device ? ' · ' + esc(row.device) : '') + '</p>' +
       (row.sourceUrl ? '<p><a target="_blank" rel="noreferrer" href="' + esc(row.sourceUrl) + '">' + esc(row.sourceUrl) + '</a></p>' : '') +
-      (row.metadata.description ? '<p>' + esc(row.metadata.description) + '</p>' : '') +
-      (row.attachment ? attachmentView(id, row.attachment.filename + ' · ' + bytes(row.attachment.size),
-        /^(image\/(png|jpeg|gif|webp|avif))$/.test(row.attachment.mime)) : '') +
+      (row.attachment ? attachmentView(id, row.type === 'image' ? '下载原图' :
+        row.attachment.filename + ' · ' + bytes(row.attachment.size), imageTypes.includes(row.attachment.mime)) : '') +
       (link ? '<p><a href="' + esc(link) + '">在原模块查看和编辑</a></p>' : '') + '</div>';
     const form = panel.querySelector('form');
     installInboxTargets(form.querySelector('[data-capture-target]'), options.modules, row.target);

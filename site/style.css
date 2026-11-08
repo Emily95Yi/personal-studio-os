@@ -876,7 +876,8 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .capture-folder { max-width: 18rem; }
 .capture-segments > button, .capture-folder select { font-size: 12px; }
 .capture-folder select { width: auto; max-width: 100%; min-height: 36px; }
-.capture-folder select, #capture-detail-form :is([name=title], textarea) { border: 0; background: transparent; }
+.capture-folder select { border: 0; background: transparent; }
+#capture-detail-form :is([name=title], textarea) { border: 0; background: var(--surface); }
 #capture-detail-form textarea:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; }
 @media (prefers-reduced-motion: reduce) {
   .capture-segments::before { transition: none; }
@@ -884,7 +885,8 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .capture-details { margin-block: .9rem; }
 .capture-details p + p { margin-top: .4rem; }
 .capture-attachment { margin-block: .75rem; }
-.capture-attachment img { display: block; max-width: 100%; max-height: 240px; object-fit: contain; }
+.capture-thumbnail { display: inline-block; max-width: 100%; border-radius: 6px; }
+.capture-thumbnail img { display: block; width: 180px; max-width: 100%; max-height: 132px; object-fit: contain; }
 .capture-capacity { margin-block: 1rem; }
 .capture-capacity h4, .capture-capacity p { margin-block: .25rem; }
 .capture-capacity progress, .capture-page progress { width: 100%; accent-color: #5077a0; }
