@@ -826,17 +826,21 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
   .library-card:hover { transform: none; }
 }
 
-.capture-inbox { margin-block: 0 1rem; }
-.capture-inbox > summary { cursor: pointer; padding-block: .25rem; }
+.capture-inbox { position: relative; margin-block: 0 1rem; }
+.capture-inbox summary { cursor: pointer; padding: .55rem 3rem .55rem 0; font-weight: 600; }
+.capture-inbox-all {
+  position: absolute; inset-block-start: 0; inset-inline-end: 0;
+  width: 38px; height: 38px; border: 0; background: transparent; cursor: pointer;
+}
 .capture-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-block: .5rem; }
 .capture-list li { display: flex; align-items: center; gap: .5rem; }
 .capture-list button {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .55rem;
   flex: 1; min-width: 0; padding: .5rem .35rem; border: 0; background: transparent;
-  color: inherit; text-align: start; font: inherit; cursor: pointer; min-height: 40px;
+  color: inherit; text-align: start; font: inherit; font-size: 13px; cursor: pointer; min-height: 38px;
 }
 .capture-list button:hover { background: #edf4fb; border-radius: .45rem; }
-.capture-list strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.capture-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .capture-list small, .capture-capacity small { color: #526277; }
 .capture-filters, .capture-target {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));

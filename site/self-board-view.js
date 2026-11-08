@@ -380,8 +380,7 @@ export function boardView(route) {
     const rows = view === 'inbox' ? items.filter(row => row.status === 'inbox') :
       view === 'archived' ? boardRecords(state(), true).filter(row => row.status === 'archived') : items.slice(0, 5);
     content = (archiveViews[view] ? '<div class="sb-list-heading"><h3>' + archiveViews[view] + '</h3></div>' : '') +
-      (view === 'recent' ? inboxView() + '<div class="sb-auto" data-week-preview>' + weekPreview() + '</div>' +
-        (!requested ? overviewNavigation() : '') : '') +
+      (view === 'recent' ? inboxView() + '<div class="sb-auto" data-week-preview>' + weekPreview() + '</div>' : '') +
       (rows.length ? rowList(rows) : '');
   } else if (section === 'writing') {
     const rows = items.filter(item => boardSection(item) === section &&
@@ -420,7 +419,8 @@ export function boardView(route) {
       searchForm(params.get('q') || '') +
       '<div data-sb-results aria-live="polite">' + boardResults(route) + '</div>';
   }
-  return '<section class="sb" data-sb><section class="sb-content">' + content + '</section></section>';
+  const navigation = !section && !params.get('view') ? overviewNavigation() : '';
+  return '<section class="sb" data-sb>' + navigation + '<section class="sb-content">' + content + '</section></section>';
 }
 
 function boardRelations(item, ownerType = 'discover') {

@@ -48,10 +48,8 @@ function calendarGrid(date, mode, from, preview = false) {
 
 export function weekPreview() {
   const date = todayDate();
-  const days = calendarDays(date, 'week');
-  const dayLabel = day => (day.getUTCMonth() + 1) + '月' + day.getUTCDate() + '日';
   return '<section class="widget widget-week" aria-labelledby="week-preview-title"><div class="section-heading">' +
-    '<div><h2 id="week-preview-title">本周日历</h2><p>' + dayLabel(days[0]) + ' – ' + dayLabel(days.at(-1)) + '</p></div>' +
+    '<h2 id="week-preview-title">' + (date.getUTCMonth() + 1) + '月</h2>' +
     '<a class="header-icon" href="' + escapeHtml(calendarHref(date, 'week', 'self-board')) +
     '" aria-label="打开日历" title="打开日历">' + icon('calendar', 19) + '</a></div>' +
     calendarGrid(date, 'week', 'self-board', true) + '</section>';

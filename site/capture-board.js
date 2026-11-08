@@ -1,4 +1,5 @@
 import { escapeHtml as esc } from './html.js';
+import { icon } from './icons.js';
 import { api, attachmentView, captureMessage, captureTypes, installTargets, targetFields } from './capture-client.js';
 import { boardContentHref, collectionItemAddress, explorationAddress } from './pages.js';
 import { studioStore } from './studio-data.js';
@@ -21,14 +22,15 @@ const filters = '<form class="capture-filters" data-capture-filters>' +
   '</select><button class="action-button secondary">筛选</button></form>';
 
 export function inboxView() {
-  return '<details open class="sb-settings capture-inbox" data-capture-inbox><summary><strong>Inbox</strong> ' +
-    '<span class="work-meta" data-capture-count></span></summary><div data-capture-recent aria-live="polite"></div>' +
-    '<div class="capture-controls">' + button('查看全部', 'data-capture-all') +
-    '<a class="action-button secondary" href="/capture.html">添加收藏</a></div></details>';
+  return '<section class="capture-inbox" data-capture-inbox aria-label="Inbox">' +
+    '<details open><summary>Inbox</summary><div data-capture-recent aria-live="polite"></div></details>' +
+    '<button type="button" class="header-icon capture-inbox-all" data-capture-all aria-label="查看全部收藏" title="查看全部收藏">' +
+    icon('arrow', 17) + '</button></section>';
 }
 
 export function captureSettingsView() {
   return '<section class="sb-settings" data-capture-devices><h3>Capture Devices</h3>' +
+    '<p class="work-meta">每台 iPhone 分别生成一份快捷指令凭证。凭证仅在创建后显示，可在这里单独撤销。</p>' +
     '<form class="capture-controls"><input required maxlength="80" name="name" aria-label="设备名称" placeholder="设备名称，例如 iPhone A">' +
     '<button class="action-button secondary">新增设备授权</button></form><div aria-live="polite" data-devices-result></div>' +
     '<div data-devices-list></div></section>' +
@@ -52,7 +54,7 @@ function list(rows, batch = false) {
   return rows.length ? '<ul class="sb-rows capture-list">' + rows.map(row => '<li>' +
     (batch ? '<input type="checkbox" name="selected" value="' + esc(row.id) + '" aria-label="选择 ' + esc(row.title) + '">' : '') +
     '<button type="button" data-capture-detail="' + esc(row.id) + '"><span aria-hidden="true">' +
-    captureTypes[row.type].split(' ')[0] + '</span><strong>' + esc(row.title || row.originalText?.slice(0, 80) || '未命名收藏') + '</strong>' +
+    captureTypes[row.type].split(' ')[0] + '</span><span class="capture-title">' + esc(row.title || row.originalText?.slice(0, 80) || '未命名收藏') + '</span>' +
     '<small>' + esc(time(row.capturedAt)) + '</small></button></li>').join('') + '</ul>' :
     '<p class="work-meta">这里还没有收藏。</p>';
 }
@@ -283,15 +285,15 @@ export function mountCaptureBoard(app, changed) {
   mountSettings(app);
   const inbox = app.querySelector('[data-capture-inbox]');
   if (!inbox) return;
+  const details = inbox.querySelector('details');
   const recent = inbox.querySelector('[data-capture-recent]');
   let query = 0;
   async function load() {
     const index = ++query;
     try {
-      const { items, inboxCount } = await api('/items?limit=4');
+      const { items } = await api('/items?limit=4');
       if (index !== query) return;
       recent.innerHTML = list(items);
-      inbox.querySelector('[data-capture-count]').textContent = inboxCount + ' 条待整理';
     } catch (error) {
       if (index === query) status(recent, error);
     }
@@ -302,7 +304,7 @@ export function mountCaptureBoard(app, changed) {
     if (row) void openDetail(app, row.dataset.captureDetail, reload);
   };
   inbox.querySelector('[data-capture-all]').onclick = () => openAll(app, reload);
-  inbox.ontoggle = () => { if (inbox.open) void load(); };
+  details.ontoggle = () => { if (details.open) void load(); };
   void load();
   return load;
 }
