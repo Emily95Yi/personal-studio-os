@@ -73,6 +73,10 @@ export const autoSourceAddress = id => href('self-board', 'auto') + '?' + new UR
 export const boardContentHref = id => href('self-board', 'content', id);
 export const explorationAddress = id => id ? href('self-board', 'explorations', id) : boardHref('discover') + '?tab=explorations';
 export const collectionItemAddress = id => href('self-board', 'collections', id);
+export function inboxAddress(id, params) {
+  const query = params?.toString();
+  return href('self-board', 'inbox', ...(id ? [id] : [])) + (query ? '?' + query : '');
+}
 export function collectionsAddress({ category = 'all', folder = '' } = {}) {
   const query = new URLSearchParams();
   if (category !== 'all') query.set('category', category || 'inbox');
@@ -96,6 +100,11 @@ function boardRoute(workspace, section, id, params) {
   const base = { workspaceId: 'self-board', workspace, section, params };
   if (!section) {
     return params.get('view') === 'trash' ? { redirect: boardSettingsAddress('', 'trash') } : { ...base, type: 'board' };
+  }
+  if (section === 'inbox') {
+    const parent = id ? inboxAddress(undefined, params) : boardHref();
+    return { ...base, type: 'capture', captureId: id, parent, parentLabel: id ? 'Inbox' : 'Self-Board',
+      recordTitle: id ? '收藏详情' : 'Inbox' };
   }
   if (section === 'search' && !id) return { ...base, type: 'board', view: section };
   if (section === 'settings' && !id) {

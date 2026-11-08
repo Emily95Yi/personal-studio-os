@@ -4,6 +4,7 @@ export const captureTypes = { url: '🔗 链接', text: '▤ 文字', image: '�
 const errors = {
   unauthorized: '请登录 Studio 或检查设备授权。',
   unavailable: '暂时无法连接 Studio，请稍后重试。',
+  not_found: '这条收藏已不存在。',
   invalid_target: '分类已改变，请刷新后重新选择。',
   invalid_content: '请输入有效的文字或网址。',
   invalid_url: '请输入有效的 HTTP 或 HTTPS 网址。',
@@ -42,41 +43,58 @@ export async function api(path = '', { method = 'GET', value, data, signal } = {
 }
 
 export function installTargets(container, modules, selected = '') {
-  const selects = Array.from(container.querySelectorAll('select'));
-  const [module, group, target] = selects;
-  const available = modules.filter(row => row.groups.some(group => group.options.length));
+  const module = container.querySelector('[data-capture-module]');
+  const slider = container.querySelector('[data-capture-modules]');
+  const [group, target] = container.querySelectorAll('select:not([data-capture-module])');
+  const available = modules.map(row => row.groups.some(group => group.options.length));
   const options = (select, rows, empty) => {
     select.replaceChildren(new Option(empty, ''), ...rows.map(([key, label]) => new Option(label, key)));
     select.disabled = rows.length === 0;
   };
+  let activeModule = -1;
   const updateTarget = () => {
-    const groups = available[Number(module.value)]?.groups ?? [];
-    const rows = module.value && group.value ? groups[Number(group.value)]?.options ?? [] : [];
+    const rows = group.value ? modules[activeModule]?.groups[Number(group.value)]?.options ?? [] : [];
     options(target, rows.map(row => [row.target, row.label]), '选择分类');
   };
-  const updateGroup = () => {
-    const groups = module.value ? available[Number(module.value)]?.groups ?? [] : [];
+  const selectModule = index => {
+    activeModule = index;
+    if (module) module.value = index < 0 ? '' : String(index);
+    slider?.querySelectorAll('button').forEach((button, i) => button.setAttribute('aria-pressed', String(i === index)));
+    const groups = modules[index]?.groups ?? [];
     options(group, groups.flatMap((row, i) => row.options.length ? [[String(i), row.label]] : []), '选择分组');
     if (group.options.length === 2) group.selectedIndex = 1;
     updateTarget();
   };
-  options(module, available.map((row, i) => [String(i), row.label]), '选择模块');
-  module.onchange = updateGroup;
+  if (module) {
+    options(module, modules.flatMap((row, i) => available[i] ? [[String(i), row.label]] : []), '选择模块');
+    module.onchange = () => selectModule(module.value ? Number(module.value) : -1);
+  }
+  if (slider) {
+    slider.replaceChildren(...modules.map((row, i) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = row.label;
+      button.disabled = !available[i];
+      button.onclick = () => selectModule(activeModule === i ? -1 : i);
+      return button;
+    }));
+  }
   group.onchange = updateTarget;
-  updateGroup();
-  for (const [i, row] of available.entries()) {
+  selectModule(-1);
+  for (const [i, row] of modules.entries()) {
     const j = row.groups.findIndex(group => group.options.some(option => option.target === selected));
     if (j < 0) continue;
-    module.value = String(i);
-    updateGroup();
+    selectModule(i);
     group.value = String(j);
     updateTarget();
     target.value = selected;
+    break;
   }
 }
 
 export const targetFields = '<div class="capture-target" data-capture-target>' +
-  '<label>模块<select aria-label="模块"></select></label>' +
+  '<div class="capture-module-field"><span>模块</span>' +
+  '<div class="segmented sb-module-tabs capture-modules" data-capture-modules role="group" aria-label="模块"></div></div>' +
   '<label>分组<select aria-label="分组"></select></label>' +
   '<label>分类<select name="target" aria-label="分类"></select></label></div>';
 

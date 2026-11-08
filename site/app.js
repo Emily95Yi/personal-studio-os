@@ -1,4 +1,4 @@
-import { mountCaptureBoard } from './capture-board.js';
+import { captureActions, captureView, mountCaptureBoard } from './capture-board.js';
 import { boardContentHref, boardHref, boardSections, boardSettingsAddress, href, publicHref, readRoute } from './pages.js';
 import {
   collectionView, landing, missingView, publicView, searchView, workspaceOverview,
@@ -72,7 +72,7 @@ function pageContext(route) {
   if (route.projectPath) ancestors.push([href(...route.projectPath), route.projectLabel]);
   if (route.brand) ancestors.push([publicHref(route.brandId), route.brand.label]);
 
-  if (route.type === 'board' || route.type === 'content-detail') {
+  if (['board', 'content-detail', 'capture'].includes(route.type)) {
     if (route.type === 'board' && !route.section && !route.params.has('view')) ancestors.pop();
     const title = route.entity ? contentTitle(route.record) : boardSections[route.section]?.label;
     return { title: route.recordTitle ?? title ?? route.workspace.label, ancestors };
@@ -104,6 +104,10 @@ function header(route, { title, ancestors }) {
     (boardTitle ? boardTitleMenu(section, boardTitle, article) : '<h1>' + escapeHtml(title) + calendarYear + '</h1>');
   if (inBoard && route.section === 'settings') {
     return '<header class="studio-top"><div class="masthead sb-masthead">' + start + '</div></header>';
+  }
+  if (route.type === 'capture') {
+    return '<header class="studio-top"><div class="masthead sb-masthead">' + start +
+      (route.captureId ? captureActions() : '') + '</div></header>';
   }
   const calendar = route.type === 'auto-plan' ? '<a class="header-icon" href="' +
     escapeHtml(calendarHref(todayDate(), 'week', 'auto')) +
@@ -150,6 +154,7 @@ const views = {
   overview: workspaceOverview,
   'workshop-gallery': workshopGallery,
   board: boardView,
+  capture: captureView,
   'content-detail': boardDetail,
   'auto-plan': autoPlanView,
   calendar: calendarView,
@@ -199,7 +204,7 @@ function render({ focus = false } = {}) {
   }
   mountBoardEditor?.(route);
   mountLibrary?.(route);
-  refreshInbox = mountCaptureBoard(app, pollStudioContent);
+  refreshInbox = mountCaptureBoard(app, route, refreshStudioSync);
   if (route.entity === 'topic' && route.params.has('entry')) {
     const id = route.params.get('entry');
     const entry = [...app.querySelectorAll('[data-entry]')].find(node => node.dataset.entry === id);
@@ -484,7 +489,7 @@ onPrivateChange(() => {
   const status = app.querySelector('[data-private-status]');
   if (status) status.innerHTML = statusBanner();
   if ((modeChanged && route.workspaceId !== 'workshop' &&
-      !['board', 'content-detail'].includes(route.type)) ||
+      !['board', 'content-detail', 'capture'].includes(route.type)) ||
       (route.type === 'settings' && setupChanged)) {
     render();
     return;
@@ -552,7 +557,9 @@ window.addEventListener('hashchange', async () => {
 });
 async function pollStudioContent() {
   if (document.visibilityState !== 'visible' || app.querySelector('dialog[open]')) return;
-  if (await refreshStudioSync() && !app.querySelector('dialog[open]')) render();
+  const changed = await refreshStudioSync();
+  if (readRoute(location.hash).type === 'capture') return;
+  if (changed && !app.querySelector('dialog[open]')) render();
   else void refreshInbox?.();
 }
 window.addEventListener('focus', pollStudioContent);

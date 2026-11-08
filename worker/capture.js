@@ -137,7 +137,7 @@ async function mutate(env, owner, rows, change) {
       if (Object.hasOwn(change, key)) fields[key] = text(change[key], limit);
     }
     if (!row.native_collection && change.status !== 'deleted' &&
-        (!fields.title || (row.type === 'text' && !fields.originalText))) throw captureError('invalid_content');
+        !fields.title) throw captureError('invalid_content');
     if (!fields.title) fields.title = fields.originalText?.slice(0, 80) || '未命名收藏';
     const status = change.target ? 'organized' : change.status ?? row.status;
     let target = row.target;

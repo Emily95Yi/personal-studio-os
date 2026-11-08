@@ -96,6 +96,10 @@ assert.equal(edited.originalText, '从原编辑器修改');
 await cap('/items/' + edited.id, { method: 'PATCH', value: { version: edited.version, target: folder } });
 assert.equal((await cap('/items/' + edited.id)).nativeCollection, 'collectionItems');
 const bulk = await Promise.all(['手动文字一', '手动文字二'].map(originalText => create({ type: 'text', originalText })));
+const titleOnly = await cap('/items/' + bulk[0].id, { method: 'PATCH',
+  value: { version: 0, title: '仅标题的收藏', originalText: '', userNote: '' } });
+assert.equal(titleOnly.title, '仅标题的收藏');
+assert.equal(titleOnly.originalText, '');
 await cap('/items/batch', { method: 'PATCH', value: { ids: bulk.map(row => row.id), target: topic.target } });
 const saved = await cap('/items/' + first.id);
 await cap('/items/' + first.id, { method: 'PATCH', value: { version: saved.version, status: 'archived' } });

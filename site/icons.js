@@ -31,6 +31,7 @@ const paths = {
   folderAdd: '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2ZM12 10v6m-3-3h6"/>',
   file: '<path d="M6 3h8l4 4v14H6Zm8 0v5h4M9 12h6m-6 4h6"/>',
   fileAdd: '<path d="M6 3h8l4 4v14H6Zm8 0v5h4M12 11v6m-3-3h6"/>',
+  check: '<path d="m5 12 4 4L19 6"/>',
   published: '<circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.4 2.4 4.7-4.7"/>',
   unpublished: '<circle cx="12" cy="12" r="8"/><path d="M9 12h6"/>',
   arrow: '<path d="M4 12h15m-5-5 5 5-5 5"/>',
