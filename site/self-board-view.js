@@ -176,7 +176,7 @@ function orderControls() {
 function boardSettings() {
   const labels = state().reflectionLabels ?? [];
   return '<section class="sb-settings"><div class="sb-list-heading"><h3>Reflections 标签</h3>' +
-    boardIcon('新建标签', 'add', { data: 'data-sb-label' }) + '</div>' +
+    boardIcon('新建标签', 'add', { data: 'data-sb-label', className: 'sb-icon-plain library-icon' }) + '</div>' +
     (labels.length ? '<ul class="sb-rows sb-settings-grid">' + labels.map(label => '<li class="sb-setting-label"><span class="sb-swatch" data-sb-color="' +
       esc(label.color) + '"></span><span>' + esc(label.name) + '</span><div class="sb-view-actions">' +
       boardIcon('编辑标签 ' + label.name, 'edit', { data: 'data-sb-label="' + esc(label.id) + '"', className: 'sb-icon-plain' }) +
