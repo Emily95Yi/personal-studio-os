@@ -159,11 +159,12 @@ function validateLibrary(state) {
   }
   const entryTypeNames = new Set();
   const entryTypeIds = new Set();
-  for (const row of explorationTypes(state)) {
+  for (const row of explorationTypes(state, { includeRetired: true })) {
     title(row, 40);
     const name = row.title.trim().toLowerCase();
-    require(has(reflectionColors, row.color) && !entryTypeNames.has(name), '探索条目类型缺少有效颜色或名称重复：' + row.title);
-    entryTypeNames.add(name);
+    require(has(reflectionColors, row.color) && (row.retired == null || typeof row.retired === 'boolean') &&
+      (row.retired || !entryTypeNames.has(name)), '探索条目类型缺少有效颜色或名称重复：' + row.title);
+    if (!row.retired) entryTypeNames.add(name);
     entryTypeIds.add(row.id);
   }
   for (const row of state.explorationEntries) {

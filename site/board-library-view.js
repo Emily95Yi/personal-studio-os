@@ -80,12 +80,14 @@ function readerHeader(record) {
 
 export function topicDetail(topic, relations, editing = false) {
   const entries = entriesFor(state(), topic.id);
-  const types = new Map(explorationTypes(state()).map(row => [row.id, row]));
+  const allTypes = explorationTypes(state(), { includeRetired: true });
+  const types = new Map(allTypes.map(row => [row.id, row]));
+  const canAddEntry = allTypes.some(row => !row.retired);
   const address = explorationAddress(topic.id);
   const modeLabel = editing ? '完成编辑' : '编辑主题';
   const mode = '<a class="sb-icon sb-icon-plain library-icon" href="' + esc(address + (editing ? '' : '?edit=1')) +
     '" aria-label="' + modeLabel + '" title="' + modeLabel + '">' + icon(editing ? 'published' : 'edit', 16) + '</a>';
-  const actions = iconButton('新建条目', 'entry', '', 'add') + mode +
+  const actions = iconButton(canAddEntry ? '新建条目' : '请先在设置中新建条目类型', 'entry', '', 'add', !canAddEntry) + mode +
     (editing ? iconButton('编辑主题资料', 'topic', topic.id, 'file') : '') +
     iconButton('移到回收站', 'delete-topic', topic.id, 'trash');
   const created = topic.createdAt ? '<time class="work-meta" datetime="' + esc(topic.createdAt) + '">' +
@@ -111,13 +113,16 @@ export function topicDetail(topic, relations, editing = false) {
     }).join('') + '</ol></section>' : '') + relations + '</article>';
 }
 
-export function explorationTypeSettings() {
+export function explorationTypeSettings(editing) {
+  const types = explorationTypes(state());
   return '<section class="sb-settings"><div class="sb-list-heading"><h3>Personal Explorations 类型</h3>' +
-    iconButton('新建条目类型', 'entry-type', '', 'add') + '</div><ul class="sb-rows sb-settings-grid">' +
-    explorationTypes(state()).map(row => '<li class="sb-setting-label"><span class="sb-swatch" data-sb-color="' +
-      esc(row.color) + '" aria-hidden="true"></span><span>' + esc(row.title) + '</span><div class="sb-view-actions">' +
-      iconButton('编辑条目类型 ' + row.title, 'entry-type', row.id, 'edit') + '</div></li>').join('') +
-    '</ul></section>';
+    (editing ? iconButton('新建条目类型', 'entry-type', '', 'add') : '') + '</div>' +
+    (types.length ? '<ul class="sb-rows sb-settings-grid">' + types.map(row =>
+      '<li class="sb-setting-label"><span class="sb-swatch" data-sb-color="' +
+      esc(row.color) + '" aria-hidden="true"></span><span>' + esc(row.title) + '</span>' +
+      (editing ? '<div class="sb-view-actions">' + iconButton('编辑条目类型 ' + row.title, 'entry-type', row.id, 'edit') +
+        iconButton('删除条目类型 ' + row.title, 'delete-entry-type', row.id, 'trash') + '</div>' : '') + '</li>').join('') +
+      '</ul>' : '<p class="work-meta">暂无条目类型。</p>') + '</section>';
 }
 
 export function collectionLocation(route) {

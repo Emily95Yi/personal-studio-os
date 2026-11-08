@@ -858,11 +858,6 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .capture-device-form { display: flex; align-items: center; gap: .5rem; }
 .capture-device-form input[name=name] { flex: 1; min-width: 0; min-height: 36px; border: 0; font-size: 13px; }
 .capture-device-form button { width: 36px; height: 36px; }
-.capture-storage-refresh {
-  border: 0; padding: 4px 0; background: transparent; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer;
-}
-.capture-storage-refresh:hover { text-decoration: underline; }
-.capture-storage-refresh:disabled { opacity: .45; cursor: default; }
 .capture-form [hidden] { display: none; }
 .capture-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .capture-surface { overflow-wrap: anywhere; }

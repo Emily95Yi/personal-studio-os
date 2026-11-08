@@ -178,10 +178,10 @@ export function saveExplorationTopic(state, input) {
   return saveRecord(rows, { id, title, description: clean(description), tags: distinct(tags), coverUrl: coverField(coverUrl), icon: clean(icon) });
 }
 
-export function explorationTypes(state) {
+export function explorationTypes(state, { includeRetired = false } = {}) {
   const rows = new Map(defaultEntryTypes.map(row => [row.id, row]));
   for (const row of list(state, 'explorationEntryTypes')) rows.set(row.id, row);
-  return [...rows.values()];
+  return [...rows.values()].filter(row => includeRetired || !row.retired);
 }
 
 export function explorationEntryTitle(entry) {
@@ -204,6 +204,15 @@ export function saveExplorationType(state, { id, title, color }) {
   return record;
 }
 
+export function retireExplorationType(state, id) {
+  const type = find(explorationTypes(state), id);
+  if (!type) fail('该条目类型已不可用。');
+  state.explorationEntryTypes = [
+    ...list(state, 'explorationEntryTypes').filter(row => row.id !== id),
+    { ...type, retired: true },
+  ];
+}
+
 export function entriesFor(state, topicId) {
   return list(state, 'explorationEntries').filter(row => row.topicId === topicId).sort(byOrder);
 }
@@ -218,7 +227,7 @@ export function saveExplorationEntry(state, topicId, input) {
   const previous = input.id && find(rows, input.id);
   if (!topic || topic.deletedAt || (input.id && previous?.topicId !== topicId)) fail('探索条目已不可用。');
   const { id, type, title = '', body = '', url = '', reference = null } = input;
-  if (!find(explorationTypes(state), type) || clean(title).length > 200 ||
+  if (!find(explorationTypes(state, { includeRetired: true }), type) || clean(title).length > 200 ||
       (type === 'reference' && reference && (!validEntryTarget(state, topicId, reference) ||
         (objectFor(state, reference.type, reference.id).deletedAt &&
         (previous?.reference?.type !== reference.type || previous.reference.id !== reference.id))))) {

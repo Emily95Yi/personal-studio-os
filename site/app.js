@@ -103,10 +103,14 @@ function header(route, { title, ancestors }) {
     '" title="' + escapeHtml(backLabel) + '">' + icon('back', 19) + '</a>' +
     (boardTitle ? boardTitleMenu(section, boardTitle, article) : '<h1>' + escapeHtml(title) + calendarYear + '</h1>');
   if (inBoard && route.section === 'settings') {
-    const trash = route.view === 'trash' ? '' : '<div class="header-actions"><a class="header-icon" href="' +
-      escapeHtml(boardSettingsAddress(route.parent, 'trash')) + '" aria-label="回收站" title="回收站">' +
-      icon('trash', 19) + '</a></div>';
-    return '<header class="studio-top"><div class="masthead sb-masthead">' + start + trash + '</div></header>';
+    const editing = route.view === 'edit';
+    const modeLabel = editing ? '完成编辑' : '编辑设置';
+    const actions = route.view === 'trash' ? '' : '<div class="header-actions"><a class="header-icon" href="' +
+      escapeHtml(boardSettingsAddress(route.parent, editing ? '' : 'edit')) + '" aria-label="' + modeLabel +
+      '" title="' + modeLabel + '">' + icon(editing ? 'check' : 'edit', 19) + '</a>' +
+      '<a class="header-icon" href="' + escapeHtml(boardSettingsAddress(route.parent, 'trash')) +
+      '" aria-label="回收站" title="回收站">' + icon('trash', 19) + '</a></div>';
+    return '<header class="studio-top"><div class="masthead sb-masthead">' + start + actions + '</div></header>';
   }
   if (route.type === 'capture') {
     return '<header class="studio-top"><div class="masthead sb-masthead">' + start +

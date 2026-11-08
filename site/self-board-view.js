@@ -173,15 +173,17 @@ function orderControls() {
       '<button type="button" data-sb-order="' + key + '" aria-pressed="' + (order === key) + '">' + label + '</button>').join('') + '</div>';
 }
 
-function boardSettings() {
+function boardSettings(editing) {
   const labels = state().reflectionLabels ?? [];
+  const iconClass = 'sb-icon-plain library-icon';
   return '<section class="sb-settings"><div class="sb-list-heading"><h3>Reflections 标签</h3>' +
-    boardIcon('新建标签', 'add', { data: 'data-sb-label', className: 'sb-icon-plain library-icon' }) + '</div>' +
+    (editing ? boardIcon('新建标签', 'add', { data: 'data-sb-label', className: iconClass }) : '') + '</div>' +
     (labels.length ? '<ul class="sb-rows sb-settings-grid">' + labels.map(label => '<li class="sb-setting-label"><span class="sb-swatch" data-sb-color="' +
-      esc(label.color) + '"></span><span>' + esc(label.name) + '</span><div class="sb-view-actions">' +
-      boardIcon('编辑标签 ' + label.name, 'edit', { data: 'data-sb-label="' + esc(label.id) + '"', className: 'sb-icon-plain' }) +
-      boardIcon('移除标签 ' + label.name, 'trash', { data: 'data-sb-remove-label="' + esc(label.id) + '"', className: 'sb-icon-plain' }) + '</div></li>').join('') +
-      '</ul>' : '<p class="work-meta">添加标签后，可在灵感详情的编辑模式里为卡片选色。</p>') + '</section>' + explorationTypeSettings() + captureSettingsView();
+      esc(label.color) + '"></span><span>' + esc(label.name) + '</span>' + (editing ? '<div class="sb-view-actions">' +
+        boardIcon('编辑标签 ' + label.name, 'edit', { data: 'data-sb-label="' + esc(label.id) + '"', className: iconClass }) +
+        boardIcon('移除标签 ' + label.name, 'trash', { data: 'data-sb-remove-label="' + esc(label.id) + '"', className: iconClass }) + '</div>' : '') +
+      '</li>').join('') + '</ul>' : '<p class="work-meta">添加标签后，可在灵感详情的编辑模式里为卡片选色。</p>') +
+    '</section>' + explorationTypeSettings(editing) + captureSettingsView();
 }
 
 function groupedRows(items, groupFor, mode) {
@@ -411,7 +413,7 @@ export function boardView(route) {
         boardOptions({ '': '全部关系', ...relationTypes }) + '</select>' : '') + '</form></div>' +
       '<div data-sb-results aria-live="polite">' + boardResults(route) + '</div>';
   } else if (section === 'settings') {
-    content = route.view === 'trash' ? boardTrash() : boardSettings();
+    content = route.view === 'trash' ? boardTrash() : boardSettings(route.view === 'edit');
   } else {
     content = heading('全局搜索', '跨文章、灵感、资料与相关活动查找。') +
       searchForm(params.get('q') || '') +

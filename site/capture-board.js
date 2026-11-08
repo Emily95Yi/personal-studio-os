@@ -25,7 +25,7 @@ export function captureSettingsView() {
     iconControl('新增设备授权', 'add', 'type="submit"') + '</form><div aria-live="polite" data-devices-result></div>' +
     '<div data-devices-list></div></section>' +
     '<section class="sb-settings" data-capture-storage><div class="sb-list-heading"><h3>Storage</h3>' +
-    '<button type="button" class="capture-storage-refresh" data-storage-refresh>刷新容量</button></div>' +
+    iconControl('刷新容量', 'refresh', 'type="button" data-storage-refresh') + '</div>' +
     '<div data-storage-result aria-live="polite"></div></section>';
 }
 

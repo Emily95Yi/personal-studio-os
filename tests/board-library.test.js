@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   categoryFor, categoryList, entriesFor, explorationTypes, filterCollections, moveCollectionCategory, moveExplorationEntry,
-  removeCollectionCategory, removeCollectionFolder, removeExplorationEntry, resourceAtUrl, saveCollectionCategory,
+  removeCollectionCategory, removeCollectionFolder, removeExplorationEntry, resourceAtUrl, retireExplorationType, saveCollectionCategory,
   saveCollectionFolder, saveCollectionItem, saveExplorationEntry, saveExplorationTopic, saveExplorationType, setLibraryDeleted,
 } from '../site/board-library-data.js';
 import { removeBoardFolder, saveBoardContent, saveBoardFolder } from '../site/self-board-data.js';
@@ -94,6 +94,17 @@ test('exploration types keep stable IDs and colors through edits and backups', (
   assert.throws(() => previewMigration(emptyStudio(), {
     ...backup, explorationEntryTypes: backup.explorationEntryTypes.filter(row => row.id !== custom.id),
   }), /探索条目的主题、类型或引用无效/);
+
+  retireExplorationType(restored, custom.id);
+  retireExplorationType(restored, 'note');
+  const replacement = saveExplorationType(restored, { title: renamed.title, color: 'blue' });
+  const afterRemoval = emptyStudio();
+  importMigration(afterRemoval, studioExport(restored), 0);
+  const available = explorationTypes(afterRemoval);
+  assert.ok(available.some(row => row.id === replacement.id));
+  assert.ok(!available.some(row => row.id === custom.id || row.id === 'note'));
+  assert.equal(explorationTypes(afterRemoval, { includeRetired: true }).find(row => row.id === custom.id).title, renamed.title);
+  assert.equal(entriesFor(afterRemoval, topic.id).find(row => row.id === entry.id).type, custom.id);
 });
 
 test('new views leave legacy Wiki folders and hashes intact and share URL identity', () => {

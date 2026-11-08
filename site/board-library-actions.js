@@ -1,7 +1,7 @@
 import { escapeHtml as esc } from './html.js';
 import { collectionsAddress, explorationAddress, readRoute } from './pages.js';
 import { categoryFor, categoryList, entriesFor, explorationTypes, foldersFor, moveCollectionCategory, moveExplorationEntry,
-  removeCollectionCategory, removeCollectionFolder, removeExplorationEntry, resourceAtUrl, resourceTypes, saveCollectionCategory,
+  removeCollectionCategory, removeCollectionFolder, removeExplorationEntry, resourceAtUrl, resourceTypes, retireExplorationType, saveCollectionCategory,
   saveCollectionFolder, saveCollectionItem, saveExplorationEntry, saveExplorationTopic, saveExplorationType, setLibraryDeleted } from './board-library-data.js';
 import { collectionLocation, explorationResults, optionsHtml } from './board-library-view.js';
 import { contentTitle, objectFor, relationCandidates, studioStore, studioTags } from './studio-data.js';
@@ -133,7 +133,10 @@ export function initLibraryActions(app, render) {
     const row = id ? entriesFor(state(), topic.id).find(entry => entry.id === id) : null;
     const ref = (type, key) => JSON.stringify([type, key]);
     let selected = row?.reference ? ref(row.reference.type, row.reference.id) : '';
-    const form = dialog(row ? '编辑条目' : '新建条目', select('type', '条目类型', explorationTypes(state()).map(type => [type.id, type.title]), row?.type ?? 'note') +
+    const types = explorationTypes(state(), { includeRetired: true })
+      .filter(type => !type.retired || type.id === row?.type)
+      .map(type => [type.id, type.title + (type.retired ? '（已删除）' : '')]);
+    const form = dialog(row ? '编辑条目' : '新建条目', select('type', '条目类型', types, row?.type ?? 'note') +
       field('title', '标题（可选）', row?.title, 'maxlength="200" autofocus') + text('body', '正文 · Markdown', row?.body, 6) +
       (row?.captureNote != null ? text('captureNote', '我的备注', row.captureNote, 3) : '') +
       '<fieldset class="work-form-fields library-reference-fields" data-entry-reference>' +
@@ -204,6 +207,12 @@ export function initLibraryActions(app, render) {
     if (action === 'topic') editTopic(id);
     if (action === 'entry') editEntry(route.record, id);
     if (action === 'entry-type') editEntryType(id);
+    if (action === 'delete-entry-type') {
+      const type = explorationTypes(state()).find(row => row.id === id);
+      if (!type) return;
+      dialog('删除条目类型', '<p>删除「' + esc(type.title) + '」后，已有条目仍会保留原类型。</p>',
+        () => save(snapshot => retireExplorationType(snapshot, id)), () => refresh('entry-type'), '删除类型');
+    }
     if (action === 'category') editCategory(id);
     if (action === 'folder') editFolder(id, route);
     if (action === 'delete-category') deleteCategory(id, route);
