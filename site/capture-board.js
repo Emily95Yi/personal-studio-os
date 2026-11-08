@@ -20,23 +20,23 @@ export function inboxView() {
 }
 
 export function captureSettingsView() {
-  return '<section class="sb-settings" data-capture-devices><h3>Capture Devices</h3>' +
-    '<p class="work-meta">每台 iPhone 分别生成一份快捷指令凭证。凭证仅在创建后显示，可在这里单独撤销。</p>' +
-    '<form class="capture-controls"><input required maxlength="80" name="name" aria-label="设备名称" placeholder="设备名称，例如 iPhone A">' +
-    '<button class="action-button secondary">新增设备授权</button></form><div aria-live="polite" data-devices-result></div>' +
+  return '<section class="sb-settings" data-capture-devices><div class="sb-list-heading"><h3>Capture Devices</h3></div>' +
+    '<form class="capture-device-form"><input required maxlength="80" name="name" aria-label="设备名称" placeholder="设备名称，例如 iPhone A">' +
+    iconControl('新增设备授权', 'add', 'type="submit"') + '</form><div aria-live="polite" data-devices-result></div>' +
     '<div data-devices-list></div></section>' +
     '<section class="sb-settings" data-capture-storage><div class="sb-list-heading"><h3>Storage</h3>' +
-    button('刷新容量', 'data-storage-refresh') + '</div><div data-storage-result aria-live="polite"></div></section>';
+    '<button type="button" class="capture-storage-refresh" data-storage-refresh>刷新容量</button></div>' +
+    '<div data-storage-result aria-live="polite"></div></section>';
 }
 
 const detailForm = 'capture-detail-form';
 
 const iconControl = (label, glyph, attributes) => '<button class="header-icon capture-page-icon" aria-label="' + label +
-  '" title="' + label + '" disabled ' + attributes + '>' + icon(glyph, 18) + '</button>';
+  '" title="' + label + '" ' + attributes + '>' + icon(glyph, 18) + '</button>';
 
 export function captureActions() {
-  return '<div class="header-actions">' + iconControl('保存', 'check', 'type="submit" form="' + detailForm + '" data-capture-save') +
-    iconControl('删除', 'trash', 'type="button" data-capture-delete') + '</div>';
+  return '<div class="header-actions">' + iconControl('保存', 'check', 'type="submit" form="' + detailForm + '" data-capture-save disabled') +
+    iconControl('删除', 'trash', 'type="button" data-capture-delete disabled') + '</div>';
 }
 
 export function captureView() {
@@ -136,9 +136,9 @@ function mountList(app, route, changed) {
   const panel = app.querySelector('[data-capture-body]');
   const notice = app.querySelector('[data-capture-status]');
   panel.innerHTML = '<div class="capture-toolbar">' + segmentRow('data-capture-types', '内容类型') +
-    '<div class="capture-page-controls">' + iconControl('上一页', 'back', 'type="button" data-capture-prev') +
-    iconControl('下一页', 'arrow', 'type="button" data-capture-next') +
-    iconControl('批量分类', 'folderMove', 'type="submit" form="capture-batch"') + '</div></div>' +
+    '<div class="capture-page-controls">' + iconControl('上一页', 'back', 'type="button" data-capture-prev disabled') +
+    iconControl('下一页', 'arrow', 'type="button" data-capture-next disabled') +
+    iconControl('批量分类', 'folderMove', 'type="submit" form="capture-batch" disabled') + '</div></div>' +
     '<form id="capture-batch" class="capture-form">' + targetFields + '</form><div data-capture-list></div>';
   const batch = panel.querySelector('form');
   const submit = panel.querySelector('button[type="submit"]');
@@ -219,9 +219,9 @@ function mountSettings(app) {
     try {
       const data = await api('/devices');
       rows.innerHTML = '<ul class="sb-rows">' + data.devices.map(device => {
-        const active = !device.revoked_at && device.expires_at > Date.now();
+        const active = device.expires_at > Date.now();
         return '<li class="capture-controls"><strong>' + esc(device.name) + '</strong><small>' +
-          (device.revoked_at ? '已撤销' : active ? '有效至 ' + time(device.expires_at) : '已到期') +
+          (active ? '有效至 ' + time(device.expires_at) : '已到期') +
           ' · 最近使用 ' + time(device.used_at) + '</small>' +
           (active ? button('撤销', 'data-device-revoke="' + esc(device.id) + '"') : '') + '</li>';
       }).join('') + '</ul>';
@@ -274,8 +274,8 @@ function mountSettings(app) {
     status(output, '正在读取容量…');
     try {
       const usage = await api('storage', { method: manual ? 'POST' : 'GET' });
-      output.innerHTML = [['D1 Database', usage.d1, 500e6, '单数据库 Free 上限参考'],
-        ['R2 Object Storage', usage.r2, 10e9, 'Standard 免费用量参考，按 GB-month 计费']].map(([label, value, limit, caption]) => {
+      output.innerHTML = [['D1 Database', usage.d1, 500e6],
+        ['R2 Object Storage', usage.r2, 10e9]].map(([label, value, limit]) => {
         const known = Number.isSafeInteger(value);
         const ratio = known ? 100 * value / limit : 0;
         const level = ratio >= 95 ? 'Critical' : ratio >= 85 ? 'Warning' : ratio >= 70 ? 'Notice' : 'Normal';
@@ -284,7 +284,7 @@ function mountSettings(app) {
         return '<div class="capture-capacity" data-level="' + level + '"><h4>' + label + '</h4><p>' +
           (known ? bytes(value) + ' / ' + bytes(limit) + ' · ' + ratio.toFixed(1) + '% · ' + level : '暂不可获取') + '</p>' +
           (known ? '<progress max="100" value="' + Math.min(100, ratio) + '" aria-label="' + label + '"></progress>' : '') +
-          '<small>' + caption + (warning ? ' · ' + warning : '') + '</small></div>';
+          (warning ? '<small>' + warning + '</small>' : '') + '</div>';
       }).join('') + '<small>采集时间 ' + esc(time(usage.measuredAt)) + '</small>';
     } catch (error) {
       status(output, error);

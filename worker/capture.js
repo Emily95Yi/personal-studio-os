@@ -51,7 +51,7 @@ export async function authenticateCapture(request, env) {
 async function devicesApi(request, db, owner, path, body, json) {
   if (path === '/devices' && request.method === 'GET') {
     const { results } = await sql(db, 'SELECT id, name, created_at, expires_at, used_at, revoked_at ' +
-      'FROM capture_devices WHERE owner = ? ORDER BY created_at DESC LIMIT 100', owner).all();
+      'FROM capture_devices WHERE owner = ? AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 100', owner).all();
     return json({ devices: results });
   }
   if (path === '/devices' && request.method === 'POST') {

@@ -113,7 +113,7 @@ export function topicDetail(topic, relations, editing = false) {
 
 export function explorationTypeSettings() {
   return '<section class="sb-settings"><div class="sb-list-heading"><h3>探索条目类型</h3>' +
-    iconButton('新建条目类型', 'entry-type', '', 'add') + '</div><ul class="sb-rows">' +
+    iconButton('新建条目类型', 'entry-type', '', 'add') + '</div><ul class="sb-rows sb-settings-grid">' +
     explorationTypes(state()).map(row => '<li class="sb-setting-label"><span class="sb-swatch" data-sb-color="' +
       esc(row.color) + '" aria-hidden="true"></span><span>' + esc(row.title) + '</span><div class="sb-view-actions">' +
       iconButton('编辑条目类型 ' + row.title, 'entry-type', row.id, 'edit') + '</div></li>').join('') +
