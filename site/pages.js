@@ -111,7 +111,7 @@ function boardRoute(workspace, section, id, params) {
     const from = boardSettingsParent(params);
     if (params.get('view') === 'trash') return { ...base, type: 'board', view: 'trash', recordTitle: '回收站',
       parent: boardSettingsAddress(from), parentLabel: 'Self-Board 设置' };
-    return { ...base, type: 'board', view: section, parent: from, parentLabel: '上一页' };
+    return { ...base, type: 'board', view: section, recordTitle: 'Self-Board 设置', parent: from, parentLabel: '上一页' };
   }
   if (section === 'writing' && id === 'new') return { ...base, type: 'board', view: 'new' };
   if (section === 'discover' && !id && params.get('tab') === 'explorations') {

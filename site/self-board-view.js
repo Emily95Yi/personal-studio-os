@@ -3,7 +3,7 @@ import { storedCaptureAttachment } from './capture-client.js';
 import { weekPreview } from './planner-view.js';
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
-import { boardContentHref, boardHref, boardSections, boardSettingsAddress, discoverAddress, href } from './pages.js';
+import { boardContentHref, boardHref, boardSections, discoverAddress, href } from './pages.js';
 import { boardContent, boardFolderPath, boardMoveFolders, boardRecords, boardSection, canAddSubfolder, contentTypes, discoverCategory, discoverDirectory, exerciseFields,
   isPublished, isWriting, matchContent, pinnedBoardFolders, reflectionColors, relationTypes, resourceKey } from './self-board-data.js';
 import { contentTitle, isSelfBoard, objectFor, relatedObjects, studioStore } from './studio-data.js';
@@ -173,11 +173,9 @@ function orderControls() {
       '<button type="button" data-sb-order="' + key + '" aria-pressed="' + (order === key) + '">' + label + '</button>').join('') + '</div>';
 }
 
-function boardSettings(route) {
+function boardSettings() {
   const labels = state().reflectionLabels ?? [];
-  const trash = boardIcon('回收站', 'trash', { href: boardSettingsAddress(route.parent, 'trash'), className: 'sb-icon-plain' });
-  return heading('Self-Board 设置', '', trash) +
-    '<section class="sb-settings"><div class="sb-list-heading"><h3>Reflections 标签</h3>' +
+  return '<section class="sb-settings"><div class="sb-list-heading"><h3>Reflections 标签</h3>' +
     boardIcon('新建标签', 'add', { data: 'data-sb-label' }) + '</div>' +
     (labels.length ? '<ul class="sb-rows sb-settings-grid">' + labels.map(label => '<li class="sb-setting-label"><span class="sb-swatch" data-sb-color="' +
       esc(label.color) + '"></span><span>' + esc(label.name) + '</span><div class="sb-view-actions">' +
@@ -413,7 +411,7 @@ export function boardView(route) {
         boardOptions({ '': '全部关系', ...relationTypes }) + '</select>' : '') + '</form></div>' +
       '<div data-sb-results aria-live="polite">' + boardResults(route) + '</div>';
   } else if (section === 'settings') {
-    content = route.view === 'trash' ? boardTrash() : boardSettings(route);
+    content = route.view === 'trash' ? boardTrash() : boardSettings();
   } else {
     content = heading('全局搜索', '跨文章、灵感、资料与相关活动查找。') +
       searchForm(params.get('q') || '') +
