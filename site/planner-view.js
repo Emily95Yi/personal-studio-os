@@ -7,6 +7,7 @@ import { allCalendarEvents, agendaEventStatus, calendarSourceLabels, calendarTas
 import { icon } from './icons.js';
 import { eventDateTimeLabel, eventStatus, eventTimeLabel } from './calendar-events.js';
 import { connection } from './private-api.js';
+import { reminderRows } from './reminder-view.js';
 
 const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
 const modes = [['day', 'Day'], ['week', 'Week'], ['month', 'Month']];
@@ -21,6 +22,9 @@ function calendarGrid(date, mode, from, preview = false) {
   const start = dateKey(days[0]);
   const end = dateKey(days.at(-1));
   const tasks = calendarTasks(start, end);
+  const reminders = plannerRepository.remindersBetween(start, end);
+  const reminderCounts = new Map();
+  for (const { date } of reminders) reminderCounts.set(date, (reminderCounts.get(date) ?? 0) + 1);
   const appointments = allCalendarEvents();
   const checkIns = plannerRepository.checkInsBetween(start, end);
   const events = workshopRepository.eventsBetween(start, end);
@@ -29,10 +33,12 @@ function calendarGrid(date, mode, from, preview = false) {
     const selected = !preview && key === dateKey(date);
     const today = key === dateKey();
     const taskCount = tasks.filter(task => task.date === key).length;
+    const reminderCount = reminderCounts.get(key);
     const checked = checkIns.includes(key);
     const eventCount = events.filter(event => event.date === key).length;
     const appointmentCount = appointments.filter(event => onDay(event, key)).length;
-    const details = [appointmentCount ? appointmentCount + ' 项日程' : '', taskCount ? taskCount + ' 项待办' : '', checked ? '打卡' : '',
+    const details = [appointmentCount ? appointmentCount + ' 项日程' : '', reminderCount ? reminderCount + ' 项提醒' : '',
+      taskCount ? taskCount + ' 项待办' : '', checked ? '打卡' : '',
       eventCount ? eventCount + ' 场活动' : ''].filter(Boolean);
     const label = '<span class="day-number">' + day.getUTCDate() + '</span>' +
       (details.length ? '<span class="day-indicators">' + details.map(detail => '<small>' + detail + '</small>').join('') + '</span>' : '');
@@ -75,6 +81,7 @@ export function calendarSearchResults(query, events = allCalendarEvents()) {
 function agenda(date) {
   const key = dateKey(date);
   const tasks = calendarTasks(key, key);
+  const reminders = plannerRepository.remindersBetween(key, key);
   const appointments = allCalendarEvents().filter(event => onDay(event, key))
     .sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start));
   const checked = plannerRepository.checkInsBetween(key, key).length > 0;
@@ -93,6 +100,9 @@ function agenda(date) {
     '<li><button type="button" data-task-edit="' + escapeHtml(task.id) + '"><strong>' + escapeHtml(task.title) +
     '</strong><span>' + (task.done ? '已完成' : reviewLabel(task) ? eventStatus.confirmed + ' · ' + reviewLabel(task) : eventStatus.draft) +
     '</span></button>' + taskSourceLink(task) + '</li>').join('');
+  const list = (title, rows) => rows ? '<section class="agenda-group" aria-label="' + title +
+    '"><h3>' + title + '</h3><ul class="agenda-list">' + rows + '</ul></section>' : '';
+  const groups = list('日程', appointmentRows) + list('提醒', reminderRows(reminders)) + list('待办', taskRows);
   return '<section class="calendar-agenda"><div class="section-heading"><h2>' +
     (date.getUTCMonth() + 1) + '.' + date.getUTCDate() + '</h2><div class="calendar-agenda-actions">' +
     (connection.mode === 'private' && connection.caldav.configured ?
@@ -100,8 +110,7 @@ function agenda(date) {
       '" aria-label="新建 YiStudio 日程" title="新建 YiStudio 日程">' + icon('calendarAdd', 19) + '</button>' : '') +
     (canEdit() ? '<button type="button" class="header-icon calendar-icon" data-task-new="' + key +
       '" aria-label="新建待办" title="新建待办">' + icon('taskAdd', 19) + '</button>' : '') + '</div></div>' +
-    (appointmentRows || taskRows ? '<ul class="agenda-list">' + appointmentRows + taskRows + '</ul>' :
-      (!checked && !events.length ? '<p>暂无安排。</p>' : '')) +
+    (groups || (!checked && !events.length ? '<p>暂无安排。</p>' : '')) +
     (checked ? '<p class="habit-record">习惯 · 已打卡</p>' : '') +
     (events.length ? '<ul class="event-agenda">' + events.map(event => '<li><a href="' +
       href('workshop', 'projects', event.projectId, 'events', event.id) + '">' + escapeHtml(event.theme || event.title) +

@@ -279,6 +279,10 @@ svg { flex: none; vertical-align: middle; }
 .calendar-agenda .section-heading { align-items: center; margin-bottom: 4px; }
 .calendar-agenda-actions { display: flex; align-items: center; gap: 4px; }
 .calendar-agenda h2 { font-size: 17px; }
+.agenda-group { margin-top: 10px; }
+.agenda-group h3 { margin: 0; font-size: 13px; }
+.reminder-dialog [data-reminder-title] { display: block; margin-block: 8px; overflow-wrap: anywhere; }
+.reminder-dialog .return-link { margin-top: 8px; }
 .calendar-agenda p { color: var(--muted); }
 .agenda-list { list-style: none; padding: 0; margin: 0; }
 .agenda-list button { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; width: 100%; border: 0; padding: 8px 10px; border-radius: 5px; background: transparent; font: inherit; color: var(--ink); text-align: left; cursor: pointer; }

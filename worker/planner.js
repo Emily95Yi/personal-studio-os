@@ -20,13 +20,14 @@ function validPlan(row) {
     (row.kind !== 'quota' || Number.isInteger(row.target) && row.target >= 1 && row.target <= 999) &&
     (row.periodDays === undefined && row.periodStart === undefined || row.kind === 'quota' && row.period === 'day' &&
       Number.isSafeInteger(row.periodDays) && row.periodDays >= 1 && day(row.periodStart)) &&
-    optional(row.inboxId, id) && optional(row.reminder, value => text(value, 100)) && Array.isArray(row.sourceIds) &&
+    optional(row.startDate, day) && optional(row.inboxId, id) && optional(row.reminder, value => text(value, 100)) && Array.isArray(row.sourceIds) &&
     row.sourceIds.length <= 100 && row.sourceIds.every(value => text(value, 256));
 }
 
 function validTask(row, plans) {
   return text(row.title, 120) && day(row.date) && typeof row.done === 'boolean' &&
     optional(row.skipped, value => typeof value === 'boolean') &&
+    optional(row.autoReminder, value => value === true && plans.has(row.planId)) &&
     optional(row.planId, value => plans.has(value)) &&
     optional(row.sourceContentId, value => text(value, 256));
 }

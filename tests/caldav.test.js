@@ -196,7 +196,13 @@ test('planner-linked events retain overlap safety, survive Apple deletion as tom
     assert.equal(response.status, 200);
     await flush();
   };
-  const first = makeEvent('First', '09:00', '10:00');
+  const plan = plannerRepository.savePlan({ title: 'First', kind: 'one-off', startDate: day });
+  await save();
+  assert.equal(events.size, 0);
+  const { event: first } = plannerRepository.confirmReminder(plan.id, day, {
+    ...eventTimes(false, day + 'T09:00', day + 'T10:00'),
+    syncMode: 'caldav', location: '', notes: '', targetCalendar: '',
+  });
   await save();
   assert.equal((await current(first.id)).reason, 'conflict');
   assert.equal((await current(first.id)).conflicts[0].title, 'Daily Fixture');

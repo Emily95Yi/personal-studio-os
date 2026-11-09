@@ -3,6 +3,31 @@ import { allCalendarEvents, canEdit, openReview, readReview, showEvent, updateRe
 import { caldavCommand, connection, createCalDavEvent, disconnectCalDav, discoverCalDav, loadCalDav, loadPlanner, onPrivateChange, pollCalDav,
   refreshCalendar, saveChanges, selectCalDav, setSource } from './private-api.js';
 import { plannerRepository } from './repository.js';
+import { href } from './pages.js';
+import { icon } from './icons.js';
+
+function showReminder(app, reminder) {
+  const dialog = app.querySelector('[data-reminder-dialog]');
+  dialog.dataset.planId = reminder.planId;
+  dialog.dataset.date = reminder.date;
+  dialog.querySelector('[data-reminder-title]').textContent = reminder.title;
+  dialog.querySelector('[data-reminder-date-label]').textContent = reminder.date;
+  const notes = dialog.querySelector('[data-reminder-notes]');
+  notes.textContent = reminder.notes ?? '';
+  notes.hidden = !reminder.notes;
+  dialog.querySelector('[data-reminder-plan]').href = href('self-board', 'auto', reminder.planId);
+  const action = dialog.querySelector('[data-reminder-calendar]');
+  const deleted = reminder.event && connection.caldav.statuses.some(row => row.id === reminder.event.id && row.state === 'deleted');
+  const label = reminder.event ? '查看 YiStudio 日程' : '添加日程到 YiStudio 日历';
+  action.innerHTML = icon(reminder.event ? 'calendar' : 'calendarAdd', 19);
+  action.setAttribute('aria-label', label);
+  action.title = label;
+  action.hidden = Boolean(deleted) || !canEdit();
+  const status = dialog.querySelector('[data-reminder-status]');
+  status.hidden = !deleted;
+  status.textContent = deleted ? '关联日程已删除。' : '';
+  dialog.showModal();
+}
 
 function currentEvent(app) {
   const id = app.querySelector('[data-event-dialog]')?.dataset.eventId;
@@ -217,6 +242,25 @@ export function initAppleActions(app, render) {
       const item = allCalendarEvents().find(row => row.id === button.dataset.appleEvent);
       if (item) showEvent(app, item);
     }
+    if (button.dataset.autoReminder) {
+      const reminder = plannerRepository.getReminder(button.dataset.autoReminder, button.dataset.reminderDate);
+      if (reminder) showReminder(app, reminder);
+      return;
+    }
+    if (button.hasAttribute('data-reminder-calendar') && canEdit()) {
+      const dialog = button.closest('dialog');
+      const reminder = plannerRepository.getReminder(dialog.dataset.planId, dialog.dataset.date);
+      if (!reminder) return;
+      if (reminder.event) {
+        const item = allCalendarEvents().find(row => row.id === reminder.event.id);
+        dialog.close();
+        if (item) showEvent(app, item);
+      } else {
+        dialog.close();
+        openReview(app, null, null, reminder.date, reminder);
+      }
+      return;
+    }
     if (button.hasAttribute('data-task-review') && canEdit()) {
       const form = button.form;
       const task = plannerRepository.getTask(form.elements.id.value);
@@ -329,7 +373,10 @@ export function initAppleActions(app, render) {
     const details = data?.details && {
       ...data.details, ...(connection.caldav.configured ? { syncMode: 'caldav' } : {}),
     };
-    const saved = !editId && data && plannerRepository.confirmReview(form.elements.taskId.value, data.action, details);
+    const planId = form.elements.reminderPlan.value;
+    const saved = !editId && data && (planId
+      ? plannerRepository.confirmReminder(planId, form.elements.reminderDate.value, details)
+      : plannerRepository.confirmReview(form.elements.taskId.value, data.action, details));
     if (!saved) {
       const error = form.querySelector('[data-form-error]');
       error.textContent = data ? '此安排已变更或已确认。' : '请检查开始与结束时间。';

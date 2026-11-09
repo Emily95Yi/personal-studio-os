@@ -10,6 +10,7 @@ import { autoPlanView, originalSource, planDialog, planKindHelp, planPeriodLabel
 import { plannerRepository, studioRepository } from './repository.js';
 import { calendarHref, calendarSelection, dateKey, parseDate, todayDate } from './calendar.js';
 import { calendarHeaderActions, calendarRefreshState, calendarView, taskDialog, weekPreview } from './planner-view.js';
+import { reminderDialog } from './reminder-view.js';
 import { allCalendarEvents, canEdit, eventDialog, reviewDialog, settingsView, showEvent, statusBanner } from './apple-view.js';
 import { connection, loadCalDav, loadFeed, loadPlanner, onPrivateChange, saveChanges } from './private-api.js';
 import { initAppleActions } from './apple-actions.js';
@@ -209,7 +210,7 @@ function render({ focus = false } = {}) {
     (isPlannerPage ? '<div data-private-status>' + statusBanner() + '</div>' : '') +
     workshopBreadcrumb + storageWarning + (route.type === 'public' ? '' : syncBanner()) +
     views[route.type](route) + '</main>' +
-    (canEditTasks ? taskDialog() + reviewDialog() + eventDialog() : '') + (canEditPlans ? planDialog() : '');
+    (canEditTasks ? taskDialog() + reminderDialog() + reviewDialog() + eventDialog() : '') + (canEditPlans ? planDialog() : '');
   if (focus || route.documentId) {
     const target = app.querySelector('[data-work-selected] > summary');
     if (target) {
@@ -319,12 +320,13 @@ function openTaskDialog(button) {
 function updatePlanFields(form) {
   const kind = form.elements.kind.value;
   const help = form.querySelector('[data-plan-kind-help]');
-  help.textContent = planKindHelp(kind);
-  help.hidden = !help.textContent;
   const period = planFormPeriod(form);
+  const hasReminders = kind === 'one-off' || period === 'day';
+  help.textContent = hasReminders ? planKindHelp(kind) : '';
+  help.hidden = !help.textContent;
   for (const unit of form.querySelectorAll('[data-plan-unit]')) unit.textContent = planPeriodLabel(period);
   form.elements.periodDays.readOnly = period !== 'day';
-  for (const [selector, show] of [['[data-frequency]', kind === 'recurring'],
+  for (const [selector, show] of [['[data-plan-start]', hasReminders], ['[data-frequency]', kind === 'recurring'],
     ['[data-quota]', kind === 'quota'], ['[data-quota-days]', kind === 'quota']]) {
     const field = form.querySelector(selector);
     field.hidden = !show;
@@ -349,6 +351,7 @@ function openPlanDialog(id, source) {
   form.elements.kind.value = plan?.kind ?? 'one-off';
   form.dataset.savedKind = plan?.kind ?? '';
   form.dataset.savedPeriod = plan?.period ?? 'day';
+  form.elements.startDate.value = plan?.startDate ?? plan?.periodStart ?? dateKey();
   form.elements.periodDays.value = plan?.periodDays ?? 1;
   form.elements.interval.value = plan?.interval ?? 1;
   form.elements.target.value = plan?.target ?? 1;
@@ -406,12 +409,13 @@ app.addEventListener('submit', async event => {
     const plan = plannerRepository.savePlan({
       id: form.elements.id.value || undefined, title, kind: form.elements.kind.value,
       period: planFormPeriod(form), interval: Number(form.elements.interval.value),
+      startDate: form.elements.startDate.disabled ? undefined : form.elements.startDate.value,
       periodDays: Number(form.elements.periodDays.value),
       target: Number(form.elements.target.value), reminder: form.elements.reminder.value.trim(),
       sourceIds, inboxId,
     });
     if (!plan) {
-      error.textContent = '无法保存。请检查周期天数、间隔数或已有安排。';
+      error.textContent = '无法保存。请检查首次提醒日期、周期天数、间隔数或已有安排。';
       error.hidden = false;
       return;
     }

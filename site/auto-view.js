@@ -1,4 +1,4 @@
-import { calendarHref, inQuotaPeriod, todayDate } from './calendar.js';
+import { calendarHref, dateKey, inQuotaPeriod, planReminderDates, todayDate } from './calendar.js';
 import { escapeHtml } from './html.js';
 import { icon } from './icons.js';
 import { boardContentHref, boardSections, collectionItemAddress, explorationAddress, href, inboxAddress } from './pages.js';
@@ -8,12 +8,12 @@ import { contentTitle, studioStore } from './studio-data.js';
 import { entriesFor, explorationEntryTitle, itemsFor, topicsFor } from './board-library-data.js';
 import { boardContent, boardSection } from './self-board-data.js';
 import { canEdit, reviewLabel } from './apple-view.js';
+import { reminderRows } from './reminder-view.js';
 
 const kinds = { 'one-off': '单次', recurring: '重复规则', quota: '周期目标' };
 const kindHelp = {
-  'one-off': '手动安排一次。',
-  recurring: '保存重复间隔。日期需手动安排，目前不会自动创建待办或发送通知。',
-  quota: '按周期统计完成次数，可以手动安排日期，也可以直接记录完成。',
+  'one-off': '在选择的日期提醒一次。',
+  quota: '在每个周期的第一天提醒，按周期统计完成次数。',
 };
 const periods = { day: '日', week: '周', month: '月' };
 
@@ -115,6 +115,7 @@ export function autoPlanView({ plan }) {
   const tasks = plannerRepository.tasksForPlan(plan.id);
   const records = plannerRepository.completionsForPlan(plan.id);
   const canSchedule = !plan.paused && (plan.kind !== 'one-off' || !tasks.some(task => !task.skipped));
+  const reminderDates = planReminderDates(plan, plan.kind === 'one-off' ? plan.startDate : dateKey(), undefined, 5);
   const completionActions = plan.kind === 'one-off' ? '' : '<div class="widget-actions">' +
     (!plan.paused ? '<button class="action-button secondary" type="button" data-plan-log="' + plan.id + '">记录一次</button>' : '') +
     (records.some(item => !item.taskId) ? '<button class="text-action" type="button" data-plan-undo="' + plan.id + '">撤销最近手动记录</button>' : '') +
@@ -123,9 +124,13 @@ export function autoPlanView({ plan }) {
     (connection.mode === 'preview' ? ' · 本机预览' : '') + '</span><div class="planner-actions"><button class="action-button secondary" type="button" data-plan-edit="' +
     plan.id + '">编辑计划</button><button class="action-button secondary" type="button" data-plan-pause="' + plan.id + '">' +
     (plan.paused ? '恢复计划' : '暂停计划') + '</button></div></div>' +
-    '<section class="auto-section"><div class="section-heading"><h2>安排</h2>' +
+    '<section class="auto-section"><h2>提醒</h2>' +
+    (reminderDates.length ? '<ul class="agenda-list">' + reminderRows(reminderDates.map(date => ({
+      planId: plan.id, title: plan.title, date,
+    })), true) + '</ul>' : '<p class="subtle">暂无提醒。</p>') + '</section>' +
+    '<section class="auto-section"><div class="section-heading"><h2>待办</h2>' +
     (canSchedule ? '<button class="action-button" type="button" data-plan-schedule="' + plan.id + '">安排日期</button>' : '') +
-    '</div>' + (plan.kind === 'recurring' ? '<p class="subtle">' + kindHelp.recurring + '</p>' : '') + taskRows(tasks, true) + '</section>' +
+    '</div>' + taskRows(tasks, true) + '</section>' +
     '<section class="auto-section"><h2>完成记录</h2>' + quotaProgress(plan) +
     (records.length ? '<ul class="auto-resources">' + records.slice().reverse().map(item => '<li>' +
       escapeHtml(item.date) + (item.taskId ? ' · 安排完成' : ' · 手动记录') + '</li>').join('') + '</ul>' :
@@ -147,6 +152,7 @@ export function planDialog() {
     '<label>名称<input required maxlength="120" name="title"></label><label>类型<select name="kind">' +
     Object.entries(kinds).map(([value, label]) => '<option value="' + value + '">' + label + '</option>').join('') +
     '</select></label><p data-plan-kind-help hidden></p>' +
+    '<label data-plan-start>首次提醒日期<input required type="date" name="startDate"></label>' +
     dayInput('间隔数', 'interval', 'data-frequency') + dayInput('周期长度', 'periodDays', 'data-quota-days') +
     '<label data-quota hidden>每周期目标次数<input required type="number" min="1" max="999" name="target" value="1"></label>' +
     '<label>备注<input name="reminder" maxlength="100"></label>' +
@@ -154,5 +160,5 @@ export function planDialog() {
     '<p data-form-error role="alert" hidden></p></form></dialog>';
 }
 
-export const planKindHelp = kind => kind === 'recurring' ? '' : kindHelp[kind];
+export const planKindHelp = kind => kindHelp[kind] ?? '';
 export const planPeriodLabel = period => periods[period];

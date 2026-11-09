@@ -111,6 +111,7 @@ export function reviewDialog() {
   return `<dialog class="task-dialog apple-dialog" data-review-dialog aria-labelledby="review-title">
     <form data-review-form>
       <h2 id="review-title">建立日程</h2><input type="hidden" name="action" value="calendar"><input type="hidden" name="taskId"><input type="hidden" name="eventId"><input type="hidden" name="eventVersion"><input type="hidden" name="createId">
+      <input type="hidden" name="reminderPlan"><input type="hidden" name="reminderDate">
       <p data-review-link hidden></p>
       <label data-caldav-edit-title hidden>日程标题<input name="eventTitle" maxlength="300" disabled></label>
       <fieldset><legend>时间 · 东京</legend>
@@ -144,14 +145,16 @@ export function updateReview(form) {
     ? '保存后检查时间冲突并同步到 ' + connection.caldav.name + '。' : '保存后生成待写入日程。';
 }
 
-export function openReview(app, task, event, date = task?.date ?? dateKey()) {
+export function openReview(app, task, event, date = task?.date ?? dateKey(), reminder) {
   const dialog = app.querySelector('[data-review-dialog]');
   const form = dialog.querySelector('form');
   form.reset();
-  const direct = !task || Boolean(event);
+  const direct = (!task && !reminder) || Boolean(event);
   form.elements.taskId.value = task?.id ?? '';
   form.elements.eventId.value = event?.id ?? '';
-  form.elements.createId.value = !task && !event ? crypto.randomUUID() : '';
+  form.elements.createId.value = direct && !event ? crypto.randomUUID() : '';
+  form.elements.reminderPlan.value = reminder?.planId ?? '';
+  form.elements.reminderDate.value = reminder?.date ?? '';
   form.elements.eventVersion.value = JSON.stringify(event?.caldav?.version ?? null);
   form.elements.eventTitle.value = event?.title ?? '';
   form.elements.eventTitle.disabled = !direct;
@@ -161,11 +164,12 @@ export function openReview(app, task, event, date = task?.date ?? dateKey()) {
   form.elements.notes.maxLength = direct ? 8000 : 700;
   form.querySelector('[data-caldav-edit-title]').hidden = !direct;
   form.querySelector('[data-caldav-rebase]').hidden = true;
-  form.querySelector('h2').textContent = event ? '编辑 YiStudio 日程' : direct ? '新建 YiStudio 日程' : '建立日程';
+  form.querySelector('h2').textContent = event ? '编辑 YiStudio 日程' : direct || reminder ? '新建 YiStudio 日程' : '建立日程';
   form.elements.startTime.value = date + 'T09:00';
   form.elements.endTime.value = date + 'T10:00';
   form.elements.startDate.value = date;
   form.elements.endDate.value = date;
+  if (reminder) form.elements.notes.value = reminder.notes ?? '';
   if (event) {
     const localTime = value => new Intl.DateTimeFormat('sv-SE', {
       timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -188,8 +192,8 @@ export function openReview(app, task, event, date = task?.date ?? dateKey()) {
     form.elements.notes.value = event.notes ?? '';
   }
   const source = form.querySelector('[data-review-link]');
-  source.hidden = !task;
-  source.textContent = task?.title ?? '';
+  source.hidden = !task && !reminder;
+  source.textContent = task?.title ?? reminder?.title ?? '';
   form.querySelector('[data-form-error]').hidden = true;
   updateReview(form);
   dialog.showModal();

@@ -57,6 +57,23 @@ export function inQuotaPeriod(key, plan, today = todayDate()) {
   return Boolean(day && day >= anchor && today >= anchor && index(day) === index(today));
 }
 
+export function planReminderDates(plan, from, through = '9999-12-31', limit = Infinity) {
+  const anchor = parseDate(plan.startDate);
+  const first = parseDate(from);
+  const last = parseDate(through);
+  if (plan.paused || !anchor || !first || !last || first > last || anchor > last) return [];
+  if (plan.kind === 'one-off') return anchor >= first ? [plan.startDate] : [];
+  const step = plan.kind === 'recurring' ? plan.interval : plan.periodDays ?? 1;
+  if (plan.period !== 'day' || !Number.isSafeInteger(step) || step < 1) return [];
+  const min = Math.max(0, (first - anchor) / 86_400_000);
+  const max = (last - anchor) / 86_400_000;
+  const dates = [];
+  for (let offset = Math.ceil(min / step) * step; offset <= max && dates.length < limit; offset += step) {
+    dates.push(dateKey(addDays(anchor, offset)));
+  }
+  return dates;
+}
+
 export function calendarDays(date, mode) {
   const [start, end] = periodBounds(date, mode);
   const first = mode === 'month' ? weekStart(start) : start;
