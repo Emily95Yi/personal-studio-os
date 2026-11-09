@@ -68,12 +68,21 @@ function replace(target, source) {
   target.splice(0, target.length, ...structuredClone(source ?? []));
 }
 
+const reminderItem = (plan, date) => ({ planId: plan.id, date, title: plan.title, notes: plan.reminder });
+
 // Keep one pending reminder per plan. Dismissing it advances past today's cycles without a backlog.
 function dueReminder(plan, today) {
   if (plan.deletedAt || !plan.startDate || plan.snoozedUntil > today) return null;
   const after = plan.handledThrough ? dateKey(addDays(parseDate(plan.handledThrough), 1)) : plan.startDate;
   const [date] = planReminderDates(plan, after, today, 1);
-  return date ? { planId: plan.id, date, title: plan.title, notes: plan.reminder } : null;
+  return date ? reminderItem(plan, date) : null;
+}
+
+function scheduledReminder(plan, date) {
+  if (plan.deletedAt || plan.handledThrough >= date || plan.snoozedUntil > date) return null;
+  if (plan.snoozedUntil === date) return dueReminder(plan, date);
+  const [occurrence] = planReminderDates(plan, date, date, 1);
+  return occurrence ? reminderItem(plan, occurrence) : null;
 }
 
 function removeTasks(ids) {
@@ -126,6 +135,9 @@ export const plannerRepository = {
   },
   dueReminders(today = dateKey()) {
     return plans.map(plan => dueReminder(plan, today)).filter(Boolean).sort((a, b) => a.date.localeCompare(b.date));
+  },
+  remindersOn(date) {
+    return plans.map(plan => scheduledReminder(plan, date)).filter(Boolean);
   },
   getReminder(planId, date, today = dateKey()) {
     const plan = plans.find(item => item.id === planId);

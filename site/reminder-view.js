@@ -2,11 +2,13 @@ import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
 import { canEdit } from './apple-view.js';
 
-export function reminderRows(reminders) {
+export function reminderRows(reminders, { selectedDate, pending, showDate = false } = {}) {
   return reminders.map(reminder =>
     '<li class="agenda-entry"><button type="button" data-auto-reminder="' + esc(reminder.planId) +
-    '" data-reminder-date="' + esc(reminder.date) + '"><strong>' + esc(reminder.title) +
-    '</strong></button>' + (canEdit() ?
+    '" data-reminder-date="' + esc(reminder.date) + '"' +
+    (selectedDate ? ' data-reminder-selected="' + esc(selectedDate) + '"' : '') + '><strong>' + esc(reminder.title) +
+    '</strong>' + (showDate ? '<span>' + esc(reminder.date) + '</span>' : '') +
+    '</button>' + (canEdit() && (!pending || pending.get(reminder.planId) === reminder.date) ?
       '<button type="button" class="header-icon calendar-icon agenda-calendar-arrow" data-reminder-calendar="' + esc(reminder.planId) +
       '" data-reminder-date="' + esc(reminder.date) + '" aria-label="添加日程到 YiStudio 日历" title="添加日程到 YiStudio 日历">' +
       icon('arrow', 17) + '</button>' : '') + '</li>').join('');
@@ -23,6 +25,7 @@ export function reminderDialog() {
     icon('trash', 19) + '</button>' +
     '<button type="button" class="header-icon calendar-icon" data-dialog-cancel aria-label="关闭" title="关闭">' +
     icon('remove', 19) + '</button></div></div><strong data-reminder-title></strong>' +
+    '<p data-reminder-date-label></p>' +
     '<p data-reminder-notes hidden></p><form class="reminder-defer-form" data-reminder-defer-form hidden>' +
     '<label>延后天数<span class="plan-unit-input"><input name="days" type="number" min="1" step="1" value="1" required><span>日</span></span></label>' +
     '<button type="submit" class="header-icon calendar-icon" aria-label="确认延后" title="确认延后">' +

@@ -32,7 +32,8 @@ function calendarGrid(date, mode, from, preview = false) {
     const checked = checkIns.includes(key);
     const eventCount = events.filter(event => event.date === key).length;
     const dailyAppointments = appointments.filter(event => onDay(event, key) && (!preview || event.status !== 'draft'));
-    const details = [!preview && dailyAppointments.length ? dailyAppointments.length + ' 项日程' : '', checked ? '打卡' : '',
+    const details = [!preview && dailyAppointments.length ? dailyAppointments.length + ' 项日程' : '',
+      !preview && plannerRepository.remindersOn(key).length ? '提醒' : '', checked ? '打卡' : '',
       eventCount ? eventCount + ' 场活动' : ''].filter(Boolean);
     const titles = preview ? dailyAppointments.sort(appointmentOrder).map(event =>
       '<button type="button" class="week-appointment" data-apple-event="' + escapeHtml(event.id) +
@@ -148,10 +149,16 @@ export function calendarView({ params }) {
   const from = params.get('from');
   const legend = Object.entries(calendarSourceLabels).map(([source, label]) =>
     '<li data-calendar-source="' + source + '">' + label + '</li>').join('');
-  const reminders = plannerRepository.dueReminders();
-  const lists = taskList() + (reminders.length ?
-    '<section class="agenda-group calendar-reminders" aria-label="提醒"><h3>提醒</h3>' +
-    '<ul class="agenda-list">' + reminderRows(reminders) + '</ul></section>' : '');
+  const selectedDate = dateKey(date);
+  const scheduled = plannerRepository.remindersOn(selectedDate);
+  const due = plannerRepository.dueReminders();
+  const pending = new Map(due.map(reminder => [reminder.planId, reminder.date]));
+  const scheduledDates = new Map(scheduled.map(reminder => [reminder.planId, reminder.date]));
+  const reminders = (label, rows, options) => rows.length ?
+    '<section class="agenda-group calendar-reminders" aria-label="' + label + '"><h3>' + label + '</h3>' +
+    '<ul class="agenda-list">' + reminderRows(rows, options) + '</ul></section>' : '';
+  const lists = taskList() + reminders('当天提醒', scheduled, { selectedDate, pending }) +
+    reminders('待处理提醒', due.filter(reminder => scheduledDates.get(reminder.planId) !== reminder.date), { showDate: true });
   return '<div class="calendar-toolbar"><div class="segmented" aria-label="日历视图">' +
     modes.map(([key, label]) => dateLink(date, key, label, from, mode === key ? ' aria-current="page"' : '')).join('') +
     '</div><div class="calendar-controls">' +

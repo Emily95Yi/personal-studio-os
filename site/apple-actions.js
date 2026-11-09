@@ -6,11 +6,12 @@ import { plannerRepository } from './repository.js';
 import { href } from './pages.js';
 import { dateKey } from './calendar.js';
 
-function showReminder(app, reminder) {
+function showReminder(app, reminder, selectedDate, pending) {
   const dialog = app.querySelector('[data-reminder-dialog]');
   dialog.dataset.planId = reminder.planId;
   dialog.dataset.date = reminder.date;
   dialog.querySelector('[data-reminder-title]').textContent = reminder.title;
+  dialog.querySelector('[data-reminder-date-label]').textContent = selectedDate || reminder.date;
   const notes = dialog.querySelector('[data-reminder-notes]');
   notes.textContent = reminder.notes ?? '';
   notes.hidden = !reminder.notes;
@@ -21,7 +22,7 @@ function showReminder(app, reminder) {
   defer.querySelector('[data-form-error]').hidden = true;
   dialog.querySelector('[data-reminder-defer]').setAttribute('aria-expanded', 'false');
   for (const action of dialog.querySelectorAll('[data-reminder-calendar], [data-reminder-defer], [data-reminder-delete]')) {
-    action.hidden = !canEdit();
+    action.hidden = !canEdit() || !pending;
   }
   dialog.showModal();
 }
@@ -235,8 +236,11 @@ export function initAppleActions(app, render) {
       if (item) showEvent(app, item);
     }
     if (button.dataset.autoReminder) {
-      const reminder = plannerRepository.getReminder(button.dataset.autoReminder, button.dataset.reminderDate);
-      if (reminder) showReminder(app, reminder);
+      const { autoReminder, reminderDate, reminderSelected } = button.dataset;
+      const pending = plannerRepository.getReminder(autoReminder, reminderDate);
+      const reminder = reminderSelected ? plannerRepository.remindersOn(reminderSelected)
+        .find(row => row.planId === autoReminder && row.date === reminderDate) : pending;
+      if (reminder) showReminder(app, reminder, reminderSelected, Boolean(pending));
       return;
     }
     if (button.hasAttribute('data-reminder-calendar') && canEdit()) {

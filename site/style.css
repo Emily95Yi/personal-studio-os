@@ -291,7 +291,7 @@ svg { flex: none; vertical-align: middle; }
 .calendar-lists { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 14px; }
 .calendar-tasks { margin-top: 0; }
 .calendar-reminders { margin-top: 0; }
-.calendar-tasks + .calendar-reminders { margin-top: 20px; }
+.calendar-lists .agenda-group + .calendar-reminders { margin-top: 20px; }
 .reminder-dialog [data-reminder-title] { display: block; margin-block: 8px; overflow-wrap: anywhere; }
 .reminder-dialog .return-link { margin-top: 8px; }
 .reminder-defer-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 6px; }
