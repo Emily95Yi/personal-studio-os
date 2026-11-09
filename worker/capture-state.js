@@ -26,7 +26,7 @@ export async function readStudio(env, owner, requestedRevision) {
     for (const projection of projected.results) {
       if (projection.status === 'organized') state[projection.native_collection].push(JSON.parse(projection.document));
     }
-    return { row, state, empty: !snapshot && !row?.revision };
+    return { row, state, projections: projected.results, empty: !snapshot && !row?.revision };
   }
   throw captureError('studio_unavailable', 503);
 }

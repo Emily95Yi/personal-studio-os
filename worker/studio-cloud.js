@@ -4,6 +4,7 @@ import { emptyStudio } from '../site/studio-data.js';
 import { clearBoardTrash } from '../site/self-board-data.js';
 import { cleanupUploads } from './capture-files.js';
 import { previewMigration, studioExport } from '../site/studio-migration.js';
+import { applyStudioDelta, deltaFormat } from '../site/studio-delta.js';
 
 const leaseDuration = 120_000;
 const validToken = token => typeof token === 'string' && /^[0-9a-f-]{36}$/.test(token);
@@ -53,23 +54,24 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
   const revision = request.headers.get('X-Studio-Revision');
   if (revision !== String(row.revision)) return json({ error: 'conflict' }, 409);
   const clearTrash = url.searchParams.get('clear-trash') === '1';
-  let transfer;
-  if (clearTrash) {
-    const current = await readStudio(env, owner);
-    if (current.row?.revision !== row.revision) return json({ error: 'conflict' }, 409);
-    clearBoardTrash(current.state);
-    transfer = studioExport(current.state);
-  } else {
-    transfer = await body(request, 24 * 1024 * 1024);
-  }
+  let transfer = clearTrash ? undefined : await body(request, 24 * 1024 * 1024);
+  const delta = transfer?.format === deltaFormat;
+  const current = clearTrash || delta ? await readStudio(env, owner) : null;
+  if (current && current.row?.revision !== row.revision) return json({ error: 'conflict' }, 409);
   let checked;
   try {
+    if (clearTrash) {
+      clearBoardTrash(current.state);
+      transfer = studioExport(current.state);
+    } else if (delta) {
+      transfer = applyStudioDelta(current.state, transfer);
+    }
     checked = previewMigration(emptyStudio(), transfer).next;
   } catch {
     return json({ error: 'invalid_studio' }, 400);
   }
   ensureCaptureTopic(checked);
-  const { results: projections } = await readProjections(db, owner).all();
+  const projections = current?.projections ?? (await readProjections(db, owner).all()).results;
   const key = 'studio/' + crypto.randomUUID() + '.json';
   const updates = [];
   const purged = [];

@@ -1,6 +1,7 @@
 import { ensureCaptureTopic } from './capture-topic.js';
 import { collections, emptyStudio, studioStore } from './studio-data.js';
 import { studioExport } from './studio-migration.js';
+import { studioDelta } from './studio-delta.js';
 
 export const studioSync = { mode: 'loading', migration: false, message: '' };
 let revision = -1;
@@ -141,10 +142,10 @@ async function put(transfer, expected, path = '') {
   return revision;
 }
 
-async function saveCloud(next, expected, { clearTrash = false } = {}) {
+async function saveCloud(next, expected, { clearTrash = false } = {}, previous) {
   const release = await beginStudioEdit();
   try {
-    return clearTrash ? await put(undefined, expected, '?clear-trash=1') : await put(studioExport(next), expected);
+    return clearTrash ? await put(undefined, expected, '?clear-trash=1') : await put(studioDelta(previous, next), expected);
   } finally {
     release();
   }

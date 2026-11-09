@@ -296,10 +296,10 @@ export function createStudioStore(open = database) {
     async change(update, options) {
       await this.load();
       if (cloud) {
-        const revision = state.revision;
-        const next = structuredClone(state);
+        const previous = state;
+        const next = structuredClone(previous);
         const result = update(next);
-        next.revision = await cloud(next, revision, options);
+        next.revision = await cloud(next, previous.revision, options, previous);
         state = next;
         return result;
       }
