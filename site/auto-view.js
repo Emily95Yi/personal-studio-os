@@ -1,8 +1,8 @@
-import { calendarHref, inQuotaPeriod, todayDate } from './calendar.js';
+import { calendarHref, dateKey, inQuotaPeriod, todayDate } from './calendar.js';
 import { escapeHtml } from './html.js';
 import { icon } from './icons.js';
 import { boardContentHref, boardSections, collectionItemAddress, explorationAddress, href, inboxAddress } from './pages.js';
-import { plannerRepository, selfBoardIncludes, studioRepository } from './repository.js';
+import { nextPlanReminderDate, plannerRepository, selfBoardIncludes, studioRepository } from './repository.js';
 import { connection } from './private-api.js';
 import { contentTitle, studioStore } from './studio-data.js';
 import { entriesFor, explorationEntryTitle, itemsFor, topicsFor } from './board-library-data.js';
@@ -73,10 +73,26 @@ function quotaProgress(plan) {
 }
 
 function planCards(plans) {
-  return plans.length ? '<div class="auto-plans">' + plans.map(plan =>
+  return '<div class="auto-plans">' + plans.map(plan =>
     '<a class="auto-plan-card" href="' + href('self-board', 'auto', plan.id) + '"><strong>' +
     escapeHtml(plan.title) + '</strong><small>' + planSummary(plan) + '</small>' + quotaProgress(plan) +
-    '</a>').join('') + '</div>' : '<p class="subtle">暂无计划。</p>';
+    '</a>').join('') + '</div>';
+}
+
+function planGroups(plans) {
+  if (!plans.length) return '<p class="subtle">暂无计划。</p>';
+  const today = dateKey();
+  const byReminder = plans.map(plan => ({ plan, date: nextPlanReminderDate(plan, today) })).sort((a, b) =>
+    a.date && b.date ? a.date.localeCompare(b.date) : Number(!a.date) - Number(!b.date));
+  return Object.entries(kinds).map(([kind, label]) => {
+    const group = byReminder.filter(({ plan }) => plan.kind === kind).map(({ plan }) => plan);
+    return group.length ? '<section class="auto-plan-group"><h3>' + label + '</h3>' + planCards(group) + '</section>' : '';
+  }).join('');
+}
+
+function createIcon(label, glyph, attribute) {
+  return '<button type="button" class="header-icon calendar-icon" ' + attribute + ' aria-label="' + label +
+    '" title="' + label + '">' + icon(glyph, 19) + '</button>';
 }
 
 export function taskCalendarAction(task) {
@@ -103,8 +119,9 @@ export function autoView() {
     (connection.mode === 'preview' ? '本机预览 · 刷新清除' : connection.mode === 'private' ? '' :
       connection.mode === 'loading' ? '正在连接私有工作台…' : '私有服务不可用') +
     '</span><div class="planner-actions">' +
-    (canEdit() ? '<button class="action-button" type="button" data-plan-new>新建计划</button>' : '') + calendarLink('week', 'auto') + '</div></div>' +
-    '<section class="auto-section"><h2>计划</h2>' + planCards(plannerRepository.listPlans()) + '</section>' +
+    (canEdit() ? createIcon('新建计划', 'calendarAdd', 'data-plan-new') +
+      createIcon('新建待办', 'taskAdd', 'data-task-new') : '') + calendarLink('week', 'auto') + '</div></div>' +
+    '<section class="auto-section"><h2>计划</h2>' + planGroups(plannerRepository.listPlans()) + '</section>' +
     '<section class="auto-section"><h2>待办</h2>' + taskRows(plannerRepository.standaloneTasks(), true) + '</section>';
 }
 

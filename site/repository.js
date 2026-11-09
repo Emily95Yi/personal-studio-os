@@ -70,11 +70,23 @@ function replace(target, source) {
 
 const reminderItem = (plan, date) => ({ planId: plan.id, date, title: plan.title, notes: plan.reminder });
 
+function firstUnhandledReminder(plan, through) {
+  if (plan.deletedAt || !plan.startDate) return undefined;
+  const after = plan.handledThrough ? dateKey(addDays(parseDate(plan.handledThrough), 1)) : plan.startDate;
+  return planReminderDates(plan, after, through, 1)[0];
+}
+
+export function nextPlanReminderDate(plan, today = dateKey()) {
+  const date = firstUnhandledReminder(plan);
+  if (!date) return undefined;
+  const availableOn = plan.snoozedUntil > today ? plan.snoozedUntil : today;
+  return date > availableOn ? date : availableOn;
+}
+
 // Keep one pending reminder per plan. Dismissing it advances past today's cycles without a backlog.
 function dueReminder(plan, today) {
-  if (plan.deletedAt || !plan.startDate || plan.snoozedUntil > today) return null;
-  const after = plan.handledThrough ? dateKey(addDays(parseDate(plan.handledThrough), 1)) : plan.startDate;
-  const [date] = planReminderDates(plan, after, today, 1);
+  if (plan.snoozedUntil > today) return null;
+  const date = firstUnhandledReminder(plan, today);
   return date ? reminderItem(plan, date) : null;
 }
 

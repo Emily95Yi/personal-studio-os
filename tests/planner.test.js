@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { dateKey, inQuotaPeriod, parseDate, planReminderDates } from '../site/calendar.js';
 import { eventTimes } from '../site/calendar-events.js';
-import { plannerRepository } from '../site/repository.js';
+import { nextPlanReminderDate, plannerRepository } from '../site/repository.js';
 import { validSnapshot } from '../worker/planner.js';
 
 test('daily quota cycles use the original Tokyo date and advance across calendar boundaries', () => {
@@ -54,20 +54,26 @@ test('due reminders persist, defer by custom days and dismiss just the pending c
   const date = '2027-05-01';
   const plan = repo.savePlan({ title: 'Plan', kind: 'recurring', period: 'day', interval: 2, startDate: date });
   assert.deepEqual(repo.dueReminders('2027-04-30'), []);
+  assert.equal(nextPlanReminderDate(plan, '2027-04-30'), date);
   assert.equal(repo.remindersOn(date)[0].date, date);
   assert.deepEqual(repo.remindersOn('2027-05-02'), []);
   assert.equal(repo.remindersOn('2027-05-03')[0].date, '2027-05-03');
   assert.equal(repo.dueReminders(date)[0].date, date);
   assert.equal(repo.dueReminders('2027-05-02')[0].date, date);
+  assert.equal(nextPlanReminderDate(plan, '2027-05-02'), '2027-05-02');
   assert.equal(repo.deferReminder(plan.id, date, 3, '2027-05-02'), true);
   assert.ok(validSnapshot(repo.snapshot()));
   repo.restore(repo.snapshot());
   assert.equal(repo.dueReminders('2027-05-04').length, 0);
+  assert.equal(nextPlanReminderDate(repo.getPlan(plan.id), '2027-05-04'), '2027-05-05');
   assert.deepEqual(repo.remindersOn('2027-05-03'), []);
   assert.equal(repo.remindersOn('2027-05-05')[0].date, date);
   assert.equal(repo.dueReminders('2027-05-05')[0].date, date);
   assert.equal(repo.dismissReminder(plan.id, date, '2027-05-05'), true);
   assert.equal(repo.dueReminders('2027-05-06').length, 0);
+  assert.equal(nextPlanReminderDate(repo.getPlan(plan.id), '2027-05-06'), '2027-05-07');
+  assert.equal(nextPlanReminderDate({ ...plan, paused: true }, '2027-05-06'), undefined);
+  assert.equal(nextPlanReminderDate({ ...plan, kind: 'one-off', handledThrough: date }, date), undefined);
   assert.deepEqual(repo.remindersOn('2027-05-05'), []);
   assert.equal(repo.remindersOn('2027-05-07')[0].date, '2027-05-07');
   assert.equal(repo.dueReminders('2027-05-07')[0].date, '2027-05-07');

@@ -9,7 +9,7 @@ import { escapeHtml } from './html.js';
 import { autoPlanView, originalSource, planDialog, planKindHelp, planPeriodLabel } from './auto-view.js';
 import { plannerRepository, studioRepository } from './repository.js';
 import { calendarHref, calendarSelection, dateKey, todayDate } from './calendar.js';
-import { calendarHeaderActions, calendarRefreshState, calendarView, entryDialog, weekPreview } from './planner-view.js';
+import { calendarHeaderActions, calendarRefreshAction, calendarRefreshState, calendarView, entryDialog, weekPreview } from './planner-view.js';
 import { reminderDialog } from './reminder-view.js';
 import { allCalendarEvents, canEdit, eventDialog, openReview, settingsView, showEntryForm, showEvent, statusBanner } from './apple-view.js';
 import { connection, loadCalDav, loadFeed, loadPlanner, onPrivateChange, saveChanges } from './private-api.js';
@@ -133,9 +133,9 @@ function header(route, { title, ancestors }) {
     '<a class="header-icon" href="' + href('search') + '" aria-label="搜索" title="搜索">' + icon('search', 18) + '</a>';
   return '<header class="studio-top"><div class="masthead' + (inBoard ? ' sb-masthead' : '') +
     (floatingSearch ? ' searchable-masthead' : '') + '">' + start +
-    '<div class="header-actions">' + search + calendar + (route.type === 'calendar' ? calendarHeaderActions() : '') + (inBoard ?
+    '<div class="header-actions">' + search + calendar + (route.type === 'calendar' ? calendarHeaderActions() : '') +
+    (route.type === 'settings' ? calendarRefreshAction() : '') + (inBoard ?
       '<button type="button" class="header-icon sb-header-button" data-sb-capture aria-label="快速添加" title="快速添加">' + icon('add', 19) + '</button>' +
-      '<a class="header-icon" href="' + boardHref('connections') + '" aria-label="Network" title="Network">' + icon('network', 18) + '</a>' +
       '<a class="header-icon" href="' + escapeHtml(boardSettingsAddress(location.hash || boardHref())) +
       '" aria-label="Self-Board 设置" title="Self-Board 设置">' + icon('settings', 19) + '</a>' : '') +
     '</div></div>' + (floatingSearch ? '<div class="sb-search-results" data-sb-search-results aria-live="polite" hidden></div>' : '') + '</header>';
@@ -268,7 +268,7 @@ app.addEventListener('click', event => {
   if (!canEdit()) return;
   if (button.dataset.calendarCreate) openCalendarEntry(button.dataset.calendarCreate);
   if (button.dataset.entryType) showEntryForm(button.closest('dialog'), button.dataset.entryType);
-  if (button.dataset.taskEdit || button.dataset.planTaskNew) openTaskDialog(button);
+  if (button.dataset.taskEdit || button.dataset.planTaskNew || button.hasAttribute('data-task-new')) openTaskDialog(button);
   if (button.hasAttribute('data-task-convert')) {
     const fields = button.form?.elements;
     const task = plannerRepository.getTask(button.dataset.taskConvert || fields?.id.value);
@@ -293,7 +293,7 @@ app.addEventListener('click', event => {
   }
   if (button.hasAttribute('data-task-delete') && plannerRepository.removeTask(button.form.elements.id.value)) {
     button.closest('dialog').close();
-    refreshFocus('[data-calendar-create], [data-calendar-day][aria-current="date"], [data-plan-task-new]');
+    refreshFocus('[data-calendar-create], [data-calendar-day][aria-current="date"], [data-plan-task-new], [data-task-new]');
   }
   if (button.dataset.planLog) {
     plannerRepository.recordCompletion(button.dataset.planLog, dateKey());
@@ -601,7 +601,6 @@ onPrivateChange(() => {
     if (preview) preview.innerHTML = weekPreview();
     if (focused) preview.querySelector('a').focus({ preventScroll: true });
   }
-  if (route.type !== 'calendar') return;
   const refresh = app.querySelector('[data-feed-refresh]');
   if (refresh) {
     const { state, label, disabled } = calendarRefreshState();
@@ -610,7 +609,7 @@ onPrivateChange(() => {
     refresh.setAttribute('aria-label', label);
     refresh.title = label;
   }
-  if (!feedChanged) return;
+  if (route.type !== 'calendar' || !feedChanged) return;
   if (!app.querySelector('[data-sb-search-results] :focus')) refreshHeaderSearch(app);
   const active = document.activeElement;
   const focusedLink = active?.closest('main') ? active.getAttribute('href') : null;
@@ -649,7 +648,7 @@ window.addEventListener('hashchange', async () => {
 async function pollStudioContent() {
   if (document.visibilityState !== 'visible' || app.querySelector('dialog[open]')) return;
   const route = readRoute(location.hash);
-  if (renderedDay !== dateKey() && (route.type === 'calendar' || route.type === 'auto-plan' || isBoardOverview(route))) render();
+  if (renderedDay !== dateKey() && (route.type === 'calendar' || route.collectionId === 'auto' || isBoardOverview(route))) render();
   const changed = await refreshStudioSync();
   if (readRoute(location.hash).type === 'capture') return;
   if (changed && !app.querySelector('dialog[open]')) render();

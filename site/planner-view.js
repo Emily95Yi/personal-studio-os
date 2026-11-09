@@ -134,11 +134,14 @@ export function calendarRefreshState() {
     { state: 'idle', label: '刷新日历', disabled: false };
 }
 
-export function calendarHeaderActions() {
+export function calendarRefreshAction() {
   const { state, label, disabled } = calendarRefreshState();
   return '<button type="button" class="header-icon calendar-icon" data-feed-refresh data-refresh-state="' + state +
-    '" aria-disabled="' + disabled + '" aria-label="' + label + '" title="' + label + '">' + icon('refresh', 19) + '</button>' +
-    '<a class="header-icon calendar-icon" href="' + href('self-board', 'auto') +
+    '" aria-disabled="' + disabled + '" aria-label="' + label + '" title="' + label + '">' + icon('refresh', 19) + '</button>';
+}
+
+export function calendarHeaderActions() {
+  return '<a class="header-icon calendar-icon" href="' + href('self-board', 'auto') +
     '" aria-label="Auto 设定" title="Auto 设定">' + icon('auto', 19) + '</a>' +
     '<a class="header-icon calendar-icon" href="' + href('settings') +
     '" aria-label="日历设置" title="日历设置">' + icon('settings', 19) + '</a>';

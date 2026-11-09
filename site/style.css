@@ -234,6 +234,8 @@ svg { flex: none; vertical-align: middle; }
 .auto-section { max-width: 760px; margin-top: 20px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .auto-section h2 { font-size: 15px; }
 .auto-section > h2 { margin-bottom: 7px; }
+.auto-plan-group + .auto-plan-group { margin-top: 14px; }
+.auto-plan-group h3 { margin: 0 0 5px; color: var(--muted); font-size: 13px; }
 .auto-plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 8px; }
 .auto-plan-card { display: grid; align-content: start; gap: 3px; padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); overflow-wrap: anywhere; }
 .auto-plan-card:hover { border-color: var(--accent); }
@@ -542,6 +544,9 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .sb-empty strong { color: var(--ink); }
 .sb-empty .action-button { margin-top: 3px; }
 .sb-auto { margin-top: 20px; }
+@media (max-width: 550px) {
+  .capture-inbox + .sb-auto { margin-top: calc(20px + 1lh); }
+}
 .sb-network-tools { justify-content: space-between; margin-bottom: 8px; }
 .sb-trash-list { padding: 0; margin: 0; list-style: none; }
 .sb-trash-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 0; }

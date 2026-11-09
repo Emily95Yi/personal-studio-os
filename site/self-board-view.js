@@ -184,7 +184,9 @@ function boardSettings(editing) {
         boardIcon('编辑标签 ' + label.name, 'edit', { data: 'data-sb-label="' + esc(label.id) + '"', className: iconClass }) +
         boardIcon('移除标签 ' + label.name, 'trash', { data: 'data-sb-remove-label="' + esc(label.id) + '"', className: iconClass }) + '</div>' : '') +
       '</li>').join('') + '</ul>' : '<p class="work-meta">添加标签后，可在灵感详情的编辑模式里为卡片选色。</p>') +
-    '</section>' + explorationTypeSettings(editing) + captureSettingsView();
+    '</section>' + explorationTypeSettings(editing) + captureSettingsView() +
+    '<section class="sb-settings"><a class="return-link" href="' + boardHref('connections') + '">' +
+    icon('network', 18) + 'Network</a></section>';
 }
 
 function groupedRows(items, groupFor, mode) {

@@ -10,7 +10,7 @@ import { combineEvents, eventIcs, eventStatusLabel, eventTimes, readShortcutResu
 import { plannerRepository } from '../site/repository.js';
 import { allCalendarEvents, showEvent } from '../site/apple-view.js';
 import { connection } from '../site/private-api.js';
-import { calendarHeaderActions, calendarView } from '../site/planner-view.js';
+import { calendarHeaderActions, calendarRefreshAction, calendarView } from '../site/planner-view.js';
 
 const fakeUrl = 'webcal://p1-caldav.icloud.com/published/2/fixture_not_a_real_credential';
 const ics = (...events) => ['BEGIN:VCALENDAR', 'VERSION:2.0', ...events.flatMap(properties =>
@@ -222,12 +222,13 @@ test('calendar views combine color-coded sources and omit iCloud mutation contro
   assert.match(html, /data-calendar-source="A"[^]*Apple A original/);
   assert.match(html, /data-calendar-source="B"[^]*B only/);
   assert.match(html, /data-calendar-create="2027-01-08"[^>]+aria-label="新建日程或待办"/);
-  assert.match(calendarHeaderActions(), /data-refresh-state="success"/);
+  assert.doesNotMatch(calendarHeaderActions(), /data-feed-refresh/);
+  assert.match(calendarRefreshAction(), /data-refresh-state="success"/);
   connection.refreshing = true;
-  assert.match(calendarHeaderActions(), /data-refresh-state="pending"/);
+  assert.match(calendarRefreshAction(), /data-refresh-state="pending"/);
   connection.refreshing = false;
   connection.caldav.secondary.stale = true;
-  assert.match(calendarHeaderActions(), /data-refresh-state="error"/);
+  assert.match(calendarRefreshAction(), /data-refresh-state="error"/);
   const body = { innerHTML: '' };
   const dialog = { dataset: {}, open: true, querySelector: () => body };
   const app = { querySelector: () => dialog, querySelectorAll: () => [] };
