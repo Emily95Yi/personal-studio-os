@@ -223,9 +223,13 @@ svg { flex: none; vertical-align: middle; }
 .widget-week .calendar-day { background: var(--surface); }
 .widget-week .calendar-day.is-today { background: var(--selected); }
 .widget-week .calendar-day:hover { border-color: var(--line); }
-.agenda-list.week-appointments { margin-top: .6rem; }
-.week-appointments .agenda-appointment > button { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; }
-.week-appointments small { color: var(--muted); font-size: 12px; white-space: nowrap; text-align: end; }
+.widget-week .day-indicators { width: 100%; grid-template-columns: minmax(0, 1fr); }
+.week-appointment {
+  min-height: 20px; padding: 0 2px; border: 0; border-radius: 3px; background: var(--tint);
+  font: inherit; color: inherit; text-align: start; cursor: pointer;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.week-appointment:hover { background: var(--selected); }
 .auto-toolbar { max-width: 760px; align-items: center; }
 .auto-section { max-width: 760px; margin-top: 20px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .auto-section h2 { font-size: 15px; }

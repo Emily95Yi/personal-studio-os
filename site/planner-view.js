@@ -1,4 +1,4 @@
-import { addDays, calendarDays, calendarHref, calendarSelection, dateKey, formatDay, movePeriod, parseDate, periodBounds, todayDate } from './calendar.js';
+import { calendarDays, calendarHref, calendarSelection, dateKey, formatDay, movePeriod, todayDate } from './calendar.js';
 import { plannerRepository, workshopRepository } from './repository.js';
 import { href } from './pages.js';
 import { escapeHtml } from './html.js';
@@ -11,6 +11,7 @@ import { reminderRows } from './reminder-view.js';
 
 const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
 const modes = [['day', 'Day'], ['week', 'Week'], ['month', 'Month']];
+const appointmentOrder = (a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start);
 
 function dateLink(date, mode, label, from, attributes = '') {
   return '<a data-calendar-nav href="' + escapeHtml(calendarHref(date, mode, from)) + '"' + attributes + '>' + label + '</a>';
@@ -30,11 +31,15 @@ function calendarGrid(date, mode, from, preview = false) {
     const today = key === dateKey();
     const checked = checkIns.includes(key);
     const eventCount = events.filter(event => event.date === key).length;
-    const appointmentCount = appointments.filter(event => onDay(event, key)).length;
-    const details = [appointmentCount ? appointmentCount + ' 项日程' : '', checked ? '打卡' : '',
+    const dailyAppointments = appointments.filter(event => onDay(event, key) && (!preview || event.status !== 'draft'));
+    const details = [!preview && dailyAppointments.length ? dailyAppointments.length + ' 项日程' : '', checked ? '打卡' : '',
       eventCount ? eventCount + ' 场活动' : ''].filter(Boolean);
+    const titles = preview ? dailyAppointments.sort(appointmentOrder).map(event =>
+      '<button type="button" class="week-appointment" data-apple-event="' + escapeHtml(event.id) +
+      '" title="' + escapeHtml(event.title) + '">' + escapeHtml(event.title) + '</button>').join('') : '';
     const label = '<span class="day-number">' + day.getUTCDate() + '</span>' +
-      (details.length ? '<span class="day-indicators">' + details.map(detail => '<small>' + detail + '</small>').join('') + '</span>' : '');
+      (titles || details.length ? '<span class="day-indicators">' + titles +
+        details.map(detail => '<small>' + detail + '</small>').join('') + '</span>' : '');
     const className = 'calendar-day' + (mode === 'month' && day.getUTCMonth() !== date.getUTCMonth() ? ' other-month' : '') +
       (today ? ' is-today' : '');
     if (preview) return '<div class="' + className + '">' + label + '</div>';
@@ -47,26 +52,11 @@ function calendarGrid(date, mode, from, preview = false) {
 }
 
 export function weekPreview(date = todayDate()) {
-  const [first, last] = periodBounds(date, 'week').map(dateKey);
-  const appointments = allCalendarEvents().filter(event => event.status !== 'draft' &&
-    event.dayStart <= last && event.dayEnd > first)
-    .sort((a, b) => a.dayStart.localeCompare(b.dayStart) || Number(b.allDay) - Number(a.allDay) ||
-      a.start.localeCompare(b.start));
-  const rows = appointments.map(event => {
-    const end = dateKey(addDays(parseDate(event.dayEnd), -1));
-    const dates = event.dayStart.slice(5).replace('-', '/') +
-      (end === event.dayStart ? '' : '–' + end.slice(5).replace('-', '/'));
-    return '<li class="agenda-appointment"' +
-      (event.sourceGroup ? ' data-calendar-source="' + escapeHtml(event.sourceGroup) + '"' : '') +
-      '><button type="button" data-apple-event="' + escapeHtml(event.id) + '"><strong>' +
-      escapeHtml(event.title) + '</strong><small>' + escapeHtml(dates) + '</small></button></li>';
-  }).join('');
   return '<section class="widget widget-week" aria-labelledby="week-preview-title"><div class="section-heading">' +
     '<h2 id="week-preview-title">' + (date.getUTCMonth() + 1) + '月</h2>' +
     '<a class="header-icon" href="' + escapeHtml(calendarHref(date, 'week', 'self-board')) +
     '" aria-label="打开日历" title="打开日历">' + icon('calendar', 19) + '</a></div>' +
-    calendarGrid(date, 'week', 'self-board', true) +
-    (rows ? '<ul class="agenda-list week-appointments" aria-label="本周日程">' + rows + '</ul>' : '') + '</section>';
+    calendarGrid(date, 'week', 'self-board', true) + '</section>';
 }
 
 export function calendarSearchResults(query, events = allCalendarEvents()) {
@@ -89,9 +79,11 @@ export function calendarSearchResults(query, events = allCalendarEvents()) {
 function agenda(date, mode) {
   const key = dateKey(date);
   const appointments = allCalendarEvents().filter(event => onDay(event, key))
-    .sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start));
+    .sort(appointmentOrder);
   const checked = plannerRepository.checkInsBetween(key, key).length > 0;
   const events = workshopRepository.eventsBetween(key, key);
+  const canCreate = mode === 'day' && canEdit();
+  if (!appointments.length && !checked && !events.length && !canCreate) return '';
   const appointmentRows = appointments.map(event => {
     const source = event.sourceGroup;
     const label = calendarSourceLabels[source];
@@ -104,11 +96,11 @@ function agenda(date, mode) {
   }).join('');
   return '<section class="calendar-agenda"><div class="section-heading"><h2>' +
     (date.getUTCMonth() + 1) + '.' + date.getUTCDate() + '</h2><div class="calendar-agenda-actions">' +
-    (mode === 'day' && canEdit() ?
+    (canCreate ?
       '<button type="button" class="header-icon calendar-icon" data-calendar-create="' + key +
       '" aria-label="新建日程或待办" title="新建日程或待办">' + icon('add', 19) + '</button>' : '') + '</div></div>' +
-    '<section class="agenda-group" aria-label="日程"><h3>日程</h3>' +
-    (appointmentRows ? '<ul class="agenda-list">' + appointmentRows + '</ul>' : '<p>暂无日程。</p>') + '</section>' +
+    (appointmentRows ? '<section class="agenda-group" aria-label="日程"><h3>日程</h3>' +
+      '<ul class="agenda-list">' + appointmentRows + '</ul></section>' : '') +
     (checked ? '<p class="habit-record">习惯 · 已打卡</p>' : '') +
     (events.length ? '<ul class="event-agenda">' + events.map(event => '<li><a href="' +
       href('workshop', 'projects', event.projectId, 'events', event.id) + '">' + escapeHtml(event.theme || event.title) +
