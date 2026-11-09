@@ -148,11 +148,19 @@ export const plannerRepository = {
     changed();
     return true;
   },
-  saveCalendarEvent(details) {
+  saveCalendarEvent(details, { convertTaskId } = {}) {
     const title = details?.title?.trim();
     if (!title || title.length > 120) return null;
+    if (convertTaskId && !tasks.some(task => task.id === convertTaskId && !task.autoReminder)) return null;
     const event = { ...details, title, id: crypto.randomUUID(), status: 'export_pending', timeZone: 'Asia/Tokyo' };
     calendarEvents.push(event);
+    if (convertTaskId) {
+      // Keep plan completion history after moving the task out of the list.
+      for (const completion of completions) {
+        if (completion.taskId === convertTaskId) delete completion.taskId;
+      }
+      removeTasks(new Set([convertTaskId]));
+    }
     changed();
     return { ...event };
   },

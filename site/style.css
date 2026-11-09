@@ -281,8 +281,9 @@ svg { flex: none; vertical-align: middle; }
 .calendar-agenda h2 { font-size: 17px; }
 .agenda-group { margin-top: 10px; }
 .agenda-group h3 { margin: 0; font-size: 13px; }
-.calendar-tasks, .calendar-reminders { margin-top: 20px; }
-.calendar-tasks .section-heading { align-items: center; }
+.calendar-lists { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 14px; }
+.calendar-tasks { margin-top: 0; }
+.calendar-reminders { margin-top: 20px; }
 .reminder-dialog [data-reminder-title] { display: block; margin-block: 8px; overflow-wrap: anywhere; }
 .reminder-dialog .return-link { margin-top: 8px; }
 .reminder-defer-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 6px; }
@@ -330,7 +331,8 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .apple-settings label { display: grid; gap: 4px; margin-top: 12px; }
 .apple-settings input, .apple-dialog textarea { border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; font: inherit; color: inherit; background: var(--paper); width: 100%; }
 .apple-dialog { max-height: calc(100% - 24px); }
-.apple-dialog[data-review-dialog] { width: min(620px, calc(100% - 24px)); padding: clamp(14px, 3vw, 24px); }
+.apple-dialog[data-entry-type=event], [data-entry-dialog]:has([data-entry-types]:not([hidden])) { width: min(620px, calc(100% - 24px)); padding: clamp(14px, 3vw, 24px); }
+.entry-types { margin-top: 8px; }
 .apple-dialog [data-review-summary] { margin-top: 7px; }
 .apple-dialog fieldset, .apple-fields label, .apple-fields input { min-width: 0; }
 .apple-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }

@@ -221,7 +221,7 @@ test('calendar views combine color-coded sources and omit iCloud mutation contro
   assert.match(html, /<h2>1\.8<\/h2>/);
   assert.match(html, /data-calendar-source="A"[^]*Apple A original/);
   assert.match(html, /data-calendar-source="B"[^]*B only/);
-  assert.match(html, /data-caldav-new="2027-01-08"[^>]+aria-label="新建 YiStudio 日程"/);
+  assert.match(html, /data-calendar-create="2027-01-08"[^>]+aria-label="新建日程或待办"/);
   assert.match(calendarHeaderActions(), /data-refresh-state="success"/);
   connection.refreshing = true;
   assert.match(calendarHeaderActions(), /data-refresh-state="pending"/);

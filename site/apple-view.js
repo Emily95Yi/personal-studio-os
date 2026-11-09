@@ -100,10 +100,10 @@ export function statusBanner() {
       'data-planner-retry>重试保存') + '</button></p>';
 }
 
-export function reviewDialog() {
-  return `<dialog class="task-dialog apple-dialog" data-review-dialog aria-labelledby="review-title">
-    <form data-review-form>
-      <h2 id="review-title">建立日程</h2><input type="hidden" name="eventId"><input type="hidden" name="eventVersion"><input type="hidden" name="createId">
+export function reviewForm() {
+  return `<form data-review-form hidden>
+      <input type="hidden" name="eventId"><input type="hidden" name="eventVersion"><input type="hidden" name="createId">
+      <input type="hidden" name="convertTaskId">
       <label>日程标题<input name="eventTitle" maxlength="300" required></label>
       <fieldset><legend>时间 · 东京</legend>
         <label class="check-label"><input type="checkbox" name="allDay">全天</label>
@@ -119,7 +119,26 @@ export function reviewDialog() {
       <button class="text-action" type="button" data-caldav-rebase hidden>查看 Apple 最新版本并继续编辑</button>
       <div class="widget-actions"><button class="action-button secondary" type="button" data-dialog-cancel>取消</button>
         <button class="action-button" type="submit">确认安排</button></div>
-    </form></dialog>`;
+    </form>`;
+}
+
+export function showEntryForm(dialog, type, heading = '新建') {
+  const task = dialog.querySelector('[data-task-form]');
+  const review = dialog.querySelector('[data-review-form]');
+  const types = dialog.querySelector('[data-entry-types]');
+  dialog.querySelector('h2').textContent = heading;
+  dialog.dataset.entryType = type;
+  task.hidden = type !== 'task';
+  review.hidden = type !== 'event';
+  types.hidden = heading !== '新建';
+  for (const button of types.querySelectorAll('button')) {
+    button.setAttribute('aria-pressed', String(button.dataset.entryType === type));
+  }
+  dialog.querySelector('[data-task-actions]').hidden = type !== 'task' || !task.elements.id.value;
+  if (!dialog.open) {
+    dialog.showModal();
+    (type === 'task' ? task.elements.title : review.elements.eventTitle).focus();
+  }
 }
 
 export function updateReview(form) {
@@ -136,11 +155,12 @@ export function updateReview(form) {
     ? '保存后检查时间冲突并同步到 ' + connection.caldav.name + '。' : '保存后生成待写入日程。';
 }
 
-export function openReview(app, { event, date = dateKey(), template } = {}) {
-  const dialog = app.querySelector('[data-review-dialog]');
-  const form = dialog.querySelector('form');
+export function openReview(app, { event, date = dateKey(), template, combined = false, convertTaskId = '' } = {}) {
+  const dialog = app.querySelector('[data-entry-dialog]');
+  const form = dialog.querySelector('[data-review-form]');
   form.reset();
   form.elements.eventId.value = event?.id ?? '';
+  form.elements.convertTaskId.value = convertTaskId;
   const localDraft = !event && (template || !connection.caldav.configured);
   form.elements.createId.value = !localDraft && !event ? crypto.randomUUID() : '';
   form.elements.eventVersion.value = JSON.stringify(event?.caldav?.version ?? null);
@@ -150,7 +170,6 @@ export function openReview(app, { event, date = dateKey(), template } = {}) {
   form.elements.startTime.step = form.elements.endTime.step = event ? '1' : '60';
   form.elements.notes.maxLength = localDraft ? 700 : 8000;
   form.querySelector('[data-caldav-rebase]').hidden = true;
-  form.querySelector('h2').textContent = event ? '编辑 YiStudio 日程' : '新建 YiStudio 日程';
   form.elements.startTime.value = date + 'T09:00';
   form.elements.endTime.value = date + 'T10:00';
   form.elements.startDate.value = date;
@@ -179,7 +198,9 @@ export function openReview(app, { event, date = dateKey(), template } = {}) {
   }
   form.querySelector('[data-form-error]').hidden = true;
   updateReview(form);
-  dialog.showModal();
+  const wasOpen = dialog.open;
+  showEntryForm(dialog, 'event', combined ? '新建' : event ? '编辑 YiStudio 日程' : '新建 YiStudio 日程');
+  if (wasOpen) form.elements.eventTitle.focus();
 }
 
 export function readReview(form) {

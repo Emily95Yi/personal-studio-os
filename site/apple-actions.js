@@ -184,10 +184,6 @@ export function initAppleActions(app, render) {
       }
       return;
     }
-    if (button.dataset.caldavNew) {
-      openReview(app, { date: button.dataset.caldavNew });
-      return;
-    }
     if (button.hasAttribute('data-caldav-edit')) {
       const item = currentEvent(app);
       if (!item?.caldav) return;
@@ -355,14 +351,18 @@ export function initAppleActions(app, render) {
         return;
       }
       const submit = form.querySelector('button[type=submit]');
-      submit.disabled = true;
+      if (submit.disabled) return;
+      const dialog = form.closest('dialog');
+      const controls = [submit, ...dialog.querySelectorAll('button[data-entry-type], [data-review-form] [data-dialog-cancel]')];
+      for (const control of controls) control.disabled = true;
+      dialog.setAttribute('aria-busy', 'true');
       try {
         if (editId) {
           const version = JSON.parse(form.elements.eventVersion.value);
           await caldavCommand({ id: editId, caldav: { version } }, 'edit', data.details);
         } else await createCalDavEvent(createId, data.details);
         if (form.isConnected) {
-          form.closest('dialog').close();
+          dialog.close();
           render({ focus: true });
           const updated = allCalendarEvents().find(row => row.id === (editId || createId));
           if (updated) showEvent(app, updated);
@@ -372,14 +372,17 @@ export function initAppleActions(app, render) {
         showCalDavError(error, failure);
         form.querySelector('[data-caldav-rebase]').hidden = !editId || failure.status !== 409;
         if (failure.status === 409) void loadCalDav();
-        submit.disabled = false;
+      } finally {
+        for (const control of controls) control.disabled = false;
+        dialog.removeAttribute('aria-busy');
       }
       return;
     }
     const details = data?.details && {
       ...data.details, ...(connection.caldav.configured ? { syncMode: 'caldav' } : {}),
     };
-    const saved = plannerRepository.saveCalendarEvent(details);
+    const convertTaskId = form.elements.convertTaskId.value;
+    const saved = plannerRepository.saveCalendarEvent(details, { convertTaskId });
     if (!saved) {
       const error = form.querySelector('[data-form-error]');
       error.textContent = '请检查标题和起止时间。';

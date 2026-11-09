@@ -119,3 +119,21 @@ test('manual tasks can be saved without dates while calendar events still requir
   delete snapshot.events.find(row => row.id === event.id).start;
   assert.equal(validSnapshot(snapshot), false);
 });
+
+test('converting a task creates an independent event in the same snapshot and keeps completion history', () => {
+  const repo = plannerRepository;
+  repo.restore(null);
+  const date = '2027-03-01';
+  const plan = repo.savePlan({ title: 'Plan', kind: 'one-off' });
+  const task = repo.saveTask({ title: 'Manual', done: true, planId: plan.id, completedOn: date });
+  const details = { title: task.title, ...eventTimes(true, date, '2027-03-02'), location: '', notes: '', targetCalendar: '' };
+  assert.equal(repo.saveCalendarEvent({ ...details, title: '' }, { convertTaskId: task.id }), null);
+  assert.equal(repo.listTasks().length, 1);
+  const event = repo.saveCalendarEvent(details, { convertTaskId: task.id });
+  assert.equal(event.taskId, undefined);
+  assert.equal(repo.listTasks().length, 0);
+  assert.equal(repo.completionsForPlan(plan.id).length, 1);
+  assert.equal(repo.saveCalendarEvent(details, { convertTaskId: task.id }), null);
+  assert.equal(repo.calendarEvents().length, 1);
+  assert.ok(validSnapshot(repo.snapshot()));
+});
