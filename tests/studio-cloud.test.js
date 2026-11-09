@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { createHandler } from '../worker/index.js';
-import { addAsset, emptyStudio, saveEvent, saveProject } from '../site/studio-data.js';
+import { beginStudioEdit, startStudioSync } from '../site/studio-cloud.js';
+import { addAsset, emptyStudio, saveEvent, saveProject, studioStore } from '../site/studio-data.js';
 import { studioDelta } from '../site/studio-delta.js';
 import { saveBoardContent } from '../site/self-board-data.js';
 import { studioExport } from '../site/studio-migration.js';
@@ -34,6 +35,7 @@ function studioApi(t) {
     },
   };
   const objects = new Map();
+  const metadata = new Map();
   const origin = 'https://studio.example';
   const handler = createHandler(request => request.headers.get('X-Test-Owner'));
   const jobs = [];
@@ -41,9 +43,13 @@ function studioApi(t) {
     STUDIO_ORIGIN: origin, ACCESS_TEAM: 'studio.cloudflareaccess.com', ACCESS_AUD: 'test', ICAL_ENCRYPTION_KEY: 'test',
     DB: binding,
     STUDIO_CONTENT: {
-      put: async (key, value) => objects.set(key, value),
+      put: async (key, value, options) => {
+        objects.set(key, value);
+        metadata.set(key, options.customMetadata);
+      },
       get: async key => objects.has(key) ? { json: async () => JSON.parse(objects.get(key)) } : null,
-      delete: async key => objects.delete(key),
+      head: async key => objects.has(key) ? { customMetadata: metadata.get(key) } : null,
+      delete: async key => { objects.delete(key); metadata.delete(key); },
     },
   };
   const call = (path = '', { method = 'GET', owner = 'studio-user', value, headers } = {}) => handler(
@@ -159,4 +165,58 @@ test('Studio deltas preserve and update Capture records stored outside the snaps
   assert.equal(JSON.parse(stored.document).body, 'Edited on desktop');
   assert.equal(stored.version, 1);
   assert.ok([...objects.values()].every(snapshot => !JSON.parse(snapshot).content.length));
+});
+
+test('Studio save retries a temporary service error and recovers a lost save receipt without duplicating an Event', async t => {
+  const { call, lock, save } = studioApi(t);
+  const initial = emptyStudio();
+  const project = saveProject(initial, { title: 'Workshop' });
+  const token = crypto.randomUUID();
+  await lock(token);
+  assert.equal((await save(token, 0, studioExport(initial))).status, 200);
+  await lock(token, 'DELETE');
+
+  const requests = [];
+  let leaseRelease;
+  t.mock.method(studioStore, 'load', async () => {});
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    const path = url.slice('/api/studio'.length);
+    const { method, headers, body } = options;
+    const saving = !path && method === 'PUT';
+    if (saving) {
+      requests.push({ headers, body });
+      if (requests.length === 1) return Response.json({ error: 'unavailable' }, { status: 503 });
+    }
+    const pending = call(path, { method, headers, value: body === undefined ? undefined : JSON.parse(body) });
+    if (path === '/lease' && method === 'DELETE') leaseRelease = pending;
+    const response = await pending;
+    if (saving && requests.length === 3) {
+      assert.equal(response.status, 200);
+      throw new TypeError('Network connection closed after commit');
+    }
+    return response;
+  });
+
+  await startStudioSync();
+  const release = await beginStudioEdit();
+  try {
+    for (const title of ['First Event', 'Second Event']) {
+      await studioStore.change(state => saveEvent(state, { projectId: project.id, title }));
+    }
+    assert.equal(requests.length, 4);
+    assert.deepEqual(requests[0], requests[1]);
+    assert.deepEqual(requests[2], requests[3]);
+    assert.notEqual(requests[0].headers['X-Studio-Save-Id'], requests[2].headers['X-Studio-Save-Id']);
+    const stale = await call('', { method: 'PUT', headers: { ...requests[2].headers, 'X-Studio-Save-Id': crypto.randomUUID() },
+      value: JSON.parse(requests[2].body) });
+    assert.equal(stale.status, 409);
+    const loaded = await call();
+    assert.equal(loaded.headers.get('X-Studio-Revision'), '3');
+    assert.deepEqual((await loaded.json()).events.map(event => event.title), ['First Event', 'Second Event']);
+    await assert.rejects(studioStore.change(state => { state.projects = []; }), { code: 'invalid_studio' });
+    assert.equal(requests.length, 5);
+  } finally {
+    release();
+    await leaseRelease;
+  }
 });

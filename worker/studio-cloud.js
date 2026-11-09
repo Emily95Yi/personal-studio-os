@@ -9,6 +9,15 @@ import { applyStudioDelta, deltaFormat } from '../site/studio-delta.js';
 const leaseDuration = 120_000;
 const validToken = token => typeof token === 'string' && /^[0-9a-f-]{36}$/.test(token);
 
+async function saveConflict(storage, row, baseRevision, saveId, json) {
+  // The published snapshot proves that this save advanced the exact revision the client submitted.
+  if (saveId && row?.object_key && String(row.revision - 1) === baseRevision) {
+    const snapshot = await storage.head(row.object_key);
+    if (snapshot?.customMetadata?.saveId === saveId) return json({ revision: row.revision });
+  }
+  return json({ error: 'conflict' }, 409);
+}
+
 async function lease(request, db, owner, body, json) {
   const input = await body(request, 256);
   if (!validToken(input?.token)) return json({ error: 'invalid_lease' }, 400);
@@ -52,12 +61,14 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
     return json({ error: 'lease_expired' }, 423);
   }
   const revision = request.headers.get('X-Studio-Revision');
-  if (revision !== String(row.revision)) return json({ error: 'conflict' }, 409);
+  const saveId = request.headers.get('X-Studio-Save-Id');
+  if (saveId !== null && !validToken(saveId)) return json({ error: 'invalid_studio' }, 400);
+  if (revision !== String(row.revision)) return saveConflict(storage, row, revision, saveId, json);
   const clearTrash = url.searchParams.get('clear-trash') === '1';
   let transfer = clearTrash ? undefined : await body(request, 24 * 1024 * 1024);
   const delta = transfer?.format === deltaFormat;
   const current = clearTrash || delta ? await readStudio(env, owner) : null;
-  if (current && current.row?.revision !== row.revision) return json({ error: 'conflict' }, 409);
+  if (current && current.row?.revision !== row.revision) return saveConflict(storage, current.row, revision, saveId, json);
   let checked;
   try {
     if (clearTrash) {
@@ -104,7 +115,10 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
       "target = NULL, native_collection = NULL, document = '{}', source_url = '', normalized_url = '', " +
       "metadata = '{}', attachment_id = NULL WHERE " + selected, new Date().toISOString(), ...args));
   }
-  await storage.put(key, JSON.stringify(checked), { httpMetadata: { contentType: 'application/json' } });
+  await storage.put(key, JSON.stringify(checked), {
+    httpMetadata: { contentType: 'application/json' },
+    ...(saveId && { customMetadata: { saveId } }),
+  });
   // The new R2 snapshot and updated D1 documents become visible at the same revision.
   const publish = sql(db, 'UPDATE studio_cloud SET revision = revision + 1, previous_key = object_key, object_key = ? ' +
     'WHERE owner = ? AND revision = ? AND lease_token = ? AND lease_until > ? RETURNING revision',
@@ -121,7 +135,8 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
   }
   if (!result.results[0]) {
     ctx.waitUntil(storage.delete(key).catch(() => {}));
-    return json({ error: 'conflict' }, 409);
+    const latest = saveId ? await readCloud(db, owner) : null;
+    return saveConflict(storage, latest, revision, saveId, json);
   }
   if (row.previous_key) ctx.waitUntil(storage.delete(row.previous_key).catch(() => {}));
   if (purged.length) ctx.waitUntil(cleanupUploads(env).catch(() => {}));

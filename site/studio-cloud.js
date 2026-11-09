@@ -18,14 +18,10 @@ export function studioNotice(message) {
   changes.dispatchEvent(new Event('notice'));
 }
 
-async function request(path = '', { method = 'GET', value, headers = {}, keepalive = false } = {}) {
-  const response = await fetch('/api/studio' + path, {
-    method, cache: 'no-store', credentials: 'same-origin', redirect: 'error', keepalive,
-    signal: AbortSignal.timeout(30_000),
-    headers: { 'X-Studio-Request': '1', ...(value === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers },
-    body: value === undefined ? undefined : JSON.stringify(value),
-  }).catch(() => { throw new Error('暂时无法连接 Studio 云端，请稍后再试。'); });
-  if (response.ok) return response;
+async function responseError(response) {
+  if (response.status === 401 || response.type === 'opaqueredirect') {
+    return new Error('Studio 需要重新登录。请先复制当前草稿，再刷新页面登录。');
+  }
   const failure = await response.json().catch(() => ({}));
   const messages = {
     editing_elsewhere: '另一台设备或标签页正在编辑。请结束那边的编辑后再试。',
@@ -33,12 +29,40 @@ async function request(path = '', { method = 'GET', value, headers = {}, keepali
     conflict: '云端内容已有更新。请先保留草稿，再重新打开编辑器。',
     invalid_studio: '内容格式无效或超出同步容量，原数据仍保留。',
   };
-  throw Object.assign(new Error(messages[failure.error] || '暂时无法连接 Studio 云端，请稍后再试。'),
-    { status: response.status, code: failure.error });
+  const code = failure?.error;
+  return Object.assign(new Error(messages[code] || (response.status >= 500
+    ? 'Studio 云端暂时无法完成请求，请稍后重试。' : 'Studio 无法完成这次请求。')),
+    { status: response.status, code });
+}
+
+async function request(path = '', { method = 'GET', value, headers = {}, keepalive = false, retry = false,
+  read = response => response } = {}) {
+  const body = value === undefined ? undefined : JSON.stringify(value);
+  for (let attempt = 0; ; attempt++) {
+    let error;
+    let transient;
+    try {
+      const response = await fetch('/api/studio' + path, {
+        method, cache: 'no-store', credentials: 'same-origin', redirect: 'manual', keepalive,
+        signal: AbortSignal.timeout(30_000),
+        headers: { 'X-Studio-Request': '1', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers },
+        body,
+      });
+      if (response.ok) return await read(response);
+      error = await responseError(response);
+      transient = response.status >= 500;
+    } catch (cause) {
+      error = new Error(cause?.name === 'TimeoutError' ? 'Studio 云端响应超时，请稍后重试。' :
+        '未能确认 Studio 云端的响应，请检查网络后重试。', { cause });
+      transient = true;
+    }
+    if (!retry || !transient || attempt === 1) throw error;
+    await new Promise(resolve => setTimeout(resolve, 800));
+  }
 }
 
 async function fetchSnapshot() {
-  const response = await request('?revision=' + revision);
+  const response = await request('?revision=' + revision, { retry: true });
   if (response.status === 204) return false;
   const next = Number(response.headers.get('X-Studio-Revision'));
   const snapshot = await response.json();
@@ -89,9 +113,10 @@ export async function beginStudioEdit({ migration = false } = {}) {
   if (!currentLease) {
     acquiring ??= (async () => {
       const token = crypto.randomUUID();
-      const response = await request('/lease', { method: 'POST', value: { token } });
+      const { revision: lockedRevision } = await request('/lease', {
+        method: 'POST', value: { token }, retry: true, read: response => response.json(),
+      });
       const lease = { token, holders: 0, expired: false, timer: undefined };
-      const lockedRevision = (await response.json()).revision;
       currentLease = lease;
       if (lockedRevision !== revision) {
         endLease(lease);
@@ -134,11 +159,16 @@ export function watchStudioEditor(element, release) {
 }
 
 async function put(transfer, expected, path = '') {
-  const token = currentLease?.token;
-  const response = await request(path, {
-    method: 'PUT', value: transfer, headers: { 'X-Studio-Revision': String(expected), 'X-Studio-Lease': token },
+  const result = await request(path, {
+    method: 'PUT', value: transfer, retry: true,
+    headers: { 'X-Studio-Revision': String(expected), 'X-Studio-Lease': currentLease.token, 'X-Studio-Save-Id': crypto.randomUUID() },
+    async read(response) {
+      const result = await response.json();
+      if (result?.revision !== expected + 1) throw new Error('Invalid Studio save receipt');
+      return result;
+    },
   });
-  revision = (await response.json()).revision;
+  revision = result.revision;
   return revision;
 }
 
