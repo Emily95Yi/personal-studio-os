@@ -31,7 +31,7 @@ function validTask(row, plans) {
     optional(row.skipped, value => typeof value === 'boolean') &&
     optional(row.autoReminder, value => value === true && day(row.date) && plans.has(row.planId)) &&
     optional(row.planId, value => plans.has(value)) &&
-    optional(row.sourceContentId, value => text(value, 256));
+    optional(row.sourceContentId, value => text(value, 256)) && optional(row.inboxId, id);
 }
 
 // Only these fields cross the CalDAV boundary. Planner links stay in the planner snapshot.
@@ -51,6 +51,7 @@ function validEvent(row, reviews) {
   return (independent || review?.action === 'calendar' && review.taskId === row.taskId) &&
     row.timeZone === 'Asia/Tokyo' && statuses.includes(row.status) &&
     optional(row.syncMode, value => value === 'caldav') &&
+    optional(row.inboxId, id) &&
     optional(row.deviceResult, value => ['added', 'existing'].includes(value)) &&
     text(row.title, 120) && text(row.notes, 700) && text(row.location, 200) && text(row.targetCalendar, 80) &&
     Boolean(scheduleFields(row));

@@ -37,6 +37,7 @@ const iconControl = (label, glyph, attributes) => '<button class="header-icon ca
 
 export function captureActions() {
   return '<div class="header-actions">' + iconControl('新增Auto', 'auto', 'type="button" data-capture-plan disabled') +
+    iconControl('移出 Inbox', 'inboxMove', 'type="button" data-capture-inbox-toggle hidden disabled') +
     iconControl('保存', 'check', 'type="submit" form="' + detailForm + '" data-capture-save disabled') +
     iconControl('删除', 'trash', 'type="button" data-capture-delete disabled') + '</div>';
 }
@@ -50,13 +51,27 @@ export function captureView() {
   return '<section class="capture-surface"><div data-capture-body></div><p class="work-meta" role="status" data-capture-status>正在读取…</p></section>';
 }
 
-function list(rows, params) {
-  return rows.length ? '<ul class="sb-rows capture-list">' + rows.map(row => '<li>' +
+function shortcutActions(address) {
+  const actions = [['日程', 'calendar', 'event'], ['待办', 'taskAdd', 'task'], ['提醒', 'clock', 'reminder']];
+  return '<div class="capture-row-actions">' + actions.map(([label, glyph, kind]) =>
+    iconControl(label, glyph, 'type="button" data-capture-create="' + kind + '"')).join('') +
+    '<a class="header-icon" aria-label="分类" title="分类" href="' + address + '">' + icon('folderMove', 18) + '</a></div>';
+}
+
+function renderList(panel, rows, create, params) {
+  panel.innerHTML = rows.length ? '<ul class="sb-rows capture-list">' + rows.map((row, index) => {
+    const address = esc(inboxAddress(row.id, params));
+    return '<li data-capture-row="' + index + '">' +
     (params ? '<input type="checkbox" name="selected" value="' + esc(row.id) + '" aria-label="选择 ' + esc(row.title) + '">' : '') +
-    '<a href="' + esc(inboxAddress(row.id, params)) + '"><span aria-hidden="true">' +
+    '<a class="capture-row-link" href="' + address + '"><span aria-hidden="true">' +
     captureTypes[row.type].split(' ')[0] + '</span><span class="capture-title">' + esc(row.title || row.originalText?.slice(0, 80) || '未命名收藏') + '</span>' +
-    '<small>' + esc(time(row.capturedAt)) + '</small></a></li>').join('') + '</ul>' :
+    (row.fromShortcut ? '</a>' + shortcutActions(address) : '<small>' + esc(time(row.capturedAt)) + '</small></a>') + '</li>';
+  }).join('') + '</ul>' :
     '<p class="work-meta">这里还没有收藏。</p>';
+  panel.onclick = event => {
+    const action = event.target.closest('[data-capture-create]');
+    if (action && canEdit()) create(action.dataset.captureCreate, rows[Number(action.closest('li').dataset.captureRow)]);
+  };
 }
 
 function nativeLink(row) {
@@ -76,6 +91,7 @@ async function mountDetail(app, route, changed) {
   const save = app.querySelector('[data-capture-save]');
   const remove = app.querySelector('[data-capture-delete]');
   const plan = app.querySelector('[data-capture-plan]');
+  const inboxToggle = app.querySelector('[data-capture-inbox-toggle]');
   try {
     const [row, options] = await Promise.all([api(path), api('/options')]);
     if (!panel.isConnected) return;
@@ -101,20 +117,24 @@ async function mountDetail(app, route, changed) {
     plan.dataset.inboxTitle = row.title;
     save.disabled = remove.disabled = false;
     updateCapturePlanAction(app);
+    inboxToggle.disabled = inboxToggle.hidden = !row.inInbox;
     async function write(method, value) {
       if (save.disabled) return;
-      save.disabled = remove.disabled = plan.disabled = true;
+      save.disabled = remove.disabled = plan.disabled = inboxToggle.disabled = true;
       form.inert = true;
       status(notice, method === 'DELETE' ? '正在删除…' : '正在保存…');
       try {
         await api(path, { method, value });
-        await changed();
+        if (Object.hasOwn(value ?? {}, 'inInbox')) {
+          row.inInbox = false;
+        } else await changed();
         if (panel.isConnected) location.hash = route.parent;
       } catch (error) {
         status(notice, error);
       } finally {
         save.disabled = remove.disabled = false;
         form.inert = false;
+        inboxToggle.disabled = inboxToggle.hidden = !row.inInbox;
         if (panel.isConnected) updateCapturePlanAction(app);
       }
     }
@@ -141,12 +161,13 @@ async function mountDetail(app, route, changed) {
     remove.onclick = () => {
       if (confirm('永久删除此收藏和它的附件？')) void write('DELETE');
     };
+    inboxToggle.onclick = () => { void write('PATCH', { version: row.version, inInbox: false }); };
   } catch (error) {
     status(notice, error);
   }
 }
 
-function mountList(app, route, changed) {
+function mountList(app, route, changed, create) {
   const panel = app.querySelector('[data-capture-body]');
   const notice = app.querySelector('[data-capture-status]');
   panel.innerHTML = '<div class="capture-toolbar">' + segmentRow('data-capture-types', '内容类型') +
@@ -186,7 +207,7 @@ function mountList(app, route, changed) {
       const { items, total } = await api('/items?' + params);
       if (current !== request || !panel.isConnected) return;
       if (!items.length && offset > 0) return go(Math.max(0, Math.ceil(total / limit) * limit - limit));
-      listPanel.innerHTML = list(items, paramsAt());
+      renderList(listPanel, items, create, paramsAt());
       prev.disabled = offset === 0;
       next.disabled = offset + limit >= total;
       submit.disabled = !items.length || saving;
@@ -311,12 +332,72 @@ function mountSettings(app) {
   void loadDevices();
 }
 
-export function mountCaptureBoard(app, route, changed) {
+function mountCaptureTrash(app, panel) {
+  const list = panel.querySelector('ul');
+  const empty = app.querySelector('[data-trash-empty]');
+  const notice = panel.querySelector('[role=status]');
+  const more = panel.querySelector('[data-capture-trash-more]');
+  const clear = app.querySelector('[data-sb-clear-trash]');
+  const hasOtherTrash = !clear.disabled;
+  const limit = 50;
+  let offset = 0;
+  let version = 0;
+  async function load() {
+    const current = ++version;
+    more.disabled = true;
+    try {
+      const { items, total } = await api('/items?status=trash&limit=' + limit + '&offset=' + offset);
+      if (!panel.isConnected || current !== version) return;
+      if (!items.length && offset) {
+        offset = 0;
+        return load();
+      }
+      clear.disabled = !hasOtherTrash && !total;
+      if (empty) empty.hidden = Boolean(total);
+      const fromTrash = new URLSearchParams({ from: 'trash' });
+      list.innerHTML = items.map(row => '<li><span><a href="' + esc(inboxAddress(row.id, fromTrash)) + '">' +
+        esc(row.title) + '</a> · Inbox</span>' + iconControl('恢复到 Inbox', 'undo',
+        'type="button" data-capture-restore="' + esc(row.id) + '" data-version="' + row.version + '"') + '</li>').join('');
+      more.hidden = offset + limit >= total && offset === 0;
+      more.textContent = offset + limit < total ? '下一页' : '返回第一页';
+      more.onclick = () => {
+        offset = offset + limit < total ? offset + limit : 0;
+        void load();
+      };
+      status(notice, '');
+    } catch (error) {
+      if (error.status !== 404) status(notice, error);
+      else if (empty) empty.hidden = false;
+    } finally {
+      if (current === version) more.disabled = false;
+    }
+  }
+  list.onclick = async event => {
+    const action = event.target.closest('[data-capture-restore]');
+    if (!action || action.disabled) return;
+    action.disabled = true;
+    try {
+      await api('/items/' + encodeURIComponent(action.dataset.captureRestore), {
+        method: 'PATCH', value: { version: Number(action.dataset.version), inInbox: true },
+      });
+      await load();
+    } catch (error) {
+      status(notice, error);
+      action.disabled = false;
+    }
+  };
+  void load();
+  return load;
+}
+
+export function mountCaptureBoard(app, route, changed, create) {
   if (route.type === 'capture') {
     if (route.captureId) void mountDetail(app, route, changed);
-    else mountList(app, route, changed);
+    else mountList(app, route, changed, create);
     return;
   }
+  const trash = app.querySelector('[data-capture-trash]');
+  if (trash) return mountCaptureTrash(app, trash);
   mountSettings(app);
   const inbox = app.querySelector('[data-capture-inbox]');
   if (!inbox) return;
@@ -328,7 +409,7 @@ export function mountCaptureBoard(app, route, changed) {
     try {
       const { items } = await api('/items?limit=4');
       if (index !== query) return;
-      recent.innerHTML = list(items);
+      renderList(recent, items, create);
     } catch (error) {
       if (index === query) status(recent, error);
     }

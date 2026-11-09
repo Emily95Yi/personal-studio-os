@@ -102,8 +102,9 @@ function boardRoute(workspace, section, id, params) {
     return params.get('view') === 'trash' ? { redirect: boardSettingsAddress('', 'trash') } : { ...base, type: 'board' };
   }
   if (section === 'inbox') {
-    const parent = id ? inboxAddress(undefined, params) : boardHref();
-    return { ...base, type: 'capture', captureId: id, parent, parentLabel: id ? 'Inbox' : 'Self-Board',
+    const fromTrash = id && params.get('from') === 'trash';
+    const parent = fromTrash ? boardSettingsAddress('', 'trash') : id ? inboxAddress(undefined, params) : boardHref();
+    return { ...base, type: 'capture', captureId: id, parent, parentLabel: fromTrash ? '回收站' : id ? 'Inbox' : 'Self-Board',
       recordTitle: id ? 'Inbox Detail' : 'Inbox' };
   }
   if (section === 'search' && !id) return { ...base, type: 'board', view: section };

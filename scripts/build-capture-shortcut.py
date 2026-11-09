@@ -7,7 +7,9 @@ from uuid import uuid4
 
 ORIGIN = "https://yistudio-private.cho-eki0915.workers.dev"
 BASE = ORIGIN + "/api/capture/mobile"
+CAPTURE_PAGE = ORIGIN + "/capture.html"
 MISSING_TOKEN = "请粘贴这台 iPhone 的 Studio 设备凭证"
+JSON_OBJECT = r'\A\s*\{\s*(?:"[\s\S]*|)\}\s*\z'
 
 
 def uid():
@@ -124,6 +126,20 @@ class Workflow:
         if stop:
             self.action("exit")
 
+    def studio_response(self, response, operation, on_blocked):
+        json_object = self.match(response, JSON_OBJECT)
+        with self.condition(json_object, 101):
+            on_blocked(operation + "。Studio 手机接口可能被 Cloudflare 登录拦截。")
+        parsed = self.result("detect.dictionary", "Dictionary", WFInput=reference(response))
+        keys = self.result("getvalueforkey", "Keys", WFInput=reference(parsed),
+                           WFGetDictionaryValueType="All Keys")
+        with self.condition(keys, 99, "error"):
+            error = self.key(parsed, "error")
+            with self.condition(error, 4, "unauthorized"):
+                on_blocked(operation + "。请检查设备凭证是否有效，以及 Studio 手机接口是否已启用。")
+            self.alert(text(operation + "（", error, "）。"), stop=True)
+        return parsed, keys
+
     def choose_record(self, rows, prompt):
         with self.condition(rows, 101):
             self.alert("这个分类下没有可用选项。请重新运行，或选「快速保存」。", stop=True)
@@ -161,7 +177,7 @@ def build():
             ("读取剪贴板", lambda: wf.assign("收集输入", wf.result("getclipboard", "Clipboard"))),
             ("选择照片", lambda: wf.assign("收集输入", wf.result("selectphoto", "Photos", WFSelectMultiplePhotos=False))),
             ("选择文件", lambda: wf.assign("收集输入", wf.result("file.select", "File", SelectMultiple=False))),
-            ("大文件网页上传", lambda: (wf.action("openurl", WFInput=ORIGIN + "/capture.html"), wf.action("exit"))),
+            ("大文件网页上传", lambda: (wf.action("openurl", WFInput=CAPTURE_PAGE), wf.action("exit"))),
         ])
     # File Request points at a file-capable action output, not a text token.
     selected = wf.first(variable("收集输入"))
@@ -176,7 +192,7 @@ def build():
 
     kind = wf.result("getitemtype", "Type", WFInput=reference(selected))
     safari = wf.match(kind, r"Safari|网页|網頁|ウェブページ|web page")
-    textual = wf.match(kind, r"^(?:.*text|url|文本|纯文本|文字|富文本|純文字|格式化文字|テキスト|リッチテキスト|链接|連結|網址|网址)$")
+    textual = wf.match(kind, r"^(?:.*text|urls?|文本|纯文本|文字|富文本|純文字|格式化文字|テキスト|リッチテキスト|链接|連結|網址|网址)$")
     binary = wf.match(kind, r"image|photo|pdf|file|document|照片|图像|圖像|图片|圖片|文件|文稿|檔案|画像|ファイル|書類")
     with wf.condition(safari, 100) as otherwise:
         url = wf.result("properties.safariwebpage", "Page URL", WFInput=reference(selected),
@@ -215,10 +231,24 @@ def build():
             other_type()
             wf.assign("内容类型", "upload")
 
+    def blocked(operation):
+        with wf.condition(source, 100):
+            def open_capture():
+                wf.action("setclipboard", WFInput=reference(source), WFLocalOnly=True)
+                wf.action("openurl", WFInput=CAPTURE_PAGE)
+
+            wf.menu(operation + " 可复制链接并打开网页，登录后把链接粘贴到「原始网址」再保存。", [
+                ("复制链接并打开网页", open_capture),
+                ("关闭", lambda: wf.action("nothing")),
+            ])
+            wf.action("exit")
+        wf.alert(operation + " 请稍后重试，或打开 Studio 网页保存。", stop=True)
+
     def organize():
         response = wf.result("downloadurl", "Contents of URL", WFURL=BASE + "/options", WFHTTPMethod="GET",
                              WFHTTPHeaders=headers)
-        modules = wf.key(response, "modules")
+        parsed, _ = wf.studio_response(response, "未能读取分类", blocked)
+        modules = wf.key(parsed, "modules")
         module = wf.choose_record(modules, "选择模块")
         group = wf.choose_record(wf.key(module, "groups"), "选择分组")
         chosen = wf.choose_record(wf.key(group, "options"), "选择分类")
@@ -242,11 +272,12 @@ def build():
                            WFURL=text(BASE + "/uploads/single?id=", request_key, "&filename=", safe_name),
                            WFHTTPMethod="POST", WFHTTPHeaders=headers, WFHTTPBodyType="File",
                            WFRequestVariable=reference(selected))
-        upload_id = wf.key(upload, "id")
+        parsed, _ = wf.studio_response(upload, "附件上传未确认", blocked)
+        upload_id = wf.key(parsed, "id")
         with wf.condition(upload_id, 101):
             wf.alert("附件上传未确认。超过 8 MiB 的文件请使用「大文件网页上传」。", stop=True)
         wf.assign("附件编号", upload_id)
-        wf.assign("内容类型", wf.key(upload, "type"))
+        wf.assign("内容类型", wf.key(parsed, "type"))
 
     response = wf.result("downloadurl", "Contents of URL", WFURL=BASE, WFHTTPMethod="POST", WFHTTPHeaders=headers,
                          WFHTTPBodyType="JSON", WFJSONValues=dictionary({
@@ -254,17 +285,14 @@ def build():
                              "originalText": text(original), "userNote": text(note), "target": text(target),
                              "attachmentId": text(attachment), "metadata": {"pageTitle": text(page_title)},
                          }))
-    keys = wf.result("getvalueforkey", "Keys", WFInput=reference(response), WFGetDictionaryValueType="All Keys")
-    with wf.condition(keys, 99, "error"):
-        error = wf.key(response, "error")
-        wf.alert(text("Studio 保存失败（", error, "）。请检查内容或设备授权。"), stop=True)
+    parsed, keys = wf.studio_response(response, "Studio 未确认保存", blocked)
     with wf.condition(keys, 999, "id"):
         wf.alert("Studio 未确认保存。请检查网络和设备授权，或在 Inbox 核对。", stop=True)
     with wf.condition(keys, 99, "classificationError"):
         wf.alert("已存入 Inbox，分类未完成。可在 Self-board 里继续整理。", stop=True)
     with wf.condition(keys, 99, "duplicate"):
         wf.alert("已存在，Studio 保留了原有记录。", stop=True)
-    saved_status = wf.key(response, "status")
+    saved_status = wf.key(parsed, "status")
     with wf.condition(saved_status, 4, "organized"):
         wf.alert("已存入奕 Studio · 已分类", stop=True)
     with wf.condition(saved_status, 4, "inbox"):

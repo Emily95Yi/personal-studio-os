@@ -17,6 +17,7 @@ import { collectionLocation } from './board-library-view.js';
 import { objectHref, objectLabels } from './workshop-view.js';
 import { plannerRepository } from './repository.js';
 import { connection, saveChanges } from './private-api.js';
+import { api as captureApi } from './capture-client.js';
 
 export function refreshHeaderSearch(app) {
   const form = app.querySelector('[data-sb-floating-search]:not([hidden])');
@@ -777,6 +778,7 @@ export function initBoardActions(app, render) {
           if (connection.mode === 'private' && connection.save !== 'idle') {
             throw new Error('计划回收站尚未保存。请重试；若有其他设备更新，请重新载入。');
           }
+          if (connection.mode === 'private') await captureApi('/items/trash', { method: 'DELETE' });
         }, () => refresh(), '清空回收站', '', { studioLease: studioTrash });
     }
     if (sbRecover) {

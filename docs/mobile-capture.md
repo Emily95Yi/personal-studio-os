@@ -36,7 +36,8 @@ Collection 的「待分类」指 Collections 自己的未分类位置。选定�
 | --- | --- |
 | POST 根路径 | 创建收藏，必填 `requestKey`、`type`。可传 `title`、`originalText`、`userNote`、`sourceUrl`、`metadata`、`target`、`attachmentId` |
 | GET /options | 模块 → 分组 → `{label,target}`，原样回传 `target` |
-| GET /items | Web 列表，支持 `status`、`type`、`q`、`sort`、`offset`、`limit` |
+| GET /items | Web 列表，默认显示 Inbox。用 `status=trash` 查看移出时尚未处理的收藏。还支持 `type`、`q`、`sort`、`offset`、`limit` |
+| DELETE /items/trash | 清空收藏回收站 |
 | GET / PATCH / DELETE /items/:id | Web 详情、编辑、分类、归档、恢复、永久删除。PATCH 传详情返回的 `version` |
 | PATCH /items/batch | Web 批量分类，传 `ids`、`target`，最多 20 条 |
 | GET /items/:id/attachment | Web 私有下载，支持 `?preview` 预览 PNG/JPEG/GIF/WebP/AVIF |
@@ -47,6 +48,8 @@ Collection 的「待分类」指 Collections 自己的未分类位置。选定�
 | DELETE /uploads/:id | 取消未关联的上传 |
 | GET / POST /devices、DELETE /devices/:id | Web 查看、签发、撤销独立设备凭证 |
 | GET / POST /api/storage | Web 获取容量，POST 手动刷新 |
+
+分类后，收藏仍在 Inbox。详情页的图标可移出收藏。已保存日程、待办、提醒或分类的收藏移出后结束处理。其余收藏进入 Self-Board 回收站，可在回收站恢复。PATCH 传 `version` 和布尔值 `inInbox`，原模块记录独立保留。部署前应用迁移 0006。
 
 URL 去重忽略锚点及常见营销参数，原始地址保留。相同设备及相同 `requestKey` 返回原收藏，原备注和分类保持原值。不同的文字摘录可以共享同一个来源地址。二进制以分片 SHA-256 组合校验，可提示同一账户已有相同内容。重复附件允许作为独立收藏存储。每条新收藏最多一个附件。手机网页支持 256 MiB，以 8 MiB 请求分片、中断重试、取消、完成后确认的方式写入 R2。上传会话有效 24 小时。计划任务清理超时未关联对象及已删除收藏的附件。图片按收到的字节存储，iOS 分享方式决定发送原件或兼容版本。PDF 通过私有链接下载后用系统阅读器打开。
 
@@ -63,6 +66,8 @@ D1 从 Worker 绑定返回的 `meta.size_after` 读取当前数据库字节数�
 3. 模板已配置在共享表单中显示。如分享菜单里没有该入口，检查快捷指令详情中的「在共享表单中显示」。在 Safari 分享一个网址，选择「快速保存 · Inbox」，然后回 Self-board 核对。也可以直接在「快捷指令」App 中运行，测试手动输入或剪贴板。
 
 同一份已签名模板可发给不同 Apple ID 的设备。凭证有效期 180 天。换机或轮换时签发新凭证，替换手机中的值后撤销旧设备。分享时使用未填凭证的安装文件。
+
+如果旧版报「获取字典值失败」，先核对手机接口是否被 Cloudflare Access 重定向到登录页。新版会在读取字段前检查响应。若分享的是网址，可以选「复制链接并打开网页」，在登录后的「原始网址」栏粘贴链接，再点「保存」。直接从分享菜单保存需要完成上面的手机接口配置。
 
 如需重新生成，在 macOS 运行以下命令。签名时 Apple 会验证这份未填写凭证的模板。[Apple 快捷指令签名说明](https://support.apple.com/guide/shortcuts-mac/run-shortcuts-from-the-command-line-apd455c82f02/mac)
 

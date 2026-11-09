@@ -318,14 +318,16 @@ function heading(title, description, actions = '') {
 
 function boardTrash() {
   const rows = [...boardTrashRecords(state()), ...plannerRepository.trashedPlans().map(item => ({ type: 'plan', item }))];
-  if (!rows.length) return '<p>回收站为空</p>';
-  return '<ul class="sb-trash-list">' + rows.map(({ type, item }) => {
+  const existing = rows.length ? '<ul class="sb-trash-list">' + rows.map(({ type, item }) => {
     const data = type === 'plan' ? 'data-plan-restore="' + esc(item.id) + '"' :
       type === 'discover' ? 'data-sb-recover="' + esc(item.id) + '"' :
       'data-library="recover" data-type="' + type + '" data-id="' + esc(item.id) + '"';
     return '<li><span>' + titleOf(item) + (type === 'plan' ? ' · Auto' : '') + '</span>' +
       boardIcon('恢复记录 ' + contentTitle(item), 'undo', { data, className: 'sb-icon-plain' }) + '</li>';
-  }).join('') + '</ul>';
+  }).join('') + '</ul>' : '<p data-trash-empty hidden>回收站为空</p>';
+  return existing + '<div data-capture-trash><ul class="sb-trash-list"></ul>' +
+    '<button type="button" class="action-button secondary" data-capture-trash-more hidden>下一页</button>' +
+    '<p class="work-meta" role="status"></p></div>';
 }
 
 export function searchResults(query) {

@@ -1,4 +1,4 @@
-import { calendarDays, calendarHref, calendarSelection, dateKey, formatDay, movePeriod, todayDate } from './calendar.js';
+import { addDays, calendarDays, calendarHref, calendarSelection, dateKey, formatDay, movePeriod, parseDate, periodBounds, todayDate } from './calendar.js';
 import { plannerRepository, workshopRepository } from './repository.js';
 import { href } from './pages.js';
 import { escapeHtml } from './html.js';
@@ -46,13 +46,27 @@ function calendarGrid(date, mode, from, preview = false) {
     weekdays.map(day => '<span class="weekday">周' + day + '</span>').join('') + cells + '</div>';
 }
 
-export function weekPreview() {
-  const date = todayDate();
+export function weekPreview(date = todayDate()) {
+  const [first, last] = periodBounds(date, 'week').map(dateKey);
+  const appointments = allCalendarEvents().filter(event => event.status !== 'draft' &&
+    event.dayStart <= last && event.dayEnd > first)
+    .sort((a, b) => a.dayStart.localeCompare(b.dayStart) || Number(b.allDay) - Number(a.allDay) ||
+      a.start.localeCompare(b.start));
+  const rows = appointments.map(event => {
+    const end = dateKey(addDays(parseDate(event.dayEnd), -1));
+    const dates = event.dayStart.slice(5).replace('-', '/') +
+      (end === event.dayStart ? '' : '–' + end.slice(5).replace('-', '/'));
+    return '<li class="agenda-appointment"' +
+      (event.sourceGroup ? ' data-calendar-source="' + escapeHtml(event.sourceGroup) + '"' : '') +
+      '><button type="button" data-apple-event="' + escapeHtml(event.id) + '"><strong>' +
+      escapeHtml(event.title) + '</strong><small>' + escapeHtml(dates) + '</small></button></li>';
+  }).join('');
   return '<section class="widget widget-week" aria-labelledby="week-preview-title"><div class="section-heading">' +
     '<h2 id="week-preview-title">' + (date.getUTCMonth() + 1) + '月</h2>' +
     '<a class="header-icon" href="' + escapeHtml(calendarHref(date, 'week', 'self-board')) +
     '" aria-label="打开日历" title="打开日历">' + icon('calendar', 19) + '</a></div>' +
-    calendarGrid(date, 'week', 'self-board', true) + '</section>';
+    calendarGrid(date, 'week', 'self-board', true) +
+    (rows ? '<ul class="agenda-list week-appointments" aria-label="本周日程">' + rows + '</ul>' : '') + '</section>';
 }
 
 export function calendarSearchResults(query, events = allCalendarEvents()) {
@@ -103,11 +117,12 @@ function agenda(date, mode) {
 
 function taskList() {
   const tasks = plannerRepository.listTasks();
+  if (!tasks.length) return '';
   const rows = tasks.map(task =>
     '<li class="agenda-entry"><button type="button" data-task-edit="' + escapeHtml(task.id) + '"><strong>' +
     escapeHtml(task.title) + '</strong></button>' + taskCalendarAction(task) + taskSourceLink(task) + '</li>').join('');
   return '<section class="agenda-group calendar-tasks" aria-label="待办"><h3>待办</h3>' +
-    (rows ? '<ul class="agenda-list">' + rows + '</ul>' : '<p class="subtle">暂无待办。</p>') + '</section>';
+    '<ul class="agenda-list">' + rows + '</ul></section>';
 }
 
 export function calendarRefreshState() {
@@ -142,6 +157,9 @@ export function calendarView({ params }) {
   const legend = Object.entries(calendarSourceLabels).map(([source, label]) =>
     '<li data-calendar-source="' + source + '">' + label + '</li>').join('');
   const reminders = plannerRepository.dueReminders();
+  const lists = taskList() + (reminders.length ?
+    '<section class="agenda-group calendar-reminders" aria-label="提醒"><h3>提醒</h3>' +
+    '<ul class="agenda-list">' + reminderRows(reminders) + '</ul></section>' : '');
   return '<div class="calendar-toolbar"><div class="segmented" aria-label="日历视图">' +
     modes.map(([key, label]) => dateLink(date, key, label, from, mode === key ? ' aria-current="page"' : '')).join('') +
     '</div><div class="calendar-controls">' +
@@ -149,10 +167,8 @@ export function calendarView({ params }) {
     dateLink(todayDate(), mode, '今天', from) + dateLink(movePeriod(date, mode, 1), mode, '›', from, ' aria-label="下一时段"') +
     '</div></div><div class="calendar-period"><h2>' + (date.getUTCMonth() + 1) + '月</h2>' +
     '<ul class="calendar-legend" aria-label="日历颜色">' + legend + '</ul></div>' +
-    calendarGrid(date, mode, from) + agenda(date, mode) + '<div class="calendar-lists">' + taskList() +
-    '<section class="agenda-group calendar-reminders" aria-label="提醒"><h3>提醒</h3>' +
-    (reminders.length ? '<ul class="agenda-list">' + reminderRows(reminders) + '</ul>' :
-      '<p class="subtle">暂无到期提醒。</p>') + '</section></div>';
+    calendarGrid(date, mode, from) + agenda(date, mode) +
+    (lists ? '<div class="calendar-lists">' + lists + '</div>' : '');
 }
 
 export function entryDialog() {

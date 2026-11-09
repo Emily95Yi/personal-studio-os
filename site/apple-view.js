@@ -151,6 +151,7 @@ export function openReview(app, { event, date = dateKey(), template, combined = 
   const dialog = app.querySelector('[data-entry-dialog]');
   const form = dialog.querySelector('[data-review-form]');
   form.reset();
+  form.dataset.inboxId = template?.inboxId ?? '';
   form.elements.eventId.value = event?.id ?? '';
   form.elements.convertTaskId.value = convertTaskId;
   const localDraft = !event && (template || !connection.caldav.configured);
@@ -203,12 +204,13 @@ export function readReview(form) {
   const endDay = parseDate(fields.endDate.value) ? labelTime(fields.endDate.value) : '';
   const times = allDay ? eventTimes(true, fields.startDate.value, endDay) :
     eventTimes(false, fields.startTime.value, fields.endTime.value);
-  const { originalLocation, originalNotes } = form.dataset;
+  const { originalLocation, originalNotes, inboxId } = form.dataset;
   const unchanged = fields.notes.value === mergedNotes(originalLocation, originalNotes);
   return times ? { details: {
     ...times, location: unchanged ? originalLocation : '',
     notes: unchanged ? originalNotes : fields.notes.value,
     targetCalendar: 'YiStudio', title: fields.eventTitle.value.trim(),
+    ...(inboxId ? { inboxId } : {}),
   } } : null;
 }
 

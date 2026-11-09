@@ -265,7 +265,7 @@ export const plannerRepository = {
     changed();
     return true;
   },
-  saveTask({ id, title, notes, date, done, planId, completedOn, sourceContentId }) {
+  saveTask({ id, title, notes, date, done, planId, completedOn, sourceContentId, inboxId }) {
     const existing = tasks.find(task => task.id === id);
     if ((id && !existing) || (date !== undefined && !parseDate(date))) return undefined;
     if (notes !== undefined && (typeof notes !== 'string' || notes.length > 700)) return undefined;
@@ -277,6 +277,7 @@ export const plannerRepository = {
       done: Boolean(done) && !existing?.skipped, planId: owner };
     if (date !== undefined) task.date = date;
     if (notes !== undefined) task.notes = notes;
+    if (!existing && inboxId) task.inboxId = inboxId;
     if (sourceContentId === '') delete task.sourceContentId;
     else if (sourceContentId && (plan?.sourceIds.includes(sourceContentId) || existing?.sourceContentId === sourceContentId)) {
       task.sourceContentId = sourceContentId;

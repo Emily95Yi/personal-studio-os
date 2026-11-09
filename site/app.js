@@ -1,6 +1,6 @@
 import { captureActions, captureView, mountCaptureBoard, updateCapturePlanAction } from './capture-board.js';
 import { api as captureApi } from './capture-client.js';
-import { boardContentHref, boardHref, boardSections, boardSettingsAddress, href, publicHref, readRoute } from './pages.js';
+import { boardContentHref, boardHref, boardSections, boardSettingsAddress, href, inboxAddress, publicHref, readRoute } from './pages.js';
 import {
   collectionView, landing, missingView, publicView, searchView, workspaceOverview,
 } from './views.js';
@@ -194,8 +194,9 @@ function render({ focus = false } = {}) {
   }
   if (route.entity === 'topic' && topicLease?.address !== location.hash) route.params.delete('edit');
   const context = pageContext(route);
-  const canEditTasks = route.type === 'calendar' || route.collectionId === 'auto';
-  const canEditPlans = route.collectionId === 'auto' || (route.type === 'capture' && Boolean(route.captureId));
+  const captureSurface = route.type === 'capture' || isBoardOverview(route);
+  const canEditTasks = route.type === 'calendar' || route.collectionId === 'auto' || captureSurface;
+  const canEditPlans = route.collectionId === 'auto' || captureSurface;
   const isPlannerPage = canEditPlans || canEditTasks || isBoardOverview(route) || route.view === 'trash' || route.type === 'home';
   document.title = context.title;
   app.dataset.page = route.type;
@@ -222,7 +223,7 @@ function render({ focus = false } = {}) {
   }
   mountBoardEditor?.(route);
   mountLibrary?.(route);
-  refreshInbox = mountCaptureBoard(app, route, refreshStudioSync);
+  refreshInbox = mountCaptureBoard(app, route, refreshStudioSync, createFromCapture);
   if (route.entity === 'topic' && route.params.has('entry')) {
     const id = route.params.get('entry');
     const entry = [...app.querySelectorAll('[data-entry]')].find(node => node.dataset.entry === id);
@@ -314,6 +315,7 @@ function refreshFocus(selector) {
 }
 
 function fillTaskForm(form, { task, plan } = {}) {
+  delete form.dataset.inboxId;
   form.elements.id.value = task?.id ?? '';
   form.elements.planId.value = task?.planId ?? plan?.id ?? '';
   form.elements.title.value = task?.title ?? plan?.title ?? '';
@@ -344,6 +346,27 @@ function openTaskDialog(button) {
   const dialog = app.querySelector('[data-entry-dialog]');
   fillTaskForm(dialog.querySelector('[data-task-form]'), { task, plan });
   showEntryForm(dialog, 'task', task ? '编辑待办' : '新建待办');
+}
+
+function createFromCapture(kind, row) {
+  const title = (row.title || '未命名收藏').slice(0, 120);
+  if (kind === 'reminder') {
+    openPlanDialog(undefined, { inboxId: row.id, title, reminder: (row.userNote || '').split('\n')[0].slice(0, 100) });
+    return;
+  }
+  const source = row.sourceUrl?.length <= 700 ? row.sourceUrl : new URL(inboxAddress(row.id), location.origin).href;
+  const notes = [source, row.originalText, row.userNote].filter(Boolean).join('\n\n').slice(0, 700);
+  if (kind === 'event') {
+    openReview(app, { template: { title, notes, inboxId: row.id } });
+    return;
+  }
+  const dialog = app.querySelector('[data-entry-dialog]');
+  const form = dialog.querySelector('[data-task-form]');
+  fillTaskForm(form);
+  form.dataset.inboxId = row.id;
+  form.elements.title.value = title;
+  form.elements.notes.value = notes;
+  showEntryForm(dialog, 'task', '新建待办');
 }
 
 function updatePlanFields(form) {
@@ -384,7 +407,7 @@ function openPlanDialog(id, source) {
   form.elements.periodDays.value = plan?.periodDays ?? 1;
   form.elements.interval.value = plan?.interval ?? 1;
   form.elements.target.value = plan?.target ?? 1;
-  form.elements.reminder.value = plan?.reminder ?? '';
+  form.elements.reminder.value = plan?.reminder ?? source?.reminder ?? '';
   form.dataset.sourceId = source?.record?.id ?? '';
   form.dataset.inboxId = source?.inboxId ?? '';
   const linkedInbox = Boolean(source?.inboxId || plan?.inboxId);
@@ -481,6 +504,7 @@ app.addEventListener('submit', async event => {
   const saved = plannerRepository.saveTask({
     id: form.elements.id.value || undefined, planId: form.elements.planId.value || undefined,
     title, notes: form.elements.notes.value, done: form.elements.done.checked, completedOn: dateKey(),
+    inboxId: form.dataset.inboxId,
     sourceContentId: form.elements.sourceContentId.disabled ? undefined : form.elements.sourceContentId.value,
   });
   if (!saved) {
@@ -625,7 +649,7 @@ window.addEventListener('hashchange', async () => {
 async function pollStudioContent() {
   if (document.visibilityState !== 'visible' || app.querySelector('dialog[open]')) return;
   const route = readRoute(location.hash);
-  if (renderedDay !== dateKey() && (route.type === 'calendar' || route.type === 'auto-plan')) render();
+  if (renderedDay !== dateKey() && (route.type === 'calendar' || route.type === 'auto-plan' || isBoardOverview(route))) render();
   const changed = await refreshStudioSync();
   if (readRoute(location.hash).type === 'capture') return;
   if (changed && !app.querySelector('dialog[open]')) render();

@@ -223,6 +223,9 @@ svg { flex: none; vertical-align: middle; }
 .widget-week .calendar-day { background: var(--surface); }
 .widget-week .calendar-day.is-today { background: var(--selected); }
 .widget-week .calendar-day:hover { border-color: var(--line); }
+.agenda-list.week-appointments { margin-top: .6rem; }
+.week-appointments .agenda-appointment > button { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; }
+.week-appointments small { color: var(--muted); font-size: 12px; white-space: nowrap; text-align: end; }
 .auto-toolbar { max-width: 760px; align-items: center; }
 .auto-section { max-width: 760px; margin-top: 20px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .auto-section h2 { font-size: 15px; }
@@ -283,7 +286,8 @@ svg { flex: none; vertical-align: middle; }
 .agenda-group h3 { margin: 0; font-size: 13px; }
 .calendar-lists { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 14px; }
 .calendar-tasks { margin-top: 0; }
-.calendar-reminders { margin-top: 20px; }
+.calendar-reminders { margin-top: 0; }
+.calendar-tasks + .calendar-reminders { margin-top: 20px; }
 .reminder-dialog [data-reminder-title] { display: block; margin-block: 8px; overflow-wrap: anywhere; }
 .reminder-dialog .return-link { margin-top: 8px; }
 .reminder-defer-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 6px; }
@@ -856,12 +860,14 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .capture-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-block: .5rem; }
 .capture-list, .capture-list li + li { border: 0; }
 .capture-list li { display: flex; align-items: center; gap: .5rem; }
-.capture-list a {
+.capture-row-link {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .55rem;
   flex: 1; min-width: 0; padding: .5rem .35rem; border: 0; background: transparent;
   color: inherit; text-align: start; font: inherit; font-size: 13px; cursor: pointer; min-height: 38px;
 }
-.capture-list a:hover { background: #edf4fb; border-radius: .45rem; }
+.capture-row-link:hover { background: #edf4fb; border-radius: .45rem; }
+.capture-row-actions { display: flex; gap: 2px; }
+.capture-row-actions .header-icon { width: 36px; height: 38px; }
 .capture-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .capture-list small, .capture-capacity small { color: #526277; }
 .capture-target { display: grid; gap: .5rem; margin-block: .5rem; min-width: 0; }
@@ -877,6 +883,7 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .capture-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .capture-surface { overflow-wrap: anywhere; }
 .capture-page-icon { border: 0; background: transparent; cursor: pointer; }
+.capture-page-icon[hidden] { display: none; }
 .capture-page-icon:disabled { opacity: .45; cursor: default; }
 .capture-surface .capture-form { gap: .85rem; }
 .capture-toolbar {
@@ -919,6 +926,6 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .capture-capacity[data-level="Critical"] progress { accent-color: #b02c33; }
 .capture-page { max-width: 36rem; margin: auto; padding: 1rem 1rem 3rem; }
 @media (max-width: 480px) {
-  .capture-list a { grid-template-columns: auto minmax(0, 1fr); }
+  .capture-row-link { grid-template-columns: auto minmax(0, 1fr); }
   .capture-list small { grid-column: 2; }
 }

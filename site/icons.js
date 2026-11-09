@@ -32,6 +32,7 @@ const paths = {
   pin: '<path d="m14 3 7 7-2 1-4 4v3l-3 1-2.5-2.5L4 22l-2-2 5.5-5.5L5 12l1-3h3l4-4Z"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
   folderMove: '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Zm5 6h8m-3-3 3 3-3 3"/>',
+  inboxMove: '<path d="M4 12h5l2 3h2l2-3h5M4 12l2-6h7m-9 6v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6m-5-5h6m-3-3 3 3-3 3"/>',
   folderAdd: '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2ZM12 10v6m-3-3h6"/>',
   file: '<path d="M6 3h8l4 4v14H6Zm8 0v5h4M9 12h6m-6 4h6"/>',
   fileAdd: '<path d="M6 3h8l4 4v14H6Zm8 0v5h4M12 11v6m-3-3h6"/>',

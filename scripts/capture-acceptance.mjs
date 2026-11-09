@@ -82,11 +82,35 @@ const unfiled = await create({ type: 'text', originalText: '收藏待分类', ta
 const categoryRoot = await create({ type: 'text', originalText: '类别根目录', target: otherCategory.target });
 assert.ok([unlabeled, unfiled, categoryRoot].every(row => row.status === 'organized'));
 const inbox = await cap('/items');
-assert.equal(inbox.inboxCount, 1);
-assert.equal(inbox.items[0].title, 'Saved page');
-assert.equal(inbox.items[0].sourceUrl, url);
-assert.equal(inbox.items[0].normalizedUrl, 'https://example.org/saved');
-assert.equal((await cap('/items?q=Saved')).total, 1);
+assert.equal(inbox.inboxCount, 8);
+const savedPage = inbox.items.find(row => row.id === first.id);
+assert.equal(savedPage.title, 'Saved page');
+assert.equal(savedPage.sourceUrl, url);
+assert.equal(savedPage.normalizedUrl, 'https://example.org/saved');
+assert.equal(savedPage.fromShortcut, true);
+const classifiedInInbox = inbox.items.find(row => row.id === categorized.id);
+assert.equal(classifiedInInbox.inInbox, true);
+const hidden = await cap('/items/' + categorized.id, {
+  method: 'PATCH', value: { version: classifiedInInbox.version, inInbox: false },
+});
+assert.equal(hidden.status, 'organized');
+assert.equal(hidden.inInbox, false);
+assert.equal((await cap('/items')).inboxCount, 7);
+assert.equal((await cap('/items?status=trash')).total, 0);
+await cap('/items/' + categorized.id, {
+  method: 'PATCH', value: { version: hidden.version, inInbox: true }, expect: 409,
+});
+const unprocessed = await cap('/items/' + first.id, {
+  method: 'PATCH', value: { version: savedPage.version, inInbox: false },
+});
+assert.deepEqual((await cap('/items?status=trash')).items.map(row => row.id), [first.id]);
+assert.equal((await cap('/items?status=trash', { as: 'another-owner' })).total, 0);
+const restored = await cap('/items/' + first.id, {
+  method: 'PATCH', value: { version: unprocessed.version, inInbox: true },
+});
+assert.equal(restored.inInbox, true);
+assert.equal((await cap('/items?status=trash')).total, 0);
+assert.equal((await cap('/items?q=Saved+page')).total, 1);
 assert.equal((await cap('/items', { as: 'another-owner' })).total, 0);
 
 await call('/studio/lease', { method: 'POST', value: { token: lease } });
@@ -117,6 +141,35 @@ await cap('/items/batch', { method: 'PATCH', value: { ids: bulk.map(row => row.i
 const saved = await cap('/items/' + first.id);
 await cap('/items/' + first.id, { method: 'PATCH', value: { version: saved.version, status: 'archived' } });
 assert.equal((await cap('/items?status=archived')).total, 1);
+
+const [forTask, forReminder, forEvent, discarded] = await Promise.all(['待办来源', '提醒来源', '日程来源', '清空测试'].map(
+  originalText => create({ type: 'text', originalText }, a.token)));
+const getItem = id => cap('/items/' + id);
+const moveOut = row => cap('/items/' + row.id, { method: 'PATCH', value: { version: row.version, inInbox: false } });
+const oldEventSource = await getItem(forEvent.id);
+const date = '2026-11-09';
+const planner = await call('/planner');
+const emptyPlanner = { tasks: [], plans: [], events: [], reviews: [], completions: [], habitDates: [] };
+const committed = await call('/planner', { method: 'PUT', value: {
+  revision: planner.revision,
+  snapshot: { ...emptyPlanner,
+    tasks: [{ id: crypto.randomUUID(), inboxId: forTask.id, title: '待办', done: false }],
+    plans: [{ id: crypto.randomUUID(), inboxId: forReminder.id, title: '提醒', kind: 'one-off',
+      paused: false, startDate: date, sourceIds: [] }],
+    events: [{ id: crypto.randomUUID(), inboxId: forEvent.id, title: '日程', status: 'confirmed',
+      start: date, end: '2026-11-10', allDay: true, timeZone: 'Asia/Tokyo', location: '', notes: '', targetCalendar: '' }],
+  },
+} });
+await call('/planner', { method: 'PUT', value: { revision: committed.revision, snapshot: emptyPlanner } });
+await cap('/items/' + forEvent.id, {
+  method: 'PATCH', value: { version: oldEventSource.version, inInbox: false }, expect: 409,
+});
+for (const item of [forTask, forReminder, forEvent, discarded]) await moveOut(await getItem(item.id));
+assert.deepEqual((await cap('/items?status=trash')).items.map(row => row.id), [discarded.id]);
+await cap('/items/trash', { method: 'DELETE' });
+await cap('/items/' + discarded.id, { expect: 404 });
+assert.equal((await getItem(forTask.id)).inInbox, false);
+assert.equal((await getItem(categorized.id)).target, folder);
 
 const pdf = Buffer.from('%PDF-1.7\nTest fixture');
 const uploadId = crypto.randomUUID();

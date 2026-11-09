@@ -89,33 +89,42 @@ function captureView(row) {
     id: row.id, type: row.type, status: row.status, target: row.target, version: row.version,
     ...values, sourceDomain: values.sourceUrl ? new URL(values.sourceUrl).hostname : '',
     normalizedUrl: row.normalized_url, metadata: JSON.parse(row.metadata), capturedAt: row.captured_at, updatedAt: row.updated_at,
-    device: row.device_name, nativeCollection: row.native_collection,
+    device: row.device_name, fromShortcut: Boolean(row.device_id), nativeCollection: row.native_collection,
+    inInbox: row.inbox_eligible ? !row.inbox_hidden : null,
     planId: row.type === 'text' ? linkedPlanId(row.request_key) : undefined,
     ...(row.filename ? { attachment: { filename: row.filename, mime: row.mime, size: row.size } } : {}),
   };
 }
 
-const select = 'SELECT i.*, u.filename, u.mime, u.size, d.name AS device_name FROM capture_items i ' +
+const activeInbox = "i.status IN ('inbox', 'organized') AND json_extract(i.document, '$.deletedAt') IS NULL";
+const trashInbox = "i.status = 'inbox' AND i.inbox_hidden = 1 AND i.inbox_handled = 0";
+const select = 'SELECT i.*, u.filename, u.mime, u.size, d.name AS device_name, (' + activeInbox +
+  ') AS inbox_eligible FROM capture_items i ' +
   'LEFT JOIN capture_uploads u ON u.id = i.attachment_id LEFT JOIN capture_devices d ON d.id = i.device_id';
 const one = (db, owner, id) => sql(db, select + " WHERE i.owner = ? AND i.id = ? AND i.status != 'deleted'", owner, id).first();
 
 async function items(db, owner, params) {
   const status = params.get('status') || 'inbox';
   const type = params.get('type') || '';
-  if (!['inbox', 'organized', 'archived'].includes(status) || (type && !types.includes(type))) throw captureError('invalid_filter');
+  if (!['inbox', 'trash', 'organized', 'archived'].includes(status) || (type && !types.includes(type))) {
+    throw captureError('invalid_filter');
+  }
   const q = text(params.get('q'), 150).toLowerCase();
   const ascending = params.get('sort') === 'oldest';
   const limit = Math.min(50, Math.max(1, Number(params.get('limit')) || 25));
   const offset = Math.min(100000, Math.max(0, Number(params.get('offset')) || 0));
   if (!Number.isInteger(limit) || !Number.isInteger(offset)) throw captureError('invalid_filter');
-  const filter = ' WHERE i.owner = ? AND i.status = ?' + (type ? ' AND i.type = ?' : '') +
+  const condition = status === 'inbox' ? activeInbox + ' AND i.inbox_hidden = 0' :
+    status === 'trash' ? trashInbox : 'i.status = ?';
+  const filter = ' WHERE i.owner = ? AND ' + condition +
+    (type ? ' AND i.type = ?' : '') +
     (q ? ' AND instr(lower(i.document || i.source_url || i.metadata), ?) > 0' : '');
-  const args = [owner, status, ...(type ? [type] : []), ...(q ? [q] : [])];
+  const args = [owner, ...(['inbox', 'trash'].includes(status) ? [] : [status]), ...(type ? [type] : []), ...(q ? [q] : [])];
   const [rows, count, inbox] = await db.batch([
     sql(db, select + filter + (ascending ? ' ORDER BY i.captured_at, i.id' : ' ORDER BY i.captured_at DESC, i.id DESC') +
       ' LIMIT ? OFFSET ?', ...args, limit, offset),
     sql(db, 'SELECT count(*) AS count FROM capture_items i' + filter, ...args),
-    sql(db, "SELECT count(*) AS count FROM capture_items WHERE owner = ? AND status = 'inbox'", owner),
+    sql(db, 'SELECT count(*) AS count FROM capture_items i WHERE i.owner = ? AND i.inbox_hidden = 0 AND ' + activeInbox, owner),
   ]);
   return { items: rows.results.map(captureView), total: count.results[0].count, inboxCount: inbox.results[0].count };
 }
@@ -172,11 +181,12 @@ async function mutate(env, owner, rows, change) {
       document = JSON.parse(row.document);
     }
     updates.push(sql(db, 'UPDATE capture_items SET status = ?, target = ?, native_collection = ?, document = ?, ' +
-      'source_url = ?, normalized_url = ?, metadata = ?, version = version + 1, updated_at = ?, attachment_id = ? ' +
+      'source_url = ?, normalized_url = ?, metadata = ?, version = version + 1, updated_at = ?, attachment_id = ?, ' +
+      'inbox_handled = CASE WHEN ? THEN 1 ELSE inbox_handled END ' +
       'WHERE owner = ? AND id = ? AND version = ? AND ' + guard + ' RETURNING id',
     status, target, collection, JSON.stringify(document), status === 'deleted' ? '' : fields.sourceUrl,
     status === 'deleted' ? '' : row.normalized_url, status === 'deleted' ? '{}' : row.metadata,
-    now, status === 'deleted' ? null : row.attachment_id, owner, row.id, row.version, ...guardArgs));
+    now, status === 'deleted' ? null : row.attachment_id, Number(Boolean(change.target)), owner, row.id, row.version, ...guardArgs));
     if (status === 'deleted' && row.attachment_id) {
       updates.push(sql(db, "UPDATE capture_uploads SET status = 'deleting' WHERE id = ? AND " +
         'NOT EXISTS (SELECT 1 FROM capture_items WHERE attachment_id = ?)', row.attachment_id, row.attachment_id));
@@ -235,10 +245,10 @@ async function create(env, owner, actor, device, input) {
     new URL(sourceUrl).hostname).slice(0, 200);
   const now = stamp();
   const row = await sql(db, "INSERT INTO capture_items (id, owner, device_id, request_key, type, source_url, normalized_url, " +
-    "metadata, captured_at, updated_at, status, document, attachment_id) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'inbox', ?, ? " +
+    "metadata, captured_at, updated_at, status, document, attachment_id, inbox_handled) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'inbox', ?, ?, ? " +
     "WHERE (? IS NULL OR EXISTS (SELECT 1 FROM capture_uploads WHERE id = ? AND status = 'ready' AND created_at >= ?)) " +
     'ON CONFLICT DO NOTHING RETURNING *', crypto.randomUUID(), owner, device?.id ?? null, key, type, sourceUrl, normalized,
-  JSON.stringify(metadata), now, now, JSON.stringify({ title, originalText, userNote }), file?.id ?? null,
+  JSON.stringify(metadata), now, now, JSON.stringify({ title, originalText, userNote }), file?.id ?? null, Number(Boolean(planId)),
   file?.id ?? null, file?.id ?? null, Date.now() - 86400000).first();
   if (!row) {
     const duplicate = await sql(db, "SELECT id, status FROM capture_items WHERE owner = ? AND (request_key = ? OR " +
@@ -274,6 +284,18 @@ export async function captureApi(request, env, ctx, owner, url, { body, json }, 
   if (device) ownerOnly();
   if (path === '/devices' || path.startsWith('/devices/')) return devicesApi(request, env.DB, owner, path, body, json);
   if (path === '/items' && method === 'GET') return json(await items(env.DB, owner, url.searchParams));
+  if (path === '/items/trash' && method === 'DELETE') {
+    const trash = 'i.owner = ? AND ' + trashInbox;
+    await env.DB.batch([
+      sql(env.DB, "UPDATE capture_uploads SET status = 'deleting' WHERE id IN " +
+        '(SELECT attachment_id FROM capture_items i WHERE ' + trash + ')', owner),
+      sql(env.DB, "UPDATE capture_items AS i SET status = 'deleted', document = '{}', metadata = '{}', " +
+        "source_url = '', normalized_url = '', attachment_id = NULL, version = version + 1, updated_at = ? WHERE " + trash,
+      stamp(), owner),
+    ]);
+    ctx.waitUntil(cleanupUploads(env).catch(() => {}));
+    return json({ deleted: true });
+  }
   if (path === '/items/batch' && method === 'PATCH') {
     const input = await body(request, 4096);
     const ids = input?.ids;
@@ -301,6 +323,16 @@ export async function captureApi(request, env, ctx, owner, url, { body, json }, 
   if (method === 'PATCH') {
     const change = await body(request, maxJSON);
     if (!change || change.version !== row.version) throw captureError('conflict', 409);
+    if (Object.hasOwn(change, 'inInbox')) {
+      if (typeof change.inInbox !== 'boolean' || Object.keys(change).length !== 2) throw captureError('invalid_status');
+      const inboxHidden = Number(!change.inInbox);
+      const eligible = change.inInbox ? trashInbox : activeInbox + ' AND i.inbox_hidden = 0';
+      const updated = await sql(env.DB, 'UPDATE capture_items AS i SET inbox_hidden = ?, version = version + 1, updated_at = ? ' +
+        'WHERE i.owner = ? AND i.id = ? AND i.version = ? AND ' + eligible + ' RETURNING version, updated_at',
+      inboxHidden, stamp(), owner, id, row.version).first();
+      if (!updated) throw captureError('conflict', 409);
+      return json(captureView({ ...row, ...updated, inbox_hidden: inboxHidden }));
+    }
     if (Object.hasOwn(change, 'target')) change.target = text(change.target, 1000);
     if ((change.target && !env.STUDIO_CONTENT) || (change.status && !['inbox', 'archived'].includes(change.status))) {
       throw captureError('invalid_status');
