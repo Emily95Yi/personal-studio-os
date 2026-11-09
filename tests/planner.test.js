@@ -82,12 +82,12 @@ test('plan trash and task deletion preserve independent and previously linked ca
   assert.equal(repo.setPlanTrashed(plan.id, true), true);
   assert.equal(repo.getPlan(plan.id), undefined);
   assert.equal(repo.trashedPlans()[0].id, plan.id);
-  assert.equal(repo.tasksBetween(date, date).length, 0);
+  assert.equal(repo.listTasks().length, 0);
   assert.equal(repo.dueReminders(date).length, 0);
   assert.equal(repo.calendarEvents().length, 2);
   repo.restore(repo.snapshot());
   assert.equal(repo.setPlanTrashed(plan.id, false), true);
-  assert.equal(repo.tasksBetween(date, date).length, 1);
+  assert.equal(repo.listTasks().length, 1);
   assert.equal(repo.removeTask(task.id), true);
   assert.equal(repo.calendarEvents().find(row => row.id === legacy.id).taskId, undefined);
   const replacement = repo.saveTask({ title: 'Another manual task', planId: plan.id, date });
@@ -100,4 +100,22 @@ test('plan trash and task deletion preserve independent and previously linked ca
   assert.equal(repo.calendarEvents().find(row => row.id === fromPlan.id).taskId, undefined);
   assert.equal(repo.calendarEvents().length, 3);
   assert.ok(validSnapshot(repo.snapshot()));
+});
+
+test('manual tasks can be saved without dates while calendar events still require a date range', () => {
+  const repo = plannerRepository;
+  repo.restore(null);
+  const task = repo.saveTask({ title: 'Manual', done: false });
+  assert.equal(task.date, undefined);
+  assert.ok(validSnapshot(repo.snapshot()));
+  repo.restore(JSON.parse(JSON.stringify(repo.snapshot())));
+  assert.equal(repo.listTasks()[0].id, task.id);
+  const legacy = repo.saveTask({ title: 'Previously dated', date: '2027-03-01' });
+  assert.equal(repo.saveTask({ id: legacy.id, title: 'Edited' }).date, legacy.date);
+  const event = repo.saveCalendarEvent({ title: 'Appointment', ...eventTimes(true, '2027-03-01', '2027-03-02'),
+    location: '', notes: '', targetCalendar: '' });
+  const snapshot = repo.snapshot();
+  assert.ok(validSnapshot(snapshot));
+  delete snapshot.events.find(row => row.id === event.id).start;
+  assert.equal(validSnapshot(snapshot), false);
 });

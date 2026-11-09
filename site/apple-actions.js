@@ -266,13 +266,6 @@ export function initAppleActions(app, render) {
       }
       return;
     }
-    if (button.hasAttribute('data-task-review') && canEdit()) {
-      const form = button.form;
-      const task = plannerRepository.getTask(form.elements.id.value);
-      if (!task) return;
-      form.closest('dialog').close();
-      openReview(app, { date: task.date, template: task });
-    }
     if (button.hasAttribute('data-ics-download') || button.hasAttribute('data-event-error')) {
       const item = currentEvent(app);
       if (item?.source !== 'studio' || item.status === 'synced' || item.mismatch) return;

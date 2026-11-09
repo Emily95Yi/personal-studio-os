@@ -8,7 +8,7 @@ import { icon } from './icons.js';
 import { escapeHtml } from './html.js';
 import { autoPlanView, originalSource, planDialog, planKindHelp, planPeriodLabel } from './auto-view.js';
 import { plannerRepository, studioRepository } from './repository.js';
-import { calendarHref, calendarSelection, dateKey, parseDate, todayDate } from './calendar.js';
+import { calendarHref, calendarSelection, dateKey, todayDate } from './calendar.js';
 import { calendarHeaderActions, calendarRefreshState, calendarView, taskDialog, weekPreview } from './planner-view.js';
 import { reminderDialog } from './reminder-view.js';
 import { allCalendarEvents, canEdit, eventDialog, reviewDialog, settingsView, showEvent, statusBanner } from './apple-view.js';
@@ -259,7 +259,7 @@ app.addEventListener('click', event => {
   if (!button) return;
   if (button.hasAttribute('data-dialog-cancel')) button.closest('dialog').close();
   if (!canEdit()) return;
-  if (button.dataset.taskNew || button.dataset.taskEdit || button.dataset.planSchedule) openTaskDialog(button);
+  if (button.hasAttribute('data-task-new') || button.dataset.taskEdit || button.dataset.planTaskNew) openTaskDialog(button);
   if (button.hasAttribute('data-plan-new') || button.dataset.planEdit) openPlanDialog(button.dataset.planEdit);
   if (button.dataset.inboxId) openPlanDialog(undefined, { inboxId: button.dataset.inboxId, title: button.dataset.inboxTitle });
   if (button.dataset.planPause) {
@@ -274,7 +274,7 @@ app.addEventListener('click', event => {
   }
   if (button.hasAttribute('data-task-delete') && plannerRepository.removeTask(button.form.elements.id.value)) {
     button.closest('dialog').close();
-    refreshFocus('[data-task-new], [data-plan-schedule]');
+    refreshFocus('[data-task-new], [data-plan-task-new]');
   }
   if (button.dataset.planLog) {
     plannerRepository.recordCompletion(button.dataset.planLog, dateKey());
@@ -298,14 +298,13 @@ function refreshFocus(selector) {
 function openTaskDialog(button) {
   const task = button.dataset.taskEdit ? plannerRepository.getTask(button.dataset.taskEdit) : null;
   if (button.dataset.taskEdit && !task) return;
-  const plan = button.dataset.planSchedule ? plannerRepository.getPlan(button.dataset.planSchedule) : null;
+  const plan = button.dataset.planTaskNew ? plannerRepository.getPlan(button.dataset.planTaskNew) : null;
   const dialog = app.querySelector('.task-dialog');
   const form = dialog.querySelector('form');
-  dialog.querySelector('h2').textContent = task ? '编辑安排' : plan ? '安排日期' : '新建待办';
+  dialog.querySelector('h2').textContent = task ? '编辑待办' : '新建待办';
   form.elements.id.value = task?.id ?? '';
   form.elements.planId.value = task?.planId ?? plan?.id ?? '';
   form.elements.title.value = task?.title ?? plan?.title ?? '';
-  form.elements.date.value = task?.date ?? button.dataset.taskNew ?? dateKey();
   const sources = [...new Set([...(plannerRepository.getPlan(form.elements.planId.value)?.sourceIds ?? []),
     task?.sourceContentId].filter(Boolean))].map(originalSource).filter(Boolean);
   const sourceField = form.elements.sourceContentId;
@@ -317,11 +316,9 @@ function openTaskDialog(button) {
   form.elements.done.disabled = Boolean(task?.skipped);
   form.elements.title.setCustomValidity('');
   form.querySelector('[data-form-error]').hidden = true;
-  const review = form.querySelector('[data-task-review]');
-  review.hidden = !task || task.skipped;
   form.querySelector('[data-task-delete]').hidden = !task;
   dialog.showModal();
-  (plan ? form.elements.date : form.elements.title).focus();
+  form.elements.title.focus();
 }
 
 function updatePlanFields(form) {
@@ -456,26 +453,17 @@ app.addEventListener('submit', async event => {
     else refreshFocus('[data-plan-edit]');
     return;
   }
-  const date = parseDate(form.elements.date.value);
-  if (!date) return;
   const saved = plannerRepository.saveTask({
     id: form.elements.id.value || undefined, planId: form.elements.planId.value || undefined,
-    title, date: dateKey(date), done: form.elements.done.checked, completedOn: dateKey(),
+    title, done: form.elements.done.checked, completedOn: dateKey(),
     sourceContentId: form.elements.sourceContentId.disabled ? undefined : form.elements.sourceContentId.value,
   });
   if (!saved) {
-    error.textContent = '无法保存。请检查计划是否已暂停，或是否已有单次安排。';
+    error.textContent = '无法保存。请检查计划是否已暂停，或单次计划是否已有待办。';
     error.hidden = false;
     return;
   }
   form.closest('dialog').close();
-  const route = readRoute(location.hash);
-  if (route.type === 'calendar') {
-    const { mode, date: selected } = calendarSelection(route.params);
-    if (dateKey(selected) !== saved.date) {
-      history.replaceState(history.state, '', calendarHref(date, mode, route.params.get('from')));
-    }
-  }
   render();
   (app.querySelector('[data-task-edit="' + saved.id + '"]') ?? app.querySelector('main')).focus({ preventScroll: true });
 });

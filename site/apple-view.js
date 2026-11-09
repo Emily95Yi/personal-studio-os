@@ -44,7 +44,6 @@ export function allCalendarEvents(filter = 'all') {
   const distinct = b.filter(event => !aKeys.has(JSON.stringify([event.uid, event.recurrence ?? ''])));
   return [...a, ...combineEvents(local.filter(event => event.syncMode !== 'caldav'), distinct)];
 }
-export const calendarTasks = (start, end) => plannerRepository.tasksBetween(start, end);
 export const onDay = (event, day) => event.dayStart <= day && event.dayEnd > day;
 const actionLabels = { remind: '仅记录提醒意向', todo: '保留待办', calendar: '已建立日程' };
 
@@ -142,13 +141,14 @@ export function openReview(app, { event, date = dateKey(), template } = {}) {
   const form = dialog.querySelector('form');
   form.reset();
   form.elements.eventId.value = event?.id ?? '';
-  form.elements.createId.value = !template && !event ? crypto.randomUUID() : '';
+  const localDraft = !event && (template || !connection.caldav.configured);
+  form.elements.createId.value = !localDraft && !event ? crypto.randomUUID() : '';
   form.elements.eventVersion.value = JSON.stringify(event?.caldav?.version ?? null);
   form.elements.eventTitle.value = event?.title ?? template?.title ?? '';
-  form.elements.eventTitle.maxLength = template ? 120 : 300;
-  form.elements.place.maxLength = template ? 200 : 300;
+  form.elements.eventTitle.maxLength = localDraft ? 120 : 300;
+  form.elements.place.maxLength = localDraft ? 200 : 300;
   form.elements.startTime.step = form.elements.endTime.step = event ? '1' : '60';
-  form.elements.notes.maxLength = template ? 700 : 8000;
+  form.elements.notes.maxLength = localDraft ? 700 : 8000;
   form.querySelector('[data-caldav-rebase]').hidden = true;
   form.querySelector('h2').textContent = event ? '编辑 YiStudio 日程' : '新建 YiStudio 日程';
   form.elements.startTime.value = date + 'T09:00';

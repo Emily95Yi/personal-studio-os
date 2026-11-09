@@ -80,13 +80,14 @@ function planCards(plans) {
 }
 
 function taskRows(tasks, allowSkip = false) {
-  if (!tasks.length) return '<p class="subtle">暂无安排。</p>';
-  return '<ul class="auto-task-list">' + tasks.slice().sort((a, b) => a.date.localeCompare(b.date)).map(task =>
+  if (!tasks.length) return '<p class="subtle">暂无待办。</p>';
+  return '<ul class="auto-task-list">' + tasks.map(task =>
     '<li>' + (task.skipped ? '<span class="task-skipped">已跳过</span>' :
       '<input type="checkbox" data-task-check="' + task.id + '" aria-label="完成 ' + escapeHtml(task.title) + '"' +
       (task.done ? ' checked' : '') + '>') +
     '<button class="task-title" type="button" data-task-edit="' + task.id + '">' +
-    '<strong>' + escapeHtml(task.title) + '</strong><small>' + escapeHtml([task.date.slice(5), reviewLabel(task)].filter(Boolean).join(' · ')) + '</small></button>' +
+    '<strong>' + escapeHtml(task.title) + '</strong>' +
+    (reviewLabel(task) ? '<small>' + escapeHtml(reviewLabel(task)) + '</small>' : '') + '</button>' +
     (allowSkip && !task.done && !(task.skipped && plannerRepository.getPlan(task.planId)?.kind === 'one-off' &&
       tasks.some(item => !item.skipped && item.planId === task.planId)) ? '<button type="button" class="text-action" data-task-skip="' + task.id + '">' +
       (task.skipped ? '恢复' : '跳过') + '</button>' : '') + taskSourceLink(task) + '</li>').join('') + '</ul>';
@@ -99,7 +100,7 @@ export function autoView() {
     '</span><div class="planner-actions">' +
     (canEdit() ? '<button class="action-button" type="button" data-plan-new>新建计划</button>' : '') + calendarLink('week', 'auto') + '</div></div>' +
     '<section class="auto-section"><h2>计划</h2>' + planCards(plannerRepository.listPlans()) + '</section>' +
-    '<section class="auto-section"><h2>单次安排</h2>' + taskRows(plannerRepository.standaloneTasks(), true) + '</section>';
+    '<section class="auto-section"><h2>待办</h2>' + taskRows(plannerRepository.standaloneTasks(), true) + '</section>';
 }
 
 function resourceLinks(plan) {
@@ -113,7 +114,7 @@ function resourceLinks(plan) {
 export function autoPlanView({ plan }) {
   const tasks = plannerRepository.tasksForPlan(plan.id);
   const records = plannerRepository.completionsForPlan(plan.id);
-  const canSchedule = !plan.paused && (plan.kind !== 'one-off' || !tasks.some(task => !task.skipped));
+  const canAddTask = !plan.paused && (plan.kind !== 'one-off' || !tasks.some(task => !task.skipped));
   const reminders = plannerRepository.dueReminders().filter(item => item.planId === plan.id);
   const planAction = (key, glyph, label) => '<button type="button" class="header-icon calendar-icon" data-plan-' + key +
     '="' + plan.id + '" aria-label="' + label + '" title="' + label + '">' + icon(glyph, 19) + '</button>';
@@ -126,7 +127,7 @@ export function autoPlanView({ plan }) {
     planAction('edit', 'edit', '编辑计划') + planAction('pause', plan.paused ? 'play' : 'pause', plan.paused ? '恢复计划' : '暂停计划') +
     planAction('finish', 'check', '完成计划') + '</div></div>' +
     '<section class="auto-section"><div class="section-heading"><h2>待办</h2>' +
-    (canSchedule ? '<button class="action-button" type="button" data-plan-schedule="' + plan.id + '">安排日期</button>' : '') +
+    (canAddTask ? '<button class="action-button" type="button" data-plan-task-new="' + plan.id + '">新建待办</button>' : '') +
     '</div>' + taskRows(tasks, true) + '</section>' +
     '<section class="auto-section"><h2>提醒</h2>' +
     (reminders.length ? '<ul class="agenda-list">' + reminderRows(reminders) + '</ul>' :

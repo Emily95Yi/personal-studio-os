@@ -47,7 +47,7 @@ export const workshopRepository = {
  * period?: 'day'|'week'|'month', interval?: number, target?: number, periodDays?: number, periodStart?: string,
  * startDate?: string, reminder?: string, handledThrough?: string, snoozedUntil?: string, deletedAt?: string,
  * inboxId?: string, sourceIds: string[] }} AutoPlan
- * @typedef {{ id: string, title: string, date: string, done: boolean, skipped?: boolean,
+ * @typedef {{ id: string, title: string, date?: string, done: boolean, skipped?: boolean,
  * planId?: string, sourceContentId?: string, autoReminder?: boolean }} PlannedTask
  * @typedef {{ id: string, planId: string, date: string, taskId?: string }} Completion
  */
@@ -241,10 +241,9 @@ export const plannerRepository = {
       changed();
     }
   },
-  tasksBetween(start, end) {
+  listTasks() {
     const trashed = new Set(plans.filter(plan => plan.deletedAt).map(plan => plan.id));
-    return tasks.filter(task => !task.autoReminder && !task.skipped && !trashed.has(task.planId) &&
-      task.date >= start && task.date <= end).map(task => ({ ...task }));
+    return tasks.filter(task => !task.autoReminder && !task.skipped && !trashed.has(task.planId)).map(task => ({ ...task }));
   },
   tasksForPlan(id) { return tasks.filter(task => task.planId === id && !task.autoReminder).map(task => ({ ...task })); },
   standaloneTasks() { return tasks.filter(task => !task.planId).map(task => ({ ...task })); },
@@ -260,13 +259,14 @@ export const plannerRepository = {
   },
   saveTask({ id, title, date, done, planId, completedOn, sourceContentId }) {
     const existing = tasks.find(task => task.id === id);
-    if (id && !existing) return undefined;
+    if ((id && !existing) || (date !== undefined && !parseDate(date))) return undefined;
     const owner = existing ? existing.planId : planId;
     const plan = owner ? this.getPlan(owner) : undefined;
     if (!existing && planId && (!plan || plan.paused ||
       (plan.kind === 'one-off' && this.tasksForPlan(planId).some(task => !task.skipped)))) return undefined;
-    const task = { ...existing, id: existing?.id ?? crypto.randomUUID(), title: title.trim(), date,
+    const task = { ...existing, id: existing?.id ?? crypto.randomUUID(), title: title.trim(),
       done: Boolean(done) && !existing?.skipped, planId: owner };
+    if (date !== undefined) task.date = date;
     if (sourceContentId === '') delete task.sourceContentId;
     else if (sourceContentId && (plan?.sourceIds.includes(sourceContentId) || existing?.sourceContentId === sourceContentId)) {
       task.sourceContentId = sourceContentId;

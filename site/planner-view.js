@@ -3,7 +3,7 @@ import { plannerRepository, workshopRepository } from './repository.js';
 import { href } from './pages.js';
 import { escapeHtml } from './html.js';
 import { taskSourceLink } from './auto-view.js';
-import { allCalendarEvents, agendaEventStatus, calendarSourceLabels, calendarTasks, canEdit, onDay, reviewLabel } from './apple-view.js';
+import { allCalendarEvents, agendaEventStatus, calendarSourceLabels, canEdit, onDay, reviewLabel } from './apple-view.js';
 import { icon } from './icons.js';
 import { eventDateTimeLabel, eventStatus, eventTimeLabel } from './calendar-events.js';
 import { connection } from './private-api.js';
@@ -21,7 +21,6 @@ function calendarGrid(date, mode, from, preview = false) {
   const days = calendarDays(date, mode);
   const start = dateKey(days[0]);
   const end = dateKey(days.at(-1));
-  const tasks = calendarTasks(start, end);
   const appointments = allCalendarEvents();
   const checkIns = plannerRepository.checkInsBetween(start, end);
   const events = workshopRepository.eventsBetween(start, end);
@@ -29,12 +28,10 @@ function calendarGrid(date, mode, from, preview = false) {
     const key = dateKey(day);
     const selected = !preview && key === dateKey(date);
     const today = key === dateKey();
-    const taskCount = tasks.filter(task => task.date === key).length;
     const checked = checkIns.includes(key);
     const eventCount = events.filter(event => event.date === key).length;
     const appointmentCount = appointments.filter(event => onDay(event, key)).length;
-    const details = [appointmentCount ? appointmentCount + ' 项日程' : '',
-      taskCount ? taskCount + ' 项待办' : '', checked ? '打卡' : '',
+    const details = [appointmentCount ? appointmentCount + ' 项日程' : '', checked ? '打卡' : '',
       eventCount ? eventCount + ' 场活动' : ''].filter(Boolean);
     const label = '<span class="day-number">' + day.getUTCDate() + '</span>' +
       (details.length ? '<span class="day-indicators">' + details.map(detail => '<small>' + detail + '</small>').join('') + '</span>' : '');
@@ -76,7 +73,6 @@ export function calendarSearchResults(query, events = allCalendarEvents()) {
 
 function agenda(date) {
   const key = dateKey(date);
-  const tasks = calendarTasks(key, key);
   const appointments = allCalendarEvents().filter(event => onDay(event, key))
     .sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start));
   const checked = plannerRepository.checkInsBetween(key, key).length > 0;
@@ -91,25 +87,29 @@ function agenda(date) {
       '</strong><span>' + escapeHtml(eventTimeLabel(event)) +
       '<span data-event-status' + (status ? '' : ' hidden') + '> · ' + escapeHtml(status) + '</span></span></button></li>';
   }).join('');
-  const taskRows = tasks.map(task =>
-    '<li><button type="button" data-task-edit="' + escapeHtml(task.id) + '"><strong>' + escapeHtml(task.title) +
-    '</strong><span>' + (task.done ? '已完成' : reviewLabel(task) ? eventStatus.confirmed + ' · ' + reviewLabel(task) : eventStatus.draft) +
-    '</span></button>' + taskSourceLink(task) + '</li>').join('');
-  const list = (title, rows) => rows ? '<section class="agenda-group" aria-label="' + title +
-    '"><h3>' + title + '</h3><ul class="agenda-list">' + rows + '</ul></section>' : '';
-  const groups = list('日程', appointmentRows) + list('待办', taskRows);
   return '<section class="calendar-agenda"><div class="section-heading"><h2>' +
     (date.getUTCMonth() + 1) + '.' + date.getUTCDate() + '</h2><div class="calendar-agenda-actions">' +
-    (connection.mode === 'private' && connection.caldav.configured ?
+    (canEdit() ?
       '<button type="button" class="header-icon calendar-icon" data-caldav-new="' + key +
-      '" aria-label="新建 YiStudio 日程" title="新建 YiStudio 日程">' + icon('calendarAdd', 19) + '</button>' : '') +
-    (canEdit() ? '<button type="button" class="header-icon calendar-icon" data-task-new="' + key +
-      '" aria-label="新建待办" title="新建待办">' + icon('taskAdd', 19) + '</button>' : '') + '</div></div>' +
-    (groups || (!checked && !events.length ? '<p>暂无安排。</p>' : '')) +
+      '" aria-label="新建 YiStudio 日程" title="新建 YiStudio 日程">' + icon('calendarAdd', 19) + '</button>' : '') + '</div></div>' +
+    '<section class="agenda-group" aria-label="日程"><h3>日程</h3>' +
+    (appointmentRows ? '<ul class="agenda-list">' + appointmentRows + '</ul>' : '<p>暂无日程。</p>') + '</section>' +
     (checked ? '<p class="habit-record">习惯 · 已打卡</p>' : '') +
     (events.length ? '<ul class="event-agenda">' + events.map(event => '<li><a href="' +
       href('workshop', 'projects', event.projectId, 'events', event.id) + '">' + escapeHtml(event.theme || event.title) +
       '</a><small>Workshop</small></li>').join('') + '</ul>' : '') + '</section>';
+}
+
+function taskList() {
+  const tasks = plannerRepository.listTasks();
+  const rows = tasks.map(task =>
+    '<li><button type="button" data-task-edit="' + escapeHtml(task.id) + '"><strong>' + escapeHtml(task.title) +
+    '</strong><span>' + (task.done ? '已完成' : reviewLabel(task) ? eventStatus.confirmed + ' · ' + reviewLabel(task) : '未完成') +
+    '</span></button>' + taskSourceLink(task) + '</li>').join('');
+  return '<section class="agenda-group calendar-tasks" aria-label="待办"><div class="section-heading"><h3>待办</h3>' +
+    (canEdit() ? '<button type="button" class="header-icon calendar-icon" data-task-new aria-label="新建待办" title="新建待办">' +
+      icon('taskAdd', 19) + '</button>' : '') + '</div>' +
+    (rows ? '<ul class="agenda-list">' + rows + '</ul>' : '<p class="subtle">暂无待办。</p>') + '</section>';
 }
 
 export function calendarRefreshState() {
@@ -151,7 +151,7 @@ export function calendarView({ params }) {
     dateLink(todayDate(), mode, '今天', from) + dateLink(movePeriod(date, mode, 1), mode, '›', from, ' aria-label="下一时段"') +
     '</div></div><div class="calendar-period"><h2>' + (date.getUTCMonth() + 1) + '月</h2>' +
     '<ul class="calendar-legend" aria-label="日历颜色">' + legend + '</ul></div>' +
-    calendarGrid(date, mode, from) + agenda(date) +
+    calendarGrid(date, mode, from) + agenda(date) + taskList() +
     '<section class="agenda-group calendar-reminders" aria-label="提醒"><h3>提醒</h3>' +
     (reminders.length ? '<ul class="agenda-list">' + reminderRows(reminders) + '</ul>' :
       '<p class="subtle">暂无到期提醒。</p>') + '</section>';
@@ -163,8 +163,7 @@ export function taskDialog() {
     '<button type="button" class="header-icon calendar-icon" data-task-delete hidden aria-label="删除待办" title="删除待办">' +
     icon('trash', 19) + '</button></div></div>' + (connection.mode === 'preview' ? '<p>本机预览 · 刷新清除</p>' : '') +
     '<input type="hidden" name="id"><input type="hidden" name="planId"><label>标题<input required maxlength="120" name="title"></label>' +
-    '<label>日期<input required type="date" name="date"></label><label data-task-source hidden>关联原始资料<select name="sourceContentId"></select></label><label class="check-label"><input type="checkbox" name="done">已完成</label>' +
+    '<label data-task-source hidden>关联原始资料<select name="sourceContentId"></select></label><label class="check-label"><input type="checkbox" name="done">已完成</label>' +
     '<p data-form-error role="alert" hidden></p><div class="widget-actions"><button type="button" class="action-button secondary" data-dialog-cancel>取消</button>' +
-    '<button type="button" class="header-icon calendar-icon" data-task-review hidden aria-label="建立日程" title="建立日程">' + icon('calendarAdd', 19) + '</button>' +
     '<button type="submit" class="action-button">保存</button></div></form></dialog>';
 }

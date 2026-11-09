@@ -26,9 +26,9 @@ function validPlan(row) {
 }
 
 function validTask(row, plans) {
-  return text(row.title, 120) && day(row.date) && typeof row.done === 'boolean' &&
+  return text(row.title, 120) && optional(row.date, day) && typeof row.done === 'boolean' &&
     optional(row.skipped, value => typeof value === 'boolean') &&
-    optional(row.autoReminder, value => value === true && plans.has(row.planId)) &&
+    optional(row.autoReminder, value => value === true && day(row.date) && plans.has(row.planId)) &&
     optional(row.planId, value => plans.has(value)) &&
     optional(row.sourceContentId, value => text(value, 256));
 }
