@@ -1,11 +1,15 @@
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
+import { canEdit } from './apple-view.js';
 
 export function reminderRows(reminders) {
   return reminders.map(reminder =>
-    '<li><button type="button" data-auto-reminder="' + esc(reminder.planId) +
+    '<li class="agenda-entry"><button type="button" data-auto-reminder="' + esc(reminder.planId) +
     '" data-reminder-date="' + esc(reminder.date) + '"><strong>' + esc(reminder.title) +
-    '</strong><span>Auto</span></button></li>').join('');
+    '</strong></button>' + (canEdit() ?
+      '<button type="button" class="header-icon calendar-icon agenda-calendar-arrow" data-reminder-calendar="' + esc(reminder.planId) +
+      '" data-reminder-date="' + esc(reminder.date) + '" aria-label="添加日程到 YiStudio 日历" title="添加日程到 YiStudio 日历">' +
+      icon('arrow', 17) + '</button>' : '') + '</li>').join('');
 }
 
 export function reminderDialog() {

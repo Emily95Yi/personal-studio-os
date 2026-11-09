@@ -7,7 +7,7 @@ import { connection } from './private-api.js';
 import { contentTitle, studioStore } from './studio-data.js';
 import { entriesFor, explorationEntryTitle, itemsFor, topicsFor } from './board-library-data.js';
 import { boardContent, boardSection } from './self-board-data.js';
-import { canEdit, reviewLabel } from './apple-view.js';
+import { canEdit } from './apple-view.js';
 import { reminderRows } from './reminder-view.js';
 
 const kinds = { 'one-off': '单次', recurring: '重复规则', quota: '周期目标' };
@@ -79,6 +79,12 @@ function planCards(plans) {
     '</a>').join('') + '</div>' : '<p class="subtle">暂无计划。</p>';
 }
 
+export function taskCalendarAction(task) {
+  return canEdit() && !task.skipped ?
+    '<button type="button" class="header-icon calendar-icon agenda-calendar-arrow" data-task-convert="' + escapeHtml(task.id) +
+    '" aria-label="转为日程" title="转为日程">' + icon('arrow', 17) + '</button>' : '';
+}
+
 function taskRows(tasks, allowSkip = false) {
   if (!tasks.length) return '<p class="subtle">暂无待办。</p>';
   return '<ul class="auto-task-list">' + tasks.map(task =>
@@ -86,11 +92,10 @@ function taskRows(tasks, allowSkip = false) {
       '<input type="checkbox" data-task-check="' + task.id + '" aria-label="完成 ' + escapeHtml(task.title) + '"' +
       (task.done ? ' checked' : '') + '>') +
     '<button class="task-title" type="button" data-task-edit="' + task.id + '">' +
-    '<strong>' + escapeHtml(task.title) + '</strong>' +
-    (reviewLabel(task) ? '<small>' + escapeHtml(reviewLabel(task)) + '</small>' : '') + '</button>' +
+    '<strong>' + escapeHtml(task.title) + '</strong></button>' +
     (allowSkip && !task.done && !(task.skipped && plannerRepository.getPlan(task.planId)?.kind === 'one-off' &&
       tasks.some(item => !item.skipped && item.planId === task.planId)) ? '<button type="button" class="text-action" data-task-skip="' + task.id + '">' +
-      (task.skipped ? '恢复' : '跳过') + '</button>' : '') + taskSourceLink(task) + '</li>').join('') + '</ul>';
+      (task.skipped ? '恢复' : '跳过') + '</button>' : '') + taskSourceLink(task) + taskCalendarAction(task) + '</li>').join('') + '</ul>';
 }
 
 export function autoView() {

@@ -47,7 +47,7 @@ export const workshopRepository = {
  * period?: 'day'|'week'|'month', interval?: number, target?: number, periodDays?: number, periodStart?: string,
  * startDate?: string, reminder?: string, handledThrough?: string, snoozedUntil?: string, deletedAt?: string,
  * inboxId?: string, sourceIds: string[] }} AutoPlan
- * @typedef {{ id: string, title: string, date?: string, done: boolean, skipped?: boolean,
+ * @typedef {{ id: string, title: string, notes?: string, date?: string, done: boolean, skipped?: boolean,
  * planId?: string, sourceContentId?: string, autoReminder?: boolean }} PlannedTask
  * @typedef {{ id: string, planId: string, date: string, taskId?: string }} Completion
  */
@@ -265,9 +265,10 @@ export const plannerRepository = {
     changed();
     return true;
   },
-  saveTask({ id, title, date, done, planId, completedOn, sourceContentId }) {
+  saveTask({ id, title, notes, date, done, planId, completedOn, sourceContentId }) {
     const existing = tasks.find(task => task.id === id);
     if ((id && !existing) || (date !== undefined && !parseDate(date))) return undefined;
+    if (notes !== undefined && (typeof notes !== 'string' || notes.length > 700)) return undefined;
     const owner = existing ? existing.planId : planId;
     const plan = owner ? this.getPlan(owner) : undefined;
     if (!existing && planId && (!plan || plan.paused ||
@@ -275,6 +276,7 @@ export const plannerRepository = {
     const task = { ...existing, id: existing?.id ?? crypto.randomUUID(), title: title.trim(),
       done: Boolean(done) && !existing?.skipped, planId: owner };
     if (date !== undefined) task.date = date;
+    if (notes !== undefined) task.notes = notes;
     if (sourceContentId === '') delete task.sourceContentId;
     else if (sourceContentId && (plan?.sourceIds.includes(sourceContentId) || existing?.sourceContentId === sourceContentId)) {
       task.sourceContentId = sourceContentId;

@@ -296,6 +296,10 @@ svg { flex: none; vertical-align: middle; }
 .agenda-list button:hover { background: var(--tint); }
 .agenda-list strong { overflow-wrap: anywhere; }
 .agenda-list span { color: var(--muted); font-size: 12px; }
+.agenda-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.agenda-entry > .task-source { grid-column: 1; }
+.agenda-list .agenda-calendar-arrow { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; color: var(--accent); }
+.auto-task-list .agenda-calendar-arrow { width: 36px; height: 36px; margin-inline-start: auto; }
 .habit-record { margin-top: 7px; }
 .task-dialog { width: min(440px, calc(100% - 28px)); border: 1px solid var(--line); border-radius: 9px; padding: 16px; color: var(--ink); background: var(--surface); }
 .task-dialog::backdrop { background: var(--scrim); }
@@ -333,7 +337,6 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .apple-dialog { max-height: calc(100% - 24px); }
 .apple-dialog[data-entry-type=event], [data-entry-dialog]:has([data-entry-types]:not([hidden])) { width: min(620px, calc(100% - 24px)); padding: clamp(14px, 3vw, 24px); }
 .entry-types { margin-top: 8px; }
-.apple-dialog [data-review-summary] { margin-top: 7px; }
 .apple-dialog fieldset, .apple-fields label, .apple-fields input { min-width: 0; }
 .apple-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; }
 .apple-fields:has(> [hidden]:first-child) { display: none; }

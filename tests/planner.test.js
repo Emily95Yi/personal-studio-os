@@ -105,11 +105,12 @@ test('plan trash and task deletion preserve independent and previously linked ca
 test('manual tasks can be saved without dates while calendar events still require a date range', () => {
   const repo = plannerRepository;
   repo.restore(null);
-  const task = repo.saveTask({ title: 'Manual', done: false });
+  const task = repo.saveTask({ title: 'Manual', notes: '备忘\n第二行', done: false });
   assert.equal(task.date, undefined);
   assert.ok(validSnapshot(repo.snapshot()));
   repo.restore(JSON.parse(JSON.stringify(repo.snapshot())));
   assert.equal(repo.listTasks()[0].id, task.id);
+  assert.equal(repo.saveTask({ id: task.id, title: 'Edited' }).notes, task.notes);
   const legacy = repo.saveTask({ title: 'Previously dated', date: '2027-03-01' });
   assert.equal(repo.saveTask({ id: legacy.id, title: 'Edited' }).date, legacy.date);
   const event = repo.saveCalendarEvent({ title: 'Appointment', ...eventTimes(true, '2027-03-01', '2027-03-02'),

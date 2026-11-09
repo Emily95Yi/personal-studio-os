@@ -45,7 +45,6 @@ export function allCalendarEvents(filter = 'all') {
   return [...a, ...combineEvents(local.filter(event => event.syncMode !== 'caldav'), distinct)];
 }
 export const onDay = (event, day) => event.dayStart <= day && event.dayEnd > day;
-const actionLabels = { remind: '仅记录提醒意向', todo: '保留待办', calendar: '已建立日程' };
 
 export function settingsView() {
   if (connection.mode !== 'private') {
@@ -101,24 +100,18 @@ export function statusBanner() {
 }
 
 export function reviewForm() {
-  return `<form data-review-form hidden>
+  return `<form id="entry-review-form" data-review-form hidden>
       <input type="hidden" name="eventId"><input type="hidden" name="eventVersion"><input type="hidden" name="createId">
       <input type="hidden" name="convertTaskId">
       <label>日程标题<input name="eventTitle" maxlength="300" required></label>
-      <fieldset><legend>时间 · 东京</legend>
-        <label class="check-label"><input type="checkbox" name="allDay">全天</label>
-        <div class="apple-fields"><label>开始时间<input type="datetime-local" name="startTime"></label>
+      <label class="check-label"><input type="checkbox" name="allDay">全天</label>
+      <div class="apple-fields"><label>开始时间<input type="datetime-local" name="startTime"></label>
         <label>结束时间<input type="datetime-local" name="endTime"></label></div>
-        <div class="apple-fields"><label>开始日期<input type="date" name="startDate"></label>
+      <div class="apple-fields"><label>开始日期<input type="date" name="startDate"></label>
         <label>结束日期（含当天）<input type="date" name="endDate"></label></div>
-        <label>地点<input name="place" maxlength="300"></label>
-        <label>备注<textarea name="notes" maxlength="8000" rows="2"></textarea></label>
-        <label>目标日历（可选）<input name="targetCalendar" maxlength="80"></label>
-      </fieldset>
-      <p data-review-summary></p><p data-form-error role="alert" hidden></p>
+      <label>备注<textarea name="notes" maxlength="8000" rows="3" placeholder="可填写地点或其他备注"></textarea></label>
+      <p data-form-error role="alert" hidden></p>
       <button class="text-action" type="button" data-caldav-rebase hidden>查看 Apple 最新版本并继续编辑</button>
-      <div class="widget-actions"><button class="action-button secondary" type="button" data-dialog-cancel>取消</button>
-        <button class="action-button" type="submit">确认安排</button></div>
     </form>`;
 }
 
@@ -135,6 +128,7 @@ export function showEntryForm(dialog, type, heading = '新建') {
     button.setAttribute('aria-pressed', String(button.dataset.entryType === type));
   }
   dialog.querySelector('[data-task-actions]').hidden = type !== 'task' || !task.elements.id.value;
+  dialog.querySelector('[data-review-actions]').hidden = type !== 'event';
   if (!dialog.open) {
     dialog.showModal();
     (type === 'task' ? task.elements.title : review.elements.eventTitle).focus();
@@ -149,11 +143,9 @@ export function updateReview(form) {
     field.required = !field.closest('label').hidden;
     field.disabled = !field.required;
   }
-  form.elements.targetCalendar.closest('label').hidden = connection.caldav.configured;
-  form.querySelector('button[type=submit]').textContent = connection.caldav.configured ? '保存并同步' : '建立日程';
-  form.querySelector('[data-review-summary]').textContent = connection.caldav.configured
-    ? '保存后检查时间冲突并同步到 ' + connection.caldav.name + '。' : '保存后生成待写入日程。';
 }
+
+const mergedNotes = (location, notes) => [location, notes].filter(Boolean).join('\n');
 
 export function openReview(app, { event, date = dateKey(), template, combined = false, convertTaskId = '' } = {}) {
   const dialog = app.querySelector('[data-entry-dialog]');
@@ -166,7 +158,6 @@ export function openReview(app, { event, date = dateKey(), template, combined = 
   form.elements.eventVersion.value = JSON.stringify(event?.caldav?.version ?? null);
   form.elements.eventTitle.value = event?.title ?? template?.title ?? '';
   form.elements.eventTitle.maxLength = localDraft ? 120 : 300;
-  form.elements.place.maxLength = localDraft ? 200 : 300;
   form.elements.startTime.step = form.elements.endTime.step = event ? '1' : '60';
   form.elements.notes.maxLength = localDraft ? 700 : 8000;
   form.querySelector('[data-caldav-rebase]').hidden = true;
@@ -174,7 +165,12 @@ export function openReview(app, { event, date = dateKey(), template, combined = 
   form.elements.endTime.value = date + 'T10:00';
   form.elements.startDate.value = date;
   form.elements.endDate.value = date;
-  form.elements.notes.value = template?.notes ?? '';
+  form.dataset.originalLocation = event?.location ?? '';
+  form.dataset.originalNotes = event?.notes ?? '';
+  form.elements.notes.value = event ? mergedNotes(form.dataset.originalLocation, form.dataset.originalNotes) : template?.notes ?? '';
+  const saveLabel = event ? '保存日程' : '建立日程';
+  form.elements.reviewSave.setAttribute('aria-label', saveLabel);
+  form.elements.reviewSave.title = saveLabel;
   if (event) {
     const localTime = value => new Intl.DateTimeFormat('sv-SE', {
       timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -193,8 +189,6 @@ export function openReview(app, { event, date = dateKey(), template, combined = 
       form.elements.startDate.value = dayStart;
       form.elements.endDate.value = dateKey(addDays(parseDate(dayEnd), -1));
     }
-    form.elements.place.value = event.location;
-    form.elements.notes.value = event.notes ?? '';
   }
   form.querySelector('[data-form-error]').hidden = true;
   updateReview(form);
@@ -209,9 +203,12 @@ export function readReview(form) {
   const endDay = parseDate(fields.endDate.value) ? labelTime(fields.endDate.value) : '';
   const times = allDay ? eventTimes(true, fields.startDate.value, endDay) :
     eventTimes(false, fields.startTime.value, fields.endTime.value);
+  const { originalLocation, originalNotes } = form.dataset;
+  const unchanged = fields.notes.value === mergedNotes(originalLocation, originalNotes);
   return times ? { details: {
-    ...times, location: fields.place.value, notes: fields.notes.value,
-    targetCalendar: fields.targetCalendar.value.trim(), title: fields.eventTitle.value.trim(),
+    ...times, location: unchanged ? originalLocation : '',
+    notes: unchanged ? originalNotes : fields.notes.value,
+    targetCalendar: 'YiStudio', title: fields.eventTitle.value.trim(),
   } } : null;
 }
 
@@ -282,9 +279,4 @@ function caldavEventActions(event) {
     (connection.caldav.configured && conflicting && resolutions ? button('采用 Apple 版本', 'accept_remote') +
       (sync.reason === 'remote_deleted' ? '' : button(sync.operation === 'delete' ? '仍然删除' : '保留 Studio 修改', 'keep_local')) : '') +
     '</div>';
-}
-
-export function reviewLabel(task) {
-  const review = plannerRepository.getReview(task.id);
-  return review && review.action !== 'calendar' ? actionLabels[review.action] : '';
 }

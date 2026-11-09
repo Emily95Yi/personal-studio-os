@@ -27,6 +27,7 @@ function validPlan(row) {
 
 function validTask(row, plans) {
   return text(row.title, 120) && optional(row.date, day) && typeof row.done === 'boolean' &&
+    optional(row.notes, value => text(value, 700)) &&
     optional(row.skipped, value => typeof value === 'boolean') &&
     optional(row.autoReminder, value => value === true && day(row.date) && plans.has(row.planId)) &&
     optional(row.planId, value => plans.has(value)) &&

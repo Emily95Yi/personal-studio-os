@@ -269,12 +269,14 @@ app.addEventListener('click', event => {
   if (button.dataset.entryType) showEntryForm(button.closest('dialog'), button.dataset.entryType);
   if (button.dataset.taskEdit || button.dataset.planTaskNew) openTaskDialog(button);
   if (button.hasAttribute('data-task-convert')) {
-    const task = plannerRepository.getTask(button.form.elements.id.value);
+    const fields = button.form?.elements;
+    const task = plannerRepository.getTask(button.dataset.taskConvert || fields?.id.value);
     if (!task) return;
     const route = readRoute(location.hash);
     const date = route.type === 'calendar' ? dateKey(calendarSelection(route.params).date) : dateKey();
-    const title = button.form.elements.title.value.trim() || task.title;
-    openReview(app, { date, template: { title }, convertTaskId: task.id });
+    const title = fields?.title.value.trim() || task.title;
+    const notes = fields ? fields.notes.value : task.notes;
+    openReview(app, { date, template: { title, notes }, convertTaskId: task.id });
   }
   if (button.hasAttribute('data-plan-new') || button.dataset.planEdit) openPlanDialog(button.dataset.planEdit);
   if (button.dataset.inboxId) openPlanDialog(undefined, { inboxId: button.dataset.inboxId, title: button.dataset.inboxTitle });
@@ -315,6 +317,7 @@ function fillTaskForm(form, { task, plan } = {}) {
   form.elements.id.value = task?.id ?? '';
   form.elements.planId.value = task?.planId ?? plan?.id ?? '';
   form.elements.title.value = task?.title ?? plan?.title ?? '';
+  form.elements.notes.value = task?.notes ?? '';
   const sources = [...new Set([...(plannerRepository.getPlan(form.elements.planId.value)?.sourceIds ?? []),
     task?.sourceContentId].filter(Boolean))].map(originalSource).filter(Boolean);
   const sourceField = form.elements.sourceContentId;
@@ -477,7 +480,7 @@ app.addEventListener('submit', async event => {
   }
   const saved = plannerRepository.saveTask({
     id: form.elements.id.value || undefined, planId: form.elements.planId.value || undefined,
-    title, done: form.elements.done.checked, completedOn: dateKey(),
+    title, notes: form.elements.notes.value, done: form.elements.done.checked, completedOn: dateKey(),
     sourceContentId: form.elements.sourceContentId.disabled ? undefined : form.elements.sourceContentId.value,
   });
   if (!saved) {

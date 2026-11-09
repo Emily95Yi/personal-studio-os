@@ -241,9 +241,11 @@ export function initAppleActions(app, render) {
     }
     if (button.hasAttribute('data-reminder-calendar') && canEdit()) {
       const dialog = button.closest('dialog');
-      const reminder = plannerRepository.getReminder(dialog.dataset.planId, dialog.dataset.date);
+      const planId = button.dataset.reminderCalendar || dialog?.dataset.planId;
+      const date = button.dataset.reminderDate || dialog?.dataset.date;
+      const reminder = plannerRepository.getReminder(planId, date);
       if (!reminder) return;
-      dialog.close();
+      dialog?.close();
       openReview(app, { date: dateKey(), template: reminder });
       return;
     }
@@ -350,10 +352,10 @@ export function initAppleActions(app, render) {
         error.hidden = false;
         return;
       }
-      const submit = form.querySelector('button[type=submit]');
+      const submit = form.elements.reviewSave;
       if (submit.disabled) return;
       const dialog = form.closest('dialog');
-      const controls = [submit, ...dialog.querySelectorAll('button[data-entry-type], [data-review-form] [data-dialog-cancel]')];
+      const controls = [submit, form.elements.reviewCancel, ...dialog.querySelectorAll('button[data-entry-type]')];
       for (const control of controls) control.disabled = true;
       dialog.setAttribute('aria-busy', 'true');
       try {

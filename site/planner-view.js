@@ -2,10 +2,10 @@ import { calendarDays, calendarHref, calendarSelection, dateKey, formatDay, move
 import { plannerRepository, workshopRepository } from './repository.js';
 import { href } from './pages.js';
 import { escapeHtml } from './html.js';
-import { taskSourceLink } from './auto-view.js';
-import { allCalendarEvents, agendaEventStatus, calendarSourceLabels, canEdit, onDay, reviewForm, reviewLabel } from './apple-view.js';
+import { taskCalendarAction, taskSourceLink } from './auto-view.js';
+import { allCalendarEvents, agendaEventStatus, calendarSourceLabels, canEdit, onDay, reviewForm } from './apple-view.js';
 import { icon } from './icons.js';
-import { eventDateTimeLabel, eventStatus, eventTimeLabel } from './calendar-events.js';
+import { eventDateTimeLabel, eventTimeLabel } from './calendar-events.js';
 import { connection } from './private-api.js';
 import { reminderRows } from './reminder-view.js';
 
@@ -104,9 +104,8 @@ function agenda(date, mode) {
 function taskList() {
   const tasks = plannerRepository.listTasks();
   const rows = tasks.map(task =>
-    '<li><button type="button" data-task-edit="' + escapeHtml(task.id) + '"><strong>' + escapeHtml(task.title) +
-    '</strong><span>' + (task.done ? '已完成' : reviewLabel(task) ? eventStatus.confirmed + ' · ' + reviewLabel(task) : '未完成') +
-    '</span></button>' + taskSourceLink(task) + '</li>').join('');
+    '<li class="agenda-entry"><button type="button" data-task-edit="' + escapeHtml(task.id) + '"><strong>' +
+    escapeHtml(task.title) + '</strong></button>' + taskCalendarAction(task) + taskSourceLink(task) + '</li>').join('');
   return '<section class="agenda-group calendar-tasks" aria-label="待办"><h3>待办</h3>' +
     (rows ? '<ul class="agenda-list">' + rows + '</ul>' : '<p class="subtle">暂无待办。</p>') + '</section>';
 }
@@ -162,13 +161,18 @@ export function entryDialog() {
     '<button type="button" form="entry-task-form" class="header-icon calendar-icon" data-task-convert aria-label="转为日程" title="转为日程">' +
     icon('calendarAdd', 19) + '</button>' +
     '<button type="button" form="entry-task-form" class="header-icon calendar-icon" data-task-delete aria-label="删除待办" title="删除待办">' +
-    icon('trash', 19) + '</button></div></div>' +
+    icon('trash', 19) + '</button></div><div class="header-actions" data-review-actions hidden>' +
+    '<button type="button" form="entry-review-form" name="reviewCancel" class="header-icon calendar-icon" data-dialog-cancel aria-label="取消" title="取消">' +
+    icon('remove', 19) + '</button>' +
+    '<button type="submit" form="entry-review-form" name="reviewSave" class="header-icon calendar-icon" aria-label="建立日程" title="建立日程">' +
+    icon('check', 19) + '</button></div></div>' +
     '<div class="segmented entry-types" data-entry-types role="group" aria-label="新建类型" hidden>' +
     '<button type="button" data-entry-type="event" aria-pressed="true">日程</button>' +
     '<button type="button" data-entry-type="task" aria-pressed="false">待办</button></div>' +
     reviewForm() + '<form id="entry-task-form" data-task-form hidden>' +
     (connection.mode === 'preview' ? '<p>本机预览 · 刷新清除</p>' : '') +
     '<input type="hidden" name="id"><input type="hidden" name="planId"><label>标题<input required maxlength="120" name="title"></label>' +
+    '<label>备注<textarea name="notes" maxlength="700" rows="3"></textarea></label>' +
     '<label data-task-source hidden>关联原始资料<select name="sourceContentId"></select></label><label class="check-label"><input type="checkbox" name="done">已完成</label>' +
     '<p data-form-error role="alert" hidden></p><div class="widget-actions"><button type="button" class="action-button secondary" data-dialog-cancel>取消</button>' +
     '<button type="submit" class="action-button">保存</button></div></form></dialog>';
