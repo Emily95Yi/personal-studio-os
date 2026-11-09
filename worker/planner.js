@@ -20,7 +20,8 @@ function validPlan(row) {
     (row.kind !== 'quota' || Number.isInteger(row.target) && row.target >= 1 && row.target <= 999) &&
     (row.periodDays === undefined && row.periodStart === undefined || row.kind === 'quota' && row.period === 'day' &&
       Number.isSafeInteger(row.periodDays) && row.periodDays >= 1 && day(row.periodStart)) &&
-    optional(row.startDate, day) && optional(row.inboxId, id) && optional(row.reminder, value => text(value, 100)) && Array.isArray(row.sourceIds) &&
+    optional(row.startDate, day) && optional(row.handledThrough, day) && optional(row.snoozedUntil, day) &&
+    optional(row.deletedAt, dateTime) && optional(row.inboxId, id) && optional(row.reminder, value => text(value, 100)) && Array.isArray(row.sourceIds) &&
     row.sourceIds.length <= 100 && row.sourceIds.every(value => text(value, 256));
 }
 
@@ -45,7 +46,8 @@ export function scheduleFields(row) {
 
 function validEvent(row, reviews) {
   const review = reviews.get(row.reviewId);
-  return review?.action === 'calendar' && review.taskId === row.taskId &&
+  const independent = row.taskId === undefined && row.reviewId === undefined;
+  return (independent || review?.action === 'calendar' && review.taskId === row.taskId) &&
     row.timeZone === 'Asia/Tokyo' && statuses.includes(row.status) &&
     optional(row.syncMode, value => value === 'caldav') &&
     optional(row.deviceResult, value => ['added', 'existing'].includes(value)) &&
@@ -68,14 +70,15 @@ export function validSnapshot(snapshot) {
     }
   }
   const onePerTask = rows => new Set(rows.map(row => row.taskId)).size === rows.length;
+  const linkedEvents = snapshot.events.filter(row => row.taskId !== undefined);
   return snapshot.plans.every(validPlan) &&
     snapshot.tasks.every(row => validTask(row, maps.plans)) &&
     snapshot.completions.every(row => maps.plans.has(row.planId) && day(row.date) &&
       optional(row.taskId, value => maps.tasks.get(value)?.planId === row.planId)) &&
-    onePerTask(snapshot.reviews) && onePerTask(snapshot.events) &&
+    onePerTask(snapshot.reviews) && onePerTask(linkedEvents) &&
     snapshot.reviews.every(row => maps.tasks.has(row.taskId) && actions.includes(row.action) && dateTime(row.confirmedAt)) &&
     snapshot.events.every(row => validEvent(row, maps.reviews)) &&
-    snapshot.reviews.filter(row => row.action === 'calendar').length === snapshot.events.length &&
+    snapshot.reviews.filter(row => row.action === 'calendar').length === linkedEvents.length &&
     Array.isArray(snapshot.habitDates) && snapshot.habitDates.length <= 500 && snapshot.habitDates.every(day);
 }
 

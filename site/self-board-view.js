@@ -10,6 +10,7 @@ import { contentTitle, isSelfBoard, objectFor, relatedObjects, studioStore } fro
 import { attachments, imageUrl, markdown, objectHref, objectLabels, timestamp } from './workshop-view.js';
 import { entriesFor, itemsFor, libraryMatches, topicsFor } from './board-library-data.js';
 import { collectionDetail, collectionsView, discoverTabs, explorationsView, explorationTypeSettings, topicDetail } from './board-library-view.js';
+import { plannerRepository } from './repository.js';
 
 const state = () => studioStore.state;
 const date = item => (item.date || item.createdAt || item.updatedAt || '').slice(0, 10);
@@ -316,12 +317,13 @@ function heading(title, description, actions = '') {
 }
 
 function boardTrash() {
-  const rows = boardTrashRecords(state());
+  const rows = [...boardTrashRecords(state()), ...plannerRepository.trashedPlans().map(item => ({ type: 'plan', item }))];
   if (!rows.length) return '<p>回收站为空</p>';
   return '<ul class="sb-trash-list">' + rows.map(({ type, item }) => {
-    const data = type === 'discover' ? 'data-sb-recover="' + esc(item.id) + '"' :
+    const data = type === 'plan' ? 'data-plan-restore="' + esc(item.id) + '"' :
+      type === 'discover' ? 'data-sb-recover="' + esc(item.id) + '"' :
       'data-library="recover" data-type="' + type + '" data-id="' + esc(item.id) + '"';
-    return '<li><span>' + titleOf(item) + '</span>' +
+    return '<li><span>' + titleOf(item) + (type === 'plan' ? ' · Auto' : '') + '</span>' +
       boardIcon('恢复记录 ' + contentTitle(item), 'undo', { data, className: 'sb-icon-plain' }) + '</li>';
   }).join('') + '</ul>';
 }

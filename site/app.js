@@ -108,7 +108,7 @@ function header(route, { title, ancestors }) {
     const editing = route.view === 'edit';
     const modeLabel = editing ? '完成编辑' : '编辑设置';
     if (route.view === 'trash') {
-      const disabled = boardTrashRecords(studioStore.state).length ? '' : ' disabled';
+      const disabled = boardTrashRecords(studioStore.state).length || plannerRepository.trashedPlans().length ? '' : ' disabled';
       return '<header class="studio-top"><div class="masthead sb-masthead">' + start +
         '<div class="header-actions"><button type="button" class="header-icon sb-header-button" ' +
         'aria-label="清空回收站" title="清空回收站" data-sb-clear-trash' + disabled + '>' +
@@ -184,7 +184,9 @@ const views = {
   missing: missingView,
 };
 
+let renderedDay;
 function render({ focus = false } = {}) {
+  renderedDay = dateKey();
   let route = readRoute(location.hash);
   if (route.redirect) {
     history.replaceState(null, '', route.redirect);
@@ -194,7 +196,7 @@ function render({ focus = false } = {}) {
   const context = pageContext(route);
   const canEditTasks = route.type === 'calendar' || route.collectionId === 'auto';
   const canEditPlans = route.collectionId === 'auto' || (route.type === 'capture' && Boolean(route.captureId));
-  const isPlannerPage = canEditPlans || canEditTasks || isBoardOverview(route) || route.type === 'home';
+  const isPlannerPage = canEditPlans || canEditTasks || isBoardOverview(route) || route.view === 'trash' || route.type === 'home';
   document.title = context.title;
   app.dataset.page = route.type;
   app.dataset.space = route.type === 'public' ? 'public' : 'private';
@@ -264,6 +266,16 @@ app.addEventListener('click', event => {
     plannerRepository.togglePause(button.dataset.planPause);
     refreshFocus('[data-plan-pause]');
   }
+  if (button.dataset.planFinish && plannerRepository.setPlanTrashed(button.dataset.planFinish, true)) {
+    location.hash = href('self-board', 'auto');
+  }
+  if (button.dataset.planRestore && plannerRepository.setPlanTrashed(button.dataset.planRestore, false)) {
+    refreshFocus('[data-plan-restore]');
+  }
+  if (button.hasAttribute('data-task-delete') && plannerRepository.removeTask(button.form.elements.id.value)) {
+    button.closest('dialog').close();
+    refreshFocus('[data-task-new], [data-plan-schedule]');
+  }
   if (button.dataset.planLog) {
     plannerRepository.recordCompletion(button.dataset.planLog, dateKey());
     refreshFocus('[data-plan-log]');
@@ -306,13 +318,8 @@ function openTaskDialog(button) {
   form.elements.title.setCustomValidity('');
   form.querySelector('[data-form-error]').hidden = true;
   const review = form.querySelector('[data-task-review]');
-  const scheduled = task && plannerRepository.eventForTask(task.id);
-  const deleted = scheduled && connection.caldav.statuses.some(row => row.id === scheduled.id && row.state === 'deleted');
-  review.hidden = !task || task.skipped || deleted;
-  const action = scheduled ? '查看日程' : '建立日程';
-  review.setAttribute('aria-label', action);
-  review.title = action;
-  review.innerHTML = icon(scheduled ? 'calendar' : 'calendarAdd', 19);
+  review.hidden = !task || task.skipped;
+  form.querySelector('[data-task-delete]').hidden = !task;
   dialog.showModal();
   (plan ? form.elements.date : form.elements.title).focus();
 }
@@ -541,7 +548,7 @@ onPrivateChange(() => {
     render();
     return;
   }
-  if (modeChanged && isBoardOverview(route) && !app.querySelector('dialog[open]')) {
+  if (modeChanged && (isBoardOverview(route) || route.view === 'trash') && !app.querySelector('dialog[open]')) {
     render();
     return;
   }
@@ -604,6 +611,8 @@ window.addEventListener('hashchange', async () => {
 });
 async function pollStudioContent() {
   if (document.visibilityState !== 'visible' || app.querySelector('dialog[open]')) return;
+  const route = readRoute(location.hash);
+  if (renderedDay !== dateKey() && (route.type === 'calendar' || route.type === 'auto-plan')) render();
   const changed = await refreshStudioSync();
   if (readRoute(location.hash).type === 'capture') return;
   if (changed && !app.querySelector('dialog[open]')) render();

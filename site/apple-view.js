@@ -44,13 +44,7 @@ export function allCalendarEvents(filter = 'all') {
   const distinct = b.filter(event => !aKeys.has(JSON.stringify([event.uid, event.recurrence ?? ''])));
   return [...a, ...combineEvents(local.filter(event => event.syncMode !== 'caldav'), distinct)];
 }
-export const calendarTasks = (start, end) => {
-  const deleted = new Set(connection.caldav.statuses.filter(row => row.state === 'deleted').map(row => row.id));
-  return plannerRepository.tasksBetween(start, end).filter(task => {
-    const event = plannerRepository.eventForTask(task.id);
-    return !event || deleted.has(event.id);
-  });
-};
+export const calendarTasks = (start, end) => plannerRepository.tasksBetween(start, end);
 export const onDay = (event, day) => event.dayStart <= day && event.dayEnd > day;
 const actionLabels = { remind: '仅记录提醒意向', todo: '保留待办', calendar: '已建立日程' };
 
@@ -110,10 +104,8 @@ export function statusBanner() {
 export function reviewDialog() {
   return `<dialog class="task-dialog apple-dialog" data-review-dialog aria-labelledby="review-title">
     <form data-review-form>
-      <h2 id="review-title">建立日程</h2><input type="hidden" name="action" value="calendar"><input type="hidden" name="taskId"><input type="hidden" name="eventId"><input type="hidden" name="eventVersion"><input type="hidden" name="createId">
-      <input type="hidden" name="reminderPlan"><input type="hidden" name="reminderDate">
-      <p data-review-link hidden></p>
-      <label data-caldav-edit-title hidden>日程标题<input name="eventTitle" maxlength="300" disabled></label>
+      <h2 id="review-title">建立日程</h2><input type="hidden" name="eventId"><input type="hidden" name="eventVersion"><input type="hidden" name="createId">
+      <label>日程标题<input name="eventTitle" maxlength="300" required></label>
       <fieldset><legend>时间 · 东京</legend>
         <label class="check-label"><input type="checkbox" name="allDay">全天</label>
         <div class="apple-fields"><label>开始时间<input type="datetime-local" name="startTime"></label>
@@ -145,31 +137,25 @@ export function updateReview(form) {
     ? '保存后检查时间冲突并同步到 ' + connection.caldav.name + '。' : '保存后生成待写入日程。';
 }
 
-export function openReview(app, task, event, date = task?.date ?? dateKey(), reminder) {
+export function openReview(app, { event, date = dateKey(), template } = {}) {
   const dialog = app.querySelector('[data-review-dialog]');
   const form = dialog.querySelector('form');
   form.reset();
-  const direct = (!task && !reminder) || Boolean(event);
-  form.elements.taskId.value = task?.id ?? '';
   form.elements.eventId.value = event?.id ?? '';
-  form.elements.createId.value = direct && !event ? crypto.randomUUID() : '';
-  form.elements.reminderPlan.value = reminder?.planId ?? '';
-  form.elements.reminderDate.value = reminder?.date ?? '';
+  form.elements.createId.value = !template && !event ? crypto.randomUUID() : '';
   form.elements.eventVersion.value = JSON.stringify(event?.caldav?.version ?? null);
-  form.elements.eventTitle.value = event?.title ?? '';
-  form.elements.eventTitle.disabled = !direct;
-  form.elements.eventTitle.required = direct;
-  form.elements.place.maxLength = direct ? 300 : 200;
+  form.elements.eventTitle.value = event?.title ?? template?.title ?? '';
+  form.elements.eventTitle.maxLength = template ? 120 : 300;
+  form.elements.place.maxLength = template ? 200 : 300;
   form.elements.startTime.step = form.elements.endTime.step = event ? '1' : '60';
-  form.elements.notes.maxLength = direct ? 8000 : 700;
-  form.querySelector('[data-caldav-edit-title]').hidden = !direct;
+  form.elements.notes.maxLength = template ? 700 : 8000;
   form.querySelector('[data-caldav-rebase]').hidden = true;
-  form.querySelector('h2').textContent = event ? '编辑 YiStudio 日程' : direct || reminder ? '新建 YiStudio 日程' : '建立日程';
+  form.querySelector('h2').textContent = event ? '编辑 YiStudio 日程' : '新建 YiStudio 日程';
   form.elements.startTime.value = date + 'T09:00';
   form.elements.endTime.value = date + 'T10:00';
   form.elements.startDate.value = date;
   form.elements.endDate.value = date;
-  if (reminder) form.elements.notes.value = reminder.notes ?? '';
+  form.elements.notes.value = template?.notes ?? '';
   if (event) {
     const localTime = value => new Intl.DateTimeFormat('sv-SE', {
       timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -191,9 +177,6 @@ export function openReview(app, task, event, date = task?.date ?? dateKey(), rem
     form.elements.place.value = event.location;
     form.elements.notes.value = event.notes ?? '';
   }
-  const source = form.querySelector('[data-review-link]');
-  source.hidden = !task && !reminder;
-  source.textContent = task?.title ?? reminder?.title ?? '';
   form.querySelector('[data-form-error]').hidden = true;
   updateReview(form);
   dialog.showModal();
@@ -201,16 +184,13 @@ export function openReview(app, task, event, date = task?.date ?? dateKey(), rem
 
 export function readReview(form) {
   const fields = form.elements;
-  const action = fields.action.value;
-  if (action !== 'calendar') return { action };
   const allDay = fields.allDay.checked;
   const endDay = parseDate(fields.endDate.value) ? labelTime(fields.endDate.value) : '';
   const times = allDay ? eventTimes(true, fields.startDate.value, endDay) :
     eventTimes(false, fields.startTime.value, fields.endTime.value);
-  return times ? { action, details: {
-    ...times, location: fields.eventTitle.disabled ? fields.place.value.trim() : fields.place.value,
-    notes: fields.eventTitle.disabled ? fields.notes.value.trim() : fields.notes.value,
-    targetCalendar: fields.targetCalendar.value.trim(), title: fields.eventTitle.disabled ? undefined : fields.eventTitle.value,
+  return times ? { details: {
+    ...times, location: fields.place.value, notes: fields.notes.value,
+    targetCalendar: fields.targetCalendar.value.trim(), title: fields.eventTitle.value.trim(),
   } } : null;
 }
 
@@ -285,5 +265,5 @@ function caldavEventActions(event) {
 
 export function reviewLabel(task) {
   const review = plannerRepository.getReview(task.id);
-  return review ? actionLabels[review.action] : '';
+  return review && review.action !== 'calendar' ? actionLabels[review.action] : '';
 }

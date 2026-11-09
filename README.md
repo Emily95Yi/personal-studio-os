@@ -11,7 +11,7 @@ npm run dev
 - Home 页眉的日历图标进入 Calendar。Calendar 按东京时区显示，默认 Week，可在同页切换 Day / Week / Month。
 - Workshop → Project Gallery → Events / 共通内容 → Event Detail。共通文档可按版本采用，素材与 Wiki 在 Discover。
 - Self-Board 的主入口是 Writing、Reflections、Discover、Collections。Discover 分为 Workshop Wiki 和 Personal Explorations，Collections 用于快速保存与整理生活收藏。页眉图标打开浮动搜索、Quick Capture、Network 和设置。总览显示固定的本周日历。日历图标打开完整 Calendar；Calendar 页眉可搜索已同步的日程或打开 Auto；Self-Board 的搜索只查板内内容。
-- Auto 支持单次计划、按日重复和周期目标。新计划从所选日期起在 Calendar 显示站内提醒；重复计划按间隔显示，周期目标在每周期第一天显示提醒并统计本周期完成次数。打开提醒可手动添加 YiStudio 日程。站内提醒不会发送系统通知。收藏上的 Auto 图标会打开已预选该收藏的计划表单。
+- Auto 支持单次计划、按日重复和周期目标。新计划到期后进入 Calendar 的独立提醒列表，可延后或删除当次。打开提醒可手动创建独立的 YiStudio 日程。完成计划会将计划移入回收站，已建日程保留。站内提醒不会发送系统通知。收藏上的 Auto 图标会打开已预选该收藏的计划表单。
 
 Workshop 和 Self-Board（包括探索与收藏）保存到当前站点、当前浏览器的 IndexedDB。可从 Workshop 的数据迁移入口加载测试数据。本机静态预览的 Auto 和 Calendar 编辑仅保存在当前页面内存。私有 Worker 配置完成后可保存计划并连接 Apple 日历。选定私人只读 iCloud 日历后，设置页会隐藏公开 ICS 备用订阅。
 

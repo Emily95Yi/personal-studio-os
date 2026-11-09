@@ -1,4 +1,4 @@
-import { calendarHref, dateKey, inQuotaPeriod, planReminderDates, todayDate } from './calendar.js';
+import { calendarHref, inQuotaPeriod, todayDate } from './calendar.js';
 import { escapeHtml } from './html.js';
 import { icon } from './icons.js';
 import { boardContentHref, boardSections, collectionItemAddress, explorationAddress, href, inboxAddress } from './pages.js';
@@ -12,7 +12,6 @@ import { reminderRows } from './reminder-view.js';
 
 const kinds = { 'one-off': '单次', recurring: '重复规则', quota: '周期目标' };
 const kindHelp = {
-  'one-off': '在选择的日期提醒一次。',
   quota: '在每个周期的第一天提醒，按周期统计完成次数。',
 };
 const periods = { day: '日', week: '周', month: '月' };
@@ -115,22 +114,23 @@ export function autoPlanView({ plan }) {
   const tasks = plannerRepository.tasksForPlan(plan.id);
   const records = plannerRepository.completionsForPlan(plan.id);
   const canSchedule = !plan.paused && (plan.kind !== 'one-off' || !tasks.some(task => !task.skipped));
-  const reminderDates = planReminderDates(plan, plan.kind === 'one-off' ? plan.startDate : dateKey(), undefined, 5);
+  const reminders = plannerRepository.dueReminders().filter(item => item.planId === plan.id);
+  const planAction = (key, glyph, label) => '<button type="button" class="header-icon calendar-icon" data-plan-' + key +
+    '="' + plan.id + '" aria-label="' + label + '" title="' + label + '">' + icon(glyph, 19) + '</button>';
   const completionActions = plan.kind === 'one-off' ? '' : '<div class="widget-actions">' +
     (!plan.paused ? '<button class="action-button secondary" type="button" data-plan-log="' + plan.id + '">记录一次</button>' : '') +
     (records.some(item => !item.taskId) ? '<button class="text-action" type="button" data-plan-undo="' + plan.id + '">撤销最近手动记录</button>' : '') +
     '</div>';
   return '<div class="section-heading auto-toolbar"><span class="subtle">' + planSummary(plan) +
-    (connection.mode === 'preview' ? ' · 本机预览' : '') + '</span><div class="planner-actions"><button class="action-button secondary" type="button" data-plan-edit="' +
-    plan.id + '">编辑计划</button><button class="action-button secondary" type="button" data-plan-pause="' + plan.id + '">' +
-    (plan.paused ? '恢复计划' : '暂停计划') + '</button></div></div>' +
-    '<section class="auto-section"><h2>提醒</h2>' +
-    (reminderDates.length ? '<ul class="agenda-list">' + reminderRows(reminderDates.map(date => ({
-      planId: plan.id, title: plan.title, date,
-    })), true) + '</ul>' : '<p class="subtle">暂无提醒。</p>') + '</section>' +
+    (connection.mode === 'preview' ? ' · 本机预览' : '') + '</span><div class="planner-actions">' +
+    planAction('edit', 'edit', '编辑计划') + planAction('pause', plan.paused ? 'play' : 'pause', plan.paused ? '恢复计划' : '暂停计划') +
+    planAction('finish', 'check', '完成计划') + '</div></div>' +
     '<section class="auto-section"><div class="section-heading"><h2>待办</h2>' +
     (canSchedule ? '<button class="action-button" type="button" data-plan-schedule="' + plan.id + '">安排日期</button>' : '') +
     '</div>' + taskRows(tasks, true) + '</section>' +
+    '<section class="auto-section"><h2>提醒</h2>' +
+    (reminders.length ? '<ul class="agenda-list">' + reminderRows(reminders) + '</ul>' :
+      '<p class="subtle">暂无到期提醒。</p>') + '</section>' +
     '<section class="auto-section"><h2>完成记录</h2>' + quotaProgress(plan) +
     (records.length ? '<ul class="auto-resources">' + records.slice().reverse().map(item => '<li>' +
       escapeHtml(item.date) + (item.taskId ? ' · 安排完成' : ' · 手动记录') + '</li>').join('') + '</ul>' :

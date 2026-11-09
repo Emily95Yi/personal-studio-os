@@ -4,28 +4,25 @@ import { caldavCommand, connection, createCalDavEvent, disconnectCalDav, discove
   refreshCalendar, saveChanges, selectCalDav, setSource } from './private-api.js';
 import { plannerRepository } from './repository.js';
 import { href } from './pages.js';
-import { icon } from './icons.js';
+import { dateKey } from './calendar.js';
 
 function showReminder(app, reminder) {
   const dialog = app.querySelector('[data-reminder-dialog]');
   dialog.dataset.planId = reminder.planId;
   dialog.dataset.date = reminder.date;
   dialog.querySelector('[data-reminder-title]').textContent = reminder.title;
-  dialog.querySelector('[data-reminder-date-label]').textContent = reminder.date;
   const notes = dialog.querySelector('[data-reminder-notes]');
   notes.textContent = reminder.notes ?? '';
   notes.hidden = !reminder.notes;
   dialog.querySelector('[data-reminder-plan]').href = href('self-board', 'auto', reminder.planId);
-  const action = dialog.querySelector('[data-reminder-calendar]');
-  const deleted = reminder.event && connection.caldav.statuses.some(row => row.id === reminder.event.id && row.state === 'deleted');
-  const label = reminder.event ? '查看 YiStudio 日程' : '添加日程到 YiStudio 日历';
-  action.innerHTML = icon(reminder.event ? 'calendar' : 'calendarAdd', 19);
-  action.setAttribute('aria-label', label);
-  action.title = label;
-  action.hidden = Boolean(deleted) || !canEdit();
-  const status = dialog.querySelector('[data-reminder-status]');
-  status.hidden = !deleted;
-  status.textContent = deleted ? '关联日程已删除。' : '';
+  const defer = dialog.querySelector('[data-reminder-defer-form]');
+  defer.reset();
+  defer.hidden = true;
+  defer.querySelector('[data-form-error]').hidden = true;
+  dialog.querySelector('[data-reminder-defer]').setAttribute('aria-expanded', 'false');
+  for (const action of dialog.querySelectorAll('[data-reminder-calendar], [data-reminder-defer], [data-reminder-delete]')) {
+    action.hidden = !canEdit();
+  }
   dialog.showModal();
 }
 
@@ -188,15 +185,14 @@ export function initAppleActions(app, render) {
       return;
     }
     if (button.dataset.caldavNew) {
-      openReview(app, null, null, button.dataset.caldavNew);
+      openReview(app, { date: button.dataset.caldavNew });
       return;
     }
     if (button.hasAttribute('data-caldav-edit')) {
       const item = currentEvent(app);
       if (!item?.caldav) return;
-      const task = item.taskId ? plannerRepository.getTask(item.taskId) : null;
       button.closest('dialog').close();
-      openReview(app, task, item);
+      openReview(app, { event: item });
       return;
     }
     if (button.hasAttribute('data-caldav-rebase')) {
@@ -251,13 +247,22 @@ export function initAppleActions(app, render) {
       const dialog = button.closest('dialog');
       const reminder = plannerRepository.getReminder(dialog.dataset.planId, dialog.dataset.date);
       if (!reminder) return;
-      if (reminder.event) {
-        const item = allCalendarEvents().find(row => row.id === reminder.event.id);
+      dialog.close();
+      openReview(app, { date: dateKey(), template: reminder });
+      return;
+    }
+    if (button.hasAttribute('data-reminder-defer') && canEdit()) {
+      const form = button.closest('dialog').querySelector('[data-reminder-defer-form]');
+      form.hidden = !form.hidden;
+      button.setAttribute('aria-expanded', String(!form.hidden));
+      if (!form.hidden) form.elements.days.focus();
+      return;
+    }
+    if (button.hasAttribute('data-reminder-delete') && canEdit()) {
+      const dialog = button.closest('dialog');
+      if (plannerRepository.dismissReminder(dialog.dataset.planId, dialog.dataset.date)) {
         dialog.close();
-        if (item) showEvent(app, item);
-      } else {
-        dialog.close();
-        openReview(app, null, null, reminder.date, reminder);
+        render({ focus: true });
       }
       return;
     }
@@ -266,9 +271,7 @@ export function initAppleActions(app, render) {
       const task = plannerRepository.getTask(form.elements.id.value);
       if (!task) return;
       form.closest('dialog').close();
-      const item = allCalendarEvents().find(row => row.taskId === task.id);
-      if (item) showEvent(app, item);
-      else if (!plannerRepository.eventForTask(task.id)) openReview(app, task);
+      openReview(app, { date: task.date, template: task });
     }
     if (button.hasAttribute('data-ics-download') || button.hasAttribute('data-event-error')) {
       const item = currentEvent(app);
@@ -299,6 +302,16 @@ export function initAppleActions(app, render) {
 
   app.addEventListener('submit', async event => {
     const form = event.target;
+    if (form.matches('[data-reminder-defer-form]')) {
+      event.preventDefault();
+      if (!canEdit()) return;
+      const dialog = form.closest('dialog');
+      if (plannerRepository.deferReminder(dialog.dataset.planId, dialog.dataset.date, Number(form.elements.days.value))) {
+        dialog.close();
+        render({ focus: true });
+      } else form.querySelector('[data-form-error]').hidden = false;
+      return;
+    }
     if (form.matches('[data-caldav-discover], [data-caldav-select]')) {
       event.preventDefault();
       const section = form.closest('.caldav-settings');
@@ -373,25 +386,20 @@ export function initAppleActions(app, render) {
     const details = data?.details && {
       ...data.details, ...(connection.caldav.configured ? { syncMode: 'caldav' } : {}),
     };
-    const planId = form.elements.reminderPlan.value;
-    const saved = !editId && data && (planId
-      ? plannerRepository.confirmReminder(planId, form.elements.reminderDate.value, details)
-      : plannerRepository.confirmReview(form.elements.taskId.value, data.action, details));
+    const saved = plannerRepository.saveCalendarEvent(details);
     if (!saved) {
       const error = form.querySelector('[data-form-error]');
-      error.textContent = data ? '此安排已变更或已确认。' : '请检查开始与结束时间。';
+      error.textContent = '请检查标题和起止时间。';
       error.hidden = false;
       return;
     }
     form.closest('dialog').close();
     render({ focus: true });
-    if (saved.event) {
-      const item = allCalendarEvents().find(row => row.id === saved.event.id);
-      showEvent(app, item);
-      if (saved.event.syncMode === 'caldav') {
-        await saveChanges();
-        if (connection.save === 'idle') pollCalDav();
-      }
+    const item = allCalendarEvents().find(row => row.id === saved.id);
+    if (item) showEvent(app, item);
+    if (saved.syncMode === 'caldav') {
+      await saveChanges();
+      if (connection.save === 'idle') pollCalDav();
     }
   });
 }

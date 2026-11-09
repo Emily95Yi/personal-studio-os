@@ -1,6 +1,6 @@
 import { escapeHtml as esc } from './html.js';
 import { boardContentHref, boardHref, boardSections, discoverAddress, readRoute } from './pages.js';
-import { boardContent, boardFolderPath, boardRecords, boardSection, clearBoardTrash, contentTypes, developThought, discoverCategory, discoverDirectory,
+import { boardContent, boardFolderPath, boardRecords, boardSection, boardTrashRecords, clearBoardTrash, contentTypes, developThought, discoverCategory, discoverDirectory,
   initialDiscoverCategories, isPublished, markBoardContent, moveBoardContentToPinnedFolder, moveBoardFile, pinnedBoardFolders, reflectionColors,
   relationTypes, removeBoardFolder, removeReflectionLabel, resourceKey, resourcesCategory, saveBoardContent, saveBoardFolder,
   saveReflectionLabel, toggleBoardFolderPin } from './self-board-data.js';
@@ -15,6 +15,8 @@ import { categoryList, entriesFor, foldersFor, resourceAtUrl, saveCollectionItem
   topicsFor, itemsFor } from './board-library-data.js';
 import { collectionLocation } from './board-library-view.js';
 import { objectHref, objectLabels } from './workshop-view.js';
+import { plannerRepository } from './repository.js';
+import { connection, saveChanges } from './private-api.js';
 
 export function refreshHeaderSearch(app) {
   const form = app.querySelector('[data-sb-floating-search]:not([hidden])');
@@ -764,8 +766,18 @@ export function initBoardActions(app, render) {
         () => sbMark === 'delete' ? (location.hash = boardHref(undefined, 'trash')) : refresh(), label);
     }
     if (button.hasAttribute('data-sb-clear-trash')) {
+      const studioTrash = boardTrashRecords(studioStore.state).length > 0;
       dialog('清空回收站', '<p>回收站里的所有记录将被永久删除，无法通过回收站恢复。</p>',
-        () => studioStore.change(clearBoardTrash, { clearTrash: true }), () => refresh(), '清空回收站');
+        async () => {
+          if (studioTrash && boardTrashRecords(studioStore.state).length) {
+            await studioStore.change(clearBoardTrash, { clearTrash: true });
+          }
+          plannerRepository.clearPlanTrash();
+          await saveChanges();
+          if (connection.mode === 'private' && connection.save !== 'idle') {
+            throw new Error('计划回收站尚未保存。请重试；若有其他设备更新，请重新载入。');
+          }
+        }, () => refresh(), '清空回收站', '', { studioLease: studioTrash });
     }
     if (sbRecover) {
       const item = objectFor(studioStore.state, 'discover', sbRecover);

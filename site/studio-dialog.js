@@ -1,7 +1,7 @@
 import { escapeHtml as esc } from './html.js';
 import { beginStudioEdit, studioNotice, watchStudioEditor } from './studio-cloud.js';
 
-export function studioDialog(app, title, fields, save, after, submitLabel = '保存', extraClass = '') {
+export function studioDialog(app, title, fields, save, after, submitLabel = '保存', extraClass = '', { studioLease = true } = {}) {
   const box = document.createElement('dialog');
   box.setAttribute('aria-label', title);
   box.className = 'work-dialog ' + extraClass;
@@ -33,13 +33,14 @@ export function studioDialog(app, title, fields, save, after, submitLabel = '保
     }
   });
   const surface = app.querySelector('main');
-  void beginStudioEdit().then(release => {
+  const lease = studioLease ? beginStudioEdit() : Promise.resolve(() => {});
+  void lease.then(release => {
     if (!surface?.isConnected || app.querySelector('dialog[open]')) {
       release();
       return;
     }
     app.append(box);
-    const cleanup = watchStudioEditor(box, release);
+    const cleanup = studioLease ? watchStudioEditor(box, release) : release;
     box.addEventListener('close', cleanup, { once: true });
     try {
       box.showModal();

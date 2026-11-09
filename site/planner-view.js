@@ -22,9 +22,6 @@ function calendarGrid(date, mode, from, preview = false) {
   const start = dateKey(days[0]);
   const end = dateKey(days.at(-1));
   const tasks = calendarTasks(start, end);
-  const reminders = plannerRepository.remindersBetween(start, end);
-  const reminderCounts = new Map();
-  for (const { date } of reminders) reminderCounts.set(date, (reminderCounts.get(date) ?? 0) + 1);
   const appointments = allCalendarEvents();
   const checkIns = plannerRepository.checkInsBetween(start, end);
   const events = workshopRepository.eventsBetween(start, end);
@@ -33,11 +30,10 @@ function calendarGrid(date, mode, from, preview = false) {
     const selected = !preview && key === dateKey(date);
     const today = key === dateKey();
     const taskCount = tasks.filter(task => task.date === key).length;
-    const reminderCount = reminderCounts.get(key);
     const checked = checkIns.includes(key);
     const eventCount = events.filter(event => event.date === key).length;
     const appointmentCount = appointments.filter(event => onDay(event, key)).length;
-    const details = [appointmentCount ? appointmentCount + ' 项日程' : '', reminderCount ? reminderCount + ' 项提醒' : '',
+    const details = [appointmentCount ? appointmentCount + ' 项日程' : '',
       taskCount ? taskCount + ' 项待办' : '', checked ? '打卡' : '',
       eventCount ? eventCount + ' 场活动' : ''].filter(Boolean);
     const label = '<span class="day-number">' + day.getUTCDate() + '</span>' +
@@ -81,7 +77,6 @@ export function calendarSearchResults(query, events = allCalendarEvents()) {
 function agenda(date) {
   const key = dateKey(date);
   const tasks = calendarTasks(key, key);
-  const reminders = plannerRepository.remindersBetween(key, key);
   const appointments = allCalendarEvents().filter(event => onDay(event, key))
     .sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start));
   const checked = plannerRepository.checkInsBetween(key, key).length > 0;
@@ -102,7 +97,7 @@ function agenda(date) {
     '</span></button>' + taskSourceLink(task) + '</li>').join('');
   const list = (title, rows) => rows ? '<section class="agenda-group" aria-label="' + title +
     '"><h3>' + title + '</h3><ul class="agenda-list">' + rows + '</ul></section>' : '';
-  const groups = list('日程', appointmentRows) + list('提醒', reminderRows(reminders)) + list('待办', taskRows);
+  const groups = list('日程', appointmentRows) + list('待办', taskRows);
   return '<section class="calendar-agenda"><div class="section-heading"><h2>' +
     (date.getUTCMonth() + 1) + '.' + date.getUTCDate() + '</h2><div class="calendar-agenda-actions">' +
     (connection.mode === 'private' && connection.caldav.configured ?
@@ -148,6 +143,7 @@ export function calendarView({ params }) {
   const from = params.get('from');
   const legend = Object.entries(calendarSourceLabels).map(([source, label]) =>
     '<li data-calendar-source="' + source + '">' + label + '</li>').join('');
+  const reminders = plannerRepository.dueReminders();
   return '<div class="calendar-toolbar"><div class="segmented" aria-label="日历视图">' +
     modes.map(([key, label]) => dateLink(date, key, label, from, mode === key ? ' aria-current="page"' : '')).join('') +
     '</div><div class="calendar-controls">' +
@@ -155,12 +151,17 @@ export function calendarView({ params }) {
     dateLink(todayDate(), mode, '今天', from) + dateLink(movePeriod(date, mode, 1), mode, '›', from, ' aria-label="下一时段"') +
     '</div></div><div class="calendar-period"><h2>' + (date.getUTCMonth() + 1) + '月</h2>' +
     '<ul class="calendar-legend" aria-label="日历颜色">' + legend + '</ul></div>' +
-    calendarGrid(date, mode, from) + agenda(date);
+    calendarGrid(date, mode, from) + agenda(date) +
+    '<section class="agenda-group calendar-reminders" aria-label="提醒"><h3>提醒</h3>' +
+    (reminders.length ? '<ul class="agenda-list">' + reminderRows(reminders) + '</ul>' :
+      '<p class="subtle">暂无到期提醒。</p>') + '</section>';
 }
 
 export function taskDialog() {
   return '<dialog class="task-dialog" aria-labelledby="task-dialog-title"><form data-task-form>' +
-    '<h2 id="task-dialog-title">待办</h2>' + (connection.mode === 'preview' ? '<p>本机预览 · 刷新清除</p>' : '') +
+    '<div class="plan-dialog-heading"><h2 id="task-dialog-title">待办</h2><div class="header-actions">' +
+    '<button type="button" class="header-icon calendar-icon" data-task-delete hidden aria-label="删除待办" title="删除待办">' +
+    icon('trash', 19) + '</button></div></div>' + (connection.mode === 'preview' ? '<p>本机预览 · 刷新清除</p>' : '') +
     '<input type="hidden" name="id"><input type="hidden" name="planId"><label>标题<input required maxlength="120" name="title"></label>' +
     '<label>日期<input required type="date" name="date"></label><label data-task-source hidden>关联原始资料<select name="sourceContentId"></select></label><label class="check-label"><input type="checkbox" name="done">已完成</label>' +
     '<p data-form-error role="alert" hidden></p><div class="widget-actions"><button type="button" class="action-button secondary" data-dialog-cancel>取消</button>' +

@@ -1,4 +1,4 @@
-import { dateKey, parseDate, planReminderDates } from './calendar.js';
+import { addDays, dateKey, parseDate, planReminderDates } from './calendar.js';
 import { isDiscover, objectFor, relatedObjects, studioStore } from './studio-data.js';
 
 const activities = [];
@@ -44,7 +44,9 @@ export const workshopRepository = {
 /**
  * Session-only sandbox. Plans, occurrences and completion history have separate identities.
  * @typedef {{ id: string, title: string, kind: 'one-off'|'recurring'|'quota', paused: boolean,
- * period?: 'day'|'week'|'month', interval?: number, target?: number, periodDays?: number, periodStart?: string, startDate?: string, reminder?: string, inboxId?: string, sourceIds: string[] }} AutoPlan
+ * period?: 'day'|'week'|'month', interval?: number, target?: number, periodDays?: number, periodStart?: string,
+ * startDate?: string, reminder?: string, handledThrough?: string, snoozedUntil?: string, deletedAt?: string,
+ * inboxId?: string, sourceIds: string[] }} AutoPlan
  * @typedef {{ id: string, title: string, date: string, done: boolean, skipped?: boolean,
  * planId?: string, sourceContentId?: string, autoReminder?: boolean }} PlannedTask
  * @typedef {{ id: string, planId: string, date: string, taskId?: string }} Completion
@@ -64,6 +66,25 @@ function changed() { for (const listener of listeners) listener(); }
 
 function replace(target, source) {
   target.splice(0, target.length, ...structuredClone(source ?? []));
+}
+
+// Keep one pending reminder per plan. Dismissing it advances past today's cycles without a backlog.
+function dueReminder(plan, today) {
+  if (plan.deletedAt || !plan.startDate || plan.snoozedUntil > today) return null;
+  const after = plan.handledThrough ? dateKey(addDays(parseDate(plan.handledThrough), 1)) : plan.startDate;
+  const [date] = planReminderDates(plan, after, today, 1);
+  return date ? { planId: plan.id, date, title: plan.title, notes: plan.reminder } : null;
+}
+
+function removeTasks(ids) {
+  replace(tasks, tasks.filter(task => !ids.has(task.id)));
+  replace(reviews, reviews.filter(review => !ids.has(review.taskId)));
+  for (const event of calendarEvents) {
+    if (!ids.has(event.taskId)) continue;
+    delete event.taskId;
+    delete event.reviewId;
+  }
+  replace(completions, completions.filter(item => !ids.has(item.taskId)));
 }
 
 export const plannerRepository = {
@@ -103,24 +124,37 @@ export const plannerRepository = {
     changed();
     return { review: { ...review }, event: event && { ...event } };
   },
-  remindersBetween(start, end) {
-    return plans.flatMap(plan => planReminderDates(plan, start, end).map(date => ({
-      planId: plan.id, title: plan.title, date,
-    })));
+  dueReminders(today = dateKey()) {
+    return plans.map(plan => dueReminder(plan, today)).filter(Boolean).sort((a, b) => a.date.localeCompare(b.date));
   },
-  getReminder(planId, date) {
+  getReminder(planId, date, today = dateKey()) {
     const plan = plans.find(item => item.id === planId);
-    if (!plan || !planReminderDates(plan, date, date).length) return null;
-    const task = tasks.find(item => item.autoReminder && item.planId === planId && item.date === date);
-    return { planId, date, title: plan.title, notes: plan.reminder, event: task && this.eventForTask(task.id) };
+    const reminder = plan && dueReminder(plan, today);
+    return reminder?.date === date ? reminder : null;
   },
-  confirmReminder(planId, date, details) {
-    const reminder = this.getReminder(planId, date);
-    if (!reminder || reminder.event || !details) return null;
-    // Materialize only the reminder that was explicitly added to Calendar, in the same save as its event.
-    const task = { id: crypto.randomUUID(), planId, date, title: reminder.title, done: false, autoReminder: true };
-    tasks.push(task);
-    return this.confirmReview(task.id, 'calendar', details);
+  deferReminder(planId, date, days, today = dateKey()) {
+    if (!this.getReminder(planId, date, today) || !Number.isSafeInteger(days) || days < 1) return false;
+    const until = dateKey(addDays(parseDate(today), days));
+    if (!parseDate(until)) return false;
+    plans.find(plan => plan.id === planId).snoozedUntil = until;
+    changed();
+    return true;
+  },
+  dismissReminder(planId, date, today = dateKey()) {
+    if (!this.getReminder(planId, date, today)) return false;
+    const plan = plans.find(item => item.id === planId);
+    plan.handledThrough = today;
+    delete plan.snoozedUntil;
+    changed();
+    return true;
+  },
+  saveCalendarEvent(details) {
+    const title = details?.title?.trim();
+    if (!title || title.length > 120) return null;
+    const event = { ...details, title, id: crypto.randomUUID(), status: 'export_pending', timeZone: 'Asia/Tokyo' };
+    calendarEvents.push(event);
+    changed();
+    return { ...event };
   },
   updateCalendarDraft(id, details) {
     const event = calendarEvents.find(row => row.id === id);
@@ -144,11 +178,30 @@ export const plannerRepository = {
       changed();
     }
   },
-  listPlans() { return plans.map(plan => ({ ...plan, sourceIds: [...plan.sourceIds] })); },
+  listPlans() { return plans.filter(plan => !plan.deletedAt).map(plan => ({ ...plan, sourceIds: [...plan.sourceIds] })); },
   getPlan(id) { return this.listPlans().find(plan => plan.id === id); },
+  trashedPlans() {
+    return plans.filter(plan => plan.deletedAt).map(({ id, title, deletedAt }) => ({ id, title, deletedAt }));
+  },
+  setPlanTrashed(id, trashed) {
+    const plan = plans.find(item => item.id === id);
+    if (!plan || Boolean(plan.deletedAt) === trashed) return false;
+    if (trashed) plan.deletedAt = new Date().toISOString();
+    else delete plan.deletedAt;
+    changed();
+    return true;
+  },
+  clearPlanTrash() {
+    const ids = new Set(plans.filter(plan => plan.deletedAt).map(plan => plan.id));
+    if (!ids.size) return;
+    removeTasks(new Set(tasks.filter(task => ids.has(task.planId)).map(task => task.id)));
+    replace(completions, completions.filter(item => !ids.has(item.planId)));
+    replace(plans, plans.filter(plan => !ids.has(plan.id)));
+    changed();
+  },
   savePlan(input) {
     const index = input.id ? plans.findIndex(plan => plan.id === input.id) : -1;
-    if (input.id && index === -1) return undefined;
+    if (input.id && (index === -1 || plans[index].deletedAt)) return undefined;
     const title = input.title.trim();
     if (!title || !['one-off', 'recurring', 'quota'].includes(input.kind)) return undefined;
     if (input.startDate !== undefined && !parseDate(input.startDate)) return undefined;
@@ -167,6 +220,12 @@ export const plannerRepository = {
       ...fields, ...cycle, title, id: input.id ?? crypto.randomUUID(),
       paused: plans[index]?.paused ?? false, sourceIds: [...new Set(input.sourceIds ?? [])],
     };
+    const sameRule = previous && ['kind', 'period', 'startDate', 'interval', 'periodDays'].every(key =>
+      previous[key] === plan[key]);
+    if (sameRule) {
+      plan.handledThrough = previous.handledThrough;
+      plan.snoozedUntil = previous.snoozedUntil;
+    }
     if (index === -1) plans.unshift(plan);
     else {
       plans.splice(index, 1);
@@ -176,20 +235,28 @@ export const plannerRepository = {
     return this.getPlan(plan.id);
   },
   togglePause(id) {
-    const plan = plans.find(entry => entry.id === id);
+    const plan = plans.find(entry => entry.id === id && !entry.deletedAt);
     if (plan) {
       plan.paused = !plan.paused;
       changed();
     }
   },
   tasksBetween(start, end) {
-    return tasks.filter(task => !task.autoReminder && !task.skipped && task.date >= start && task.date <= end).map(task => ({ ...task }));
+    const trashed = new Set(plans.filter(plan => plan.deletedAt).map(plan => plan.id));
+    return tasks.filter(task => !task.autoReminder && !task.skipped && !trashed.has(task.planId) &&
+      task.date >= start && task.date <= end).map(task => ({ ...task }));
   },
   tasksForPlan(id) { return tasks.filter(task => task.planId === id && !task.autoReminder).map(task => ({ ...task })); },
   standaloneTasks() { return tasks.filter(task => !task.planId).map(task => ({ ...task })); },
   getTask(id) {
     const task = tasks.find(entry => entry.id === id);
     return task && { ...task };
+  },
+  removeTask(id) {
+    if (!tasks.some(task => task.id === id && !task.autoReminder)) return false;
+    removeTasks(new Set([id]));
+    changed();
+    return true;
   },
   saveTask({ id, title, date, done, planId, completedOn, sourceContentId }) {
     const existing = tasks.find(task => task.id === id);

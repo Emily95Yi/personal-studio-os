@@ -199,7 +199,8 @@ test('planner-linked events retain overlap safety, survive Apple deletion as tom
   const plan = plannerRepository.savePlan({ title: 'First', kind: 'one-off', startDate: day });
   await save();
   assert.equal(events.size, 0);
-  const { event: first } = plannerRepository.confirmReminder(plan.id, day, {
+  const first = plannerRepository.saveCalendarEvent({
+    title: plan.title,
     ...eventTimes(false, day + 'T09:00', day + 'T10:00'),
     syncMode: 'caldav', location: '', notes: '', targetCalendar: '',
   });
@@ -229,7 +230,7 @@ test('planner-linked events retain overlap safety, survive Apple deletion as tom
   assert.equal(events.size, 0);
   assert.equal((await request(prefix + '/event/' + first.id, 'POST', { action: 'retry', version: (await current(first.id)).version })).status, 409);
   const row = sqlite.prepare('SELECT snapshot FROM planner_states WHERE owner = ?').get('alice');
-  assert.equal(JSON.parse(row.snapshot).events.find(event => event.id === first.id).taskId, first.taskId);
+  assert.equal(JSON.parse(row.snapshot).events.find(event => event.id === first.id).title, first.title);
 
   const replacement = makeEvent('Other event', '12:00', '13:00');
   await save();
