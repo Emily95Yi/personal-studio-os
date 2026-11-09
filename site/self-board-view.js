@@ -377,12 +377,14 @@ export function boardView(route) {
   let content;
   if (!section) {
     const requested = params.get('view');
-    const view = Object.hasOwn(archiveViews, requested) ? requested : 'recent';
-    const rows = view === 'inbox' ? items.filter(row => row.status === 'inbox') :
-      view === 'archived' ? boardRecords(state(), true).filter(row => row.status === 'archived') : items.slice(0, 5);
-    content = (archiveViews[view] ? '<div class="sb-list-heading"><h3>' + archiveViews[view] + '</h3></div>' : '') +
-      (view === 'recent' ? inboxView() + '<div class="sb-auto" data-week-preview>' + weekPreview() + '</div>' : '') +
-      (rows.length ? rowList(rows) : '');
+    if (Object.hasOwn(archiveViews, requested)) {
+      const rows = requested === 'inbox' ? items.filter(row => row.status === 'inbox') :
+        boardRecords(state(), true).filter(row => row.status === 'archived');
+      content = '<div class="sb-list-heading"><h3>' + archiveViews[requested] + '</h3></div>' +
+        (rows.length ? rowList(rows) : '');
+    } else {
+      content = inboxView() + '<div class="sb-auto" data-week-preview>' + weekPreview() + '</div>';
+    }
   } else if (section === 'writing') {
     const rows = items.filter(item => boardSection(item) === section &&
       (route.view === 'drafts' ? !isPublished(item) :
