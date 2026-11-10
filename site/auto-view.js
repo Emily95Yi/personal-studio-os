@@ -91,6 +91,13 @@ function createIcon(label, glyph, attribute) {
     '" title="' + label + '">' + icon(glyph, 19) + '</button>';
 }
 
+export function autoHeaderActions() {
+  return canEdit() ? '<div class="header-actions" role="group" aria-label="Auto 操作">' +
+    createIcon('添加显化', 'fileAdd', 'data-manifestation-new aria-haspopup="dialog"') +
+    createIcon('新建计划', 'calendarAdd', 'data-plan-new') +
+    createIcon('新建待办', 'taskAdd', 'data-task-new') + '</div>' : '';
+}
+
 export function taskCalendarAction(task) {
   return canEdit() && !task.skipped ?
     '<button type="button" class="header-icon calendar-icon agenda-calendar-arrow" data-task-convert="' + escapeHtml(task.id) +
@@ -112,15 +119,10 @@ function taskRows(tasks, allowSkip = false) {
 
 export function autoView() {
   const status = { preview: '本机预览 · 刷新清除', loading: '正在连接私有工作台…', unavailable: '私有服务不可用' }[connection.mode];
-  return '<div class="section-heading auto-toolbar">' +
-    (canEdit() ? '<div class="planner-actions" role="group" aria-label="Auto 操作">' +
-      createIcon('添加显化', 'fileAdd', 'data-manifestation-new aria-haspopup="dialog"') +
-      createIcon('新建计划', 'calendarAdd', 'data-plan-new') +
-      createIcon('新建待办', 'taskAdd', 'data-task-new') + '</div>' : '') +
-    (status ? '<span class="subtle">' + status + '</span>' : '') + '</div>' +
+  return (status ? '<p class="subtle">' + status + '</p>' : '') +
     '<section class="auto-section"><h2>计划</h2>' + planGroups(plannerRepository.listPlans()) + '</section>' +
-    manifestationSection() +
-    '<section class="auto-section"><h2>待办</h2>' + taskRows(plannerRepository.standaloneTasks(), true) + '</section>';
+    '<section class="auto-section"><h2>待办</h2>' + taskRows(plannerRepository.standaloneTasks(), true) + '</section>' +
+    manifestationSection();
 }
 
 function resourceLinks(plan) {

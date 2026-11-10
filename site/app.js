@@ -6,7 +6,7 @@ import {
 } from './views.js';
 import { icon } from './icons.js';
 import { escapeHtml } from './html.js';
-import { autoPlanView, originalSource, planDialog, planKindHelp, planPeriodLabel } from './auto-view.js';
+import { autoHeaderActions, autoPlanView, originalSource, planDialog, planKindHelp, planPeriodLabel } from './auto-view.js';
 import { initManifestationActions, manifestationDialog } from './manifestation-view.js';
 import { plannerRepository, studioRepository } from './repository.js';
 import { calendarHref, calendarSelection, dateKey, todayDate } from './calendar.js';
@@ -127,7 +127,7 @@ function header(route, { title, ancestors }) {
       (route.captureId ? captureActions() : '') + '</div></header>';
   }
   if (route.type === 'collection' && route.collectionId === 'auto') {
-    return '<header class="studio-top"><div class="masthead">' + start + '</div></header>';
+    return '<header class="studio-top"><div class="masthead">' + start + autoHeaderActions() + '</div></header>';
   }
   const calendar = route.type === 'auto-plan' ? '<a class="header-icon" href="' +
     escapeHtml(calendarHref(todayDate(), 'week', 'auto')) +

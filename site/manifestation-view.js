@@ -3,11 +3,10 @@ import { categoryList, collectionCategoryLabel, entriesFor, explorationEntryTitl
 import { api as captureApi } from './capture-client.js';
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
-import { boardContentHref, boardHref, boardSections, collectionItemAddress, collectionsAddress,
-  discoverAddress, explorationAddress, href, inboxAddress } from './pages.js';
+import { boardContentHref, boardSections, collectionItemAddress, explorationAddress, href, inboxAddress } from './pages.js';
 import { connection } from './private-api.js';
 import { plannerRepository } from './repository.js';
-import { boardFolderPath, boardRecords, boardSection, discoverCategory, discoverDirectory } from './self-board-data.js';
+import { boardFolderPath, boardRecords, boardSection, discoverCategory } from './self-board-data.js';
 import { contentTitle, studioStore } from './studio-data.js';
 
 const inboxGroup = 'Inbox';
@@ -19,22 +18,10 @@ const inboxTarget = (id, title) => ({
 export function manifestationTargets(state = studioStore.state) {
   const targets = new Map();
   const add = (key, group, url, ...path) => targets.set(key, { key, group, url, title: path.at(-1), label: path.join(' / ') });
-  add('board', 'Self-Board', boardHref(), 'Self-Board 总览');
-  for (const [section, { label }] of Object.entries(boardSections)) add('section:' + section, label, boardHref(section), label);
-  add('inbox', inboxGroup, inboxAddress(), 'Inbox');
-  add('auto', 'Auto', href('self-board', 'auto'), 'Auto');
   for (const plan of plannerRepository.listPlans()) add('plan:' + plan.id, 'Auto', href('self-board', 'auto', plan.id), plan.title);
 
-  const records = boardRecords(state, true);
   const wikiFolders = state.boardFolders ?? [];
-  for (const { name } of discoverDirectory(records, wikiFolders)) {
-    add('wiki-category:' + name, 'Discover', discoverAddress(name), 'Workshop Wiki', name);
-  }
-  for (const folder of wikiFolders) {
-    add('wiki-folder:' + folder.id, 'Discover', discoverAddress(folder.category, folder.id),
-      'Workshop Wiki', folder.category, ...boardFolderPath(wikiFolders, folder).map(row => row.title));
-  }
-  for (const record of records) {
+  for (const record of boardRecords(state, true)) {
     const section = boardSection(record);
     const path = [];
     if (section === 'discover') {
@@ -45,7 +32,6 @@ export function manifestationTargets(state = studioStore.state) {
     add('content:' + record.id, boardSections[section].label, boardContentHref(record.id), ...path, contentTitle(record));
   }
 
-  add('explorations', 'Discover', explorationAddress(), 'Personal Explorations');
   for (const topic of topicsFor(state)) {
     const url = explorationAddress(topic.id);
     const path = ['Personal Explorations', contentTitle(topic)];
@@ -56,15 +42,9 @@ export function manifestationTargets(state = studioStore.state) {
   }
 
   const categories = new Map([['', '待分类'], ...categoryList(state).map(row => [row.id, collectionCategoryLabel(row)])]);
-  for (const [category, title] of categories) {
-    add('collection-category:' + category, 'Collections', collectionsAddress({ category }), title);
-    for (const folder of foldersFor(state, category)) {
-      add('collection-folder:' + folder.id, 'Collections', collectionsAddress({ category, folder: folder.id }), title, folder.title);
-    }
-  }
   for (const item of itemsFor(state)) {
     const path = [categories.get(item.categoryId) ?? '待分类'];
-    const folder = targets.get('collection-folder:' + item.folderId);
+    const folder = item.folderId && foldersFor(state, item.categoryId).find(row => row.id === item.folderId);
     if (folder) path.push(folder.title);
     add('collection-item:' + item.id, 'Collections', collectionItemAddress(item.id), ...path, contentTitle(item));
   }
@@ -82,10 +62,8 @@ function savedTarget(row, targets) {
 export function manifestationSection() {
   const rows = plannerRepository.listManifestations();
   const targets = rows.some(row => row.source) ? manifestationTargets() : new Map();
-  return '<section class="auto-section" aria-labelledby="manifestations-heading"><div class="section-heading">' +
-    '<h2 id="manifestations-heading">显化</h2>' +
-    (canEdit() ? '<button type="button" class="action-button secondary" data-manifestation-new>新建</button>' : '') +
-    '</div>' + (rows.length ? '<ul class="manifestation-list">' + rows.map(row => {
+  return '<section class="auto-section" aria-labelledby="manifestations-heading"><h2 id="manifestations-heading">显化</h2>' +
+    (rows.length ? '<ul class="manifestation-list">' + rows.map(row => {
       const target = savedTarget(row, targets);
       const content = !target ? '<span>' + esc(row.text) + '</span>' : target.url
         ? '<a class="return-link" href="' + esc(target.url) + '">' + esc(target.title) + '</a>'
@@ -100,11 +78,14 @@ export function manifestationDialog() {
     <form data-manifestation-form>
       <div class="plan-dialog-heading"><h2 id="manifestation-title">新建显化</h2></div>
       <input type="hidden" name="id">
-      <label>内容类型<select name="kind"><option value="text">文字</option><option value="link">关联</option></select></label>
+      <div class="segmented manifestation-kind" role="radiogroup" aria-label="内容类型">
+        <label><input class="visually-hidden" type="radio" name="kind" value="text" checked><span>文字</span></label>
+        <label><input class="visually-hidden" type="radio" name="kind" value="link"><span>关联</span></label>
+      </div>
       <label data-manifestation-text>文字<textarea name="body" maxlength="1000" rows="4" required></textarea></label>
       <div data-manifestation-link hidden>
         <label>筛选 Self-Board<input type="search" name="query" maxlength="150" placeholder="输入栏目、文件夹或条目名称"></label>
-        <label>关联内容<select name="target" disabled></select></label>
+        <label>关联条目<select name="target" disabled></select></label>
         <div class="widget-actions">
           <button type="button" class="text-action" data-manifestation-inbox ${connection.mode === 'private' ? '' : 'hidden'}>查找 Inbox 条目</button>
           <p data-manifestation-inbox-status role="status"></p>
@@ -140,7 +121,7 @@ export function initManifestationActions(app, refreshFocus) {
       }
       groups.get(row.group).append(new Option(row.label, row.key));
     }
-    target.replaceChildren(new Option(groups.size ? '选择 Self-Board 内容' : '没有匹配的内容', ''), ...groups.values());
+    target.replaceChildren(new Option(groups.size ? '选择 Self-Board 条目' : '没有匹配的条目', ''), ...groups.values());
     target.value = selected;
     if (target.selectedIndex === -1) target.selectedIndex = 0;
   }
@@ -200,7 +181,7 @@ export function initManifestationActions(app, refreshFocus) {
       resetInbox(form);
       targets = manifestationTargets();
       const target = savedTarget(row, targets);
-      if (target) targets.set(target.key, target);
+      if (target?.url) targets.set(target.key, target);
       form.elements.id.value = row?.id ?? '';
       form.elements.kind.value = row?.source ? 'link' : 'text';
       form.elements.body.value = row?.text ?? '';

@@ -320,7 +320,7 @@ svg { flex: none; vertical-align: middle; }
 .task-dialog::backdrop { background: var(--scrim); }
 .task-dialog p { color: var(--muted); font-size: 13px; }
 .task-dialog label { display: grid; gap: 4px; margin-top: 8px; }
-.task-dialog input:not([type=checkbox]), .task-dialog select { font: inherit; color: inherit; width: 100%; background: var(--paper); border: 1px solid var(--line); border-radius: 5px; padding: 4px 8px; }
+.task-dialog input:not([type=checkbox], [type=radio]), .task-dialog select { font: inherit; color: inherit; width: 100%; background: var(--paper); border: 1px solid var(--line); border-radius: 5px; padding: 4px 8px; }
 .task-dialog [hidden] { display: none; }
 .task-dialog [data-form-error] { color: var(--error); margin-top: 8px; }
 .task-dialog fieldset { border: 1px solid var(--line); margin: 8px 0 0; }
@@ -353,6 +353,22 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .manifestation-dialog { width: min(540px, calc(100% - 28px)); max-height: calc(100% - 24px); }
 .manifestation-dialog .widget-actions { margin-top: 10px; }
 .manifestation-dialog :is(label, select) { min-width: 0; }
+.manifestation-kind {
+  position: relative; isolation: isolate; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0; margin-top: 10px; padding: 3px;
+}
+.manifestation-kind::before {
+  content: ""; position: absolute; inset: 3px auto 3px 3px; width: calc(50% - 3px);
+  background: var(--surface); border-radius: 5px; pointer-events: none; transition: transform 190ms ease;
+}
+.manifestation-kind:has([value=link]:checked)::before { transform: translateX(100%); }
+.task-dialog .manifestation-kind label { position: relative; margin: 0; cursor: pointer; }
+.manifestation-kind span { padding: 6px 10px; text-align: center; border-radius: 5px; }
+.manifestation-kind :checked + span { font-weight: 680; }
+.manifestation-kind :focus-visible + span { outline: 2px solid var(--ring); outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) {
+  .manifestation-kind::before { transition: none; }
+}
 .apple-dialog[data-entry-type=event], [data-entry-dialog]:has([data-entry-types]:not([hidden])) { width: min(620px, calc(100% - 24px)); padding: clamp(14px, 3vw, 24px); }
 .entry-types { margin-top: 8px; }
 .apple-dialog fieldset, .apple-fields label, .apple-fields input { min-width: 0; }

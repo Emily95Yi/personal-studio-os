@@ -48,7 +48,7 @@ test('undated manifestations survive planner reloads without entering tasks or r
   repo.restore(legacy);
   assert.equal(repo.saveManifestation({ text: '  ' }), undefined);
   const note = repo.saveManifestation({ text: '  下次想读的书\n留意新版  ' });
-  const link = repo.saveManifestation({ source: 'collection-folder:reading', title: '待读' });
+  const link = repo.saveManifestation({ source: 'collection-item:book', title: '散文集' });
   const snapshot = repo.snapshot();
   assert.ok(validSnapshot(snapshot));
   assert.equal(validSnapshot({ ...snapshot, manifestations: [{ ...link, text: '无效' }] }), false);
@@ -63,7 +63,7 @@ test('undated manifestations survive planner reloads without entering tasks or r
   repo.restore(null);
 });
 
-test('manifestation links include folders, subfolders, and nested Self-Board entries', () => {
+test('manifestation links select individual entries and show their folder paths', () => {
   const targets = manifestationTargets({
     content: [{ id: 'wiki', title: '练习', type: 'exercise', primaryWorkspace: 'Self-Board', folderId: 'child' }],
     boardFolders: [
@@ -75,7 +75,8 @@ test('manifestation links include folders, subfolders, and nested Self-Board ent
     collectionFolders: [{ id: 'reading', categoryId: 'default-books', title: '待读' }],
     collectionItems: [{ id: 'book', categoryId: 'default-books', folderId: 'reading', title: '散文集' }],
   });
-  assert.equal(targets.get('wiki-folder:child').url, '#/self-board/discover?category=Tools+%26+Methods&folder=child');
+  assert.deepEqual([...targets.keys()], ['content:wiki', 'topic:topic', 'entry:entry', 'collection-item:book']);
+  assert.equal(targets.get('content:wiki').url, '#/self-board/content/wiki');
   assert.equal(targets.get('content:wiki').label, 'Workshop Wiki / Tools & Methods / 工作坊 / 热身 / 练习');
   assert.equal(targets.get('entry:entry').url, '#/self-board/explorations/topic?entry=entry');
   assert.equal(targets.get('collection-item:book').label, '书籍与阅读 / 待读 / 散文集');
