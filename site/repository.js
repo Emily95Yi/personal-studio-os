@@ -60,6 +60,7 @@ const completions = [];
 const habitDates = new Set();
 const reviews = [];
 const calendarEvents = [];
+const manifestations = [];
 const listeners = new Set();
 
 function changed() { for (const listener of listeners) listener(); }
@@ -110,15 +111,38 @@ function removeTasks(ids) {
 
 export const plannerRepository = {
   onChange(listener) { listeners.add(listener); },
-  snapshot() { return structuredClone({ plans, tasks, completions, reviews, events: calendarEvents, habitDates: [...habitDates] }); },
+  snapshot() {
+    return structuredClone({ plans, tasks, completions, reviews, events: calendarEvents, manifestations, habitDates: [...habitDates] });
+  },
   restore(snapshot) {
     replace(plans, snapshot?.plans);
     replace(tasks, snapshot?.tasks);
     replace(completions, snapshot?.completions);
     replace(reviews, snapshot?.reviews);
     replace(calendarEvents, snapshot?.events);
+    replace(manifestations, snapshot?.manifestations);
     habitDates.clear();
     for (const date of snapshot?.habitDates ?? []) habitDates.add(date);
+  },
+  listManifestations() { return manifestations.map(row => ({ ...row })); },
+  saveManifestation({ id, text = '', source = '', title = '' }) {
+    const index = manifestations.findIndex(row => row.id === id);
+    if (id ? index === -1 : manifestations.length >= 500) return;
+    text = text.trim();
+    title = title.trim();
+    if (source ? text || !title || title.length > 200 || source.length > 512 : !text || text.length > 1000) return;
+    const row = { id: id || crypto.randomUUID(), ...(source ? { source, title } : { text }) };
+    if (id) manifestations[index] = row;
+    else manifestations.unshift(row);
+    changed();
+    return { ...row };
+  },
+  removeManifestation(id) {
+    const index = manifestations.findIndex(row => row.id === id);
+    if (index === -1) return false;
+    manifestations.splice(index, 1);
+    changed();
+    return true;
   },
   getReview(taskId) {
     const review = reviews.find(row => row.taskId === taskId);

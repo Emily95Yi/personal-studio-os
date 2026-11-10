@@ -193,6 +193,12 @@ test('Worker verifies signed Access tokens, isolates source and planner, caches 
   assert.deepEqual(await (await send('planner', planner)).json(), { revision: 1 });
   assert.equal((await send('planner', planner)).status, 409);
   assert.deepEqual(await (await send('planner', { auth: bob })).json(), { revision: 0, snapshot: null });
+  const manifestation = { id: crypto.randomUUID(), text: '有空看看' };
+  const updated = { ...planner.value.snapshot, manifestations: [manifestation] };
+  assert.deepEqual(await (await send('planner', { ...planner, value: { revision: 1, snapshot: updated } })).json(), { revision: 2 });
+  const { manifestations, ...oldClient } = updated;
+  assert.deepEqual(await (await send('planner', { ...planner, value: { revision: 2, snapshot: oldClient } })).json(), { revision: 3 });
+  assert.deepEqual((await (await send('planner', { auth: alice })).json()).snapshot.manifestations, [manifestation]);
   assert.equal((await send('calendar/settings', { auth: alice, method: 'DELETE' })).status, 200);
   assert.deepEqual(await (await send('calendar/feed', { auth: alice })).json(), { status: 'unconfigured', events: [] });
 });

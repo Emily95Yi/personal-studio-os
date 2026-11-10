@@ -34,6 +34,13 @@ function validTask(row, plans) {
     optional(row.sourceContentId, value => text(value, 256)) && optional(row.inboxId, id);
 }
 
+function validManifestation(row) {
+  const nonempty = (value, max) => text(value, max) && Boolean(value.trim());
+  return row.source === undefined
+    ? row.title === undefined && nonempty(row.text, 1000)
+    : row.text === undefined && nonempty(row.source, 512) && nonempty(row.title, 200);
+}
+
 // Only these fields cross the CalDAV boundary. Planner links stay in the planner snapshot.
 export function scheduleFields(row) {
   if (!row || typeof row !== 'object') return null;
@@ -61,8 +68,8 @@ export function validSnapshot(snapshot) {
   if (!snapshot || typeof snapshot !== 'object') return false;
   const maps = {};
   const ids = new Set();
-  for (const kind of ['plans', 'tasks', 'completions', 'reviews', 'events']) {
-    const rows = snapshot[kind];
+  for (const kind of ['plans', 'tasks', 'completions', 'reviews', 'events', 'manifestations']) {
+    const rows = kind === 'manifestations' && snapshot[kind] === undefined ? [] : snapshot[kind];
     if (!Array.isArray(rows) || rows.length > 500) return false;
     maps[kind] = new Map();
     for (const row of rows) {
@@ -74,6 +81,7 @@ export function validSnapshot(snapshot) {
   const onePerTask = rows => new Set(rows.map(row => row.taskId)).size === rows.length;
   const linkedEvents = snapshot.events.filter(row => row.taskId !== undefined);
   return snapshot.plans.every(validPlan) &&
+    (snapshot.manifestations ?? []).every(validManifestation) &&
     snapshot.tasks.every(row => validTask(row, maps.plans)) &&
     snapshot.completions.every(row => maps.plans.has(row.planId) && day(row.date) &&
       optional(row.taskId, value => maps.tasks.get(value)?.planId === row.planId)) &&
@@ -91,9 +99,13 @@ export async function getPlanner(db, owner) {
 
 export async function savePlanner(db, owner, revision, snapshot) {
   const body = JSON.stringify(snapshot);
+  // An open tab running the previous client can still save its plans after a reload.
+  const updatedSnapshot = snapshot.manifestations === undefined ?
+    "json_patch(?, CASE WHEN json_type(snapshot, '$.manifestations') = 'array' " +
+    "THEN json_object('manifestations', json_extract(snapshot, '$.manifestations')) ELSE '{}' END)" : '?';
   const result = revision === 0
     ? await db.prepare('INSERT OR IGNORE INTO planner_states (owner, revision, snapshot) VALUES (?, 1, ?)').bind(owner, body).run()
-    : await db.prepare('UPDATE planner_states SET revision = revision + 1, snapshot = ? WHERE owner = ? AND revision = ?')
+    : await db.prepare('UPDATE planner_states SET revision = revision + 1, snapshot = ' + updatedSnapshot + ' WHERE owner = ? AND revision = ?')
       .bind(body, owner, revision).run();
   return result.meta.changes ? { revision: revision + 1 } : null;
 }

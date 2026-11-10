@@ -230,10 +230,15 @@ svg { flex: none; vertical-align: middle; }
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
 .week-appointment:hover { background: var(--selected); }
-.auto-toolbar { max-width: 760px; align-items: center; }
-.auto-section { max-width: 760px; margin-top: 20px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.auto-toolbar { align-items: center; }
+.auto-section { margin-top: 20px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .auto-section h2 { font-size: 15px; }
 .auto-section > h2 { margin-bottom: 7px; }
+.manifestation-list { list-style: none; padding: 0; margin: 0; }
+.manifestation-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-block: 5px; }
+.manifestation-list li + li { border-top: 1px solid var(--line); }
+.manifestation-list li > :first-child { min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.manifestation-list .header-icon { width: 34px; height: 34px; }
 .auto-plan-group + .auto-plan-group { margin-top: 14px; }
 .auto-plan-group h3 { margin: 0 0 5px; color: var(--muted); font-size: 13px; }
 .auto-plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 8px; }
@@ -343,8 +348,11 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 
 .private-notice { margin-bottom: 8px; color: var(--muted); font-size: 13px; }
 .apple-settings label { display: grid; gap: 4px; margin-top: 12px; }
-.apple-settings input, .apple-dialog textarea { border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; font: inherit; color: inherit; background: var(--paper); width: 100%; }
+.apple-settings input, .task-dialog textarea { border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; font: inherit; color: inherit; background: var(--paper); width: 100%; }
 .apple-dialog { max-height: calc(100% - 24px); }
+.manifestation-dialog { width: min(540px, calc(100% - 28px)); max-height: calc(100% - 24px); }
+.manifestation-dialog .widget-actions { margin-top: 10px; }
+.manifestation-dialog :is(label, select) { min-width: 0; }
 .apple-dialog[data-entry-type=event], [data-entry-dialog]:has([data-entry-types]:not([hidden])) { width: min(620px, calc(100% - 24px)); padding: clamp(14px, 3vw, 24px); }
 .entry-types { margin-top: 8px; }
 .apple-dialog fieldset, .apple-fields label, .apple-fields input { min-width: 0; }

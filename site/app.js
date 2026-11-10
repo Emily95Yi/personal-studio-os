@@ -7,6 +7,7 @@ import {
 import { icon } from './icons.js';
 import { escapeHtml } from './html.js';
 import { autoPlanView, originalSource, planDialog, planKindHelp, planPeriodLabel } from './auto-view.js';
+import { initManifestationActions, manifestationDialog } from './manifestation-view.js';
 import { plannerRepository, studioRepository } from './repository.js';
 import { calendarHref, calendarSelection, dateKey, todayDate } from './calendar.js';
 import { calendarHeaderActions, calendarRefreshAction, calendarRefreshState, calendarView, entryDialog, weekPreview } from './planner-view.js';
@@ -125,6 +126,9 @@ function header(route, { title, ancestors }) {
     return '<header class="studio-top"><div class="masthead sb-masthead">' + start +
       (route.captureId ? captureActions() : '') + '</div></header>';
   }
+  if (route.type === 'collection' && route.collectionId === 'auto') {
+    return '<header class="studio-top"><div class="masthead">' + start + '</div></header>';
+  }
   const calendar = route.type === 'auto-plan' ? '<a class="header-icon" href="' +
     escapeHtml(calendarHref(todayDate(), 'week', 'auto')) +
     '" aria-label="打开 Calendar" title="Calendar">' + icon('calendar', 18) + '</a>' : '';
@@ -213,7 +217,8 @@ function render({ focus = false } = {}) {
     (isPlannerPage ? '<div data-private-status>' + statusBanner() + '</div>' : '') +
     workshopBreadcrumb + storageWarning + (route.type === 'public' ? '' : syncBanner()) +
     views[route.type](route) + '</main>' +
-    (canEditTasks ? entryDialog() + reminderDialog() + eventDialog() : '') + (canEditPlans ? planDialog() : '');
+    (canEditTasks ? entryDialog() + reminderDialog() + eventDialog() : '') + (canEditPlans ? planDialog() : '') +
+    (route.collectionId === 'auto' && route.type === 'collection' ? manifestationDialog() : '');
   if (focus || route.documentId) {
     const target = app.querySelector('[data-work-selected] > summary');
     if (target) {
@@ -623,6 +628,7 @@ function pollVisibleFeed() {
 }
 
 initAppleActions(app, render);
+initManifestationActions(app, refreshFocus);
 initWorkshopActions(app, render);
 mountBoardEditor = initBoardActions(app, render);
 mountLibrary = initLibraryActions(app, render);

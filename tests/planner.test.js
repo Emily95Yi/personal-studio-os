@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { dateKey, inQuotaPeriod, parseDate, planReminderDates } from '../site/calendar.js';
 import { eventTimes } from '../site/calendar-events.js';
+import { manifestationTargets } from '../site/manifestation-view.js';
 import { nextPlanReminderDate, plannerRepository } from '../site/repository.js';
 import { validSnapshot } from '../worker/planner.js';
 
@@ -36,6 +37,48 @@ test('planner snapshots retain Inbox sources and validate flexible day counts', 
   assert.equal(edited.inboxId, inboxId);
   quota.periodDays = 1.5;
   assert.equal(validSnapshot(snapshot), false);
+});
+
+test('undated manifestations survive planner reloads without entering tasks or reminders', () => {
+  const repo = plannerRepository;
+  repo.restore(null);
+  const legacy = repo.snapshot();
+  delete legacy.manifestations;
+  assert.ok(validSnapshot(legacy));
+  repo.restore(legacy);
+  assert.equal(repo.saveManifestation({ text: '  ' }), undefined);
+  const note = repo.saveManifestation({ text: '  下次想读的书\n留意新版  ' });
+  const link = repo.saveManifestation({ source: 'collection-folder:reading', title: '待读' });
+  const snapshot = repo.snapshot();
+  assert.ok(validSnapshot(snapshot));
+  assert.equal(validSnapshot({ ...snapshot, manifestations: [{ ...link, text: '无效' }] }), false);
+  assert.equal(validSnapshot({ ...snapshot, manifestations: [link, link] }), false);
+  repo.restore(snapshot);
+  assert.deepEqual(repo.listManifestations(), [link, { id: note.id, text: '下次想读的书\n留意新版' }]);
+  assert.deepEqual(repo.listTasks(), []);
+  assert.deepEqual(repo.dueReminders(), []);
+  assert.equal(repo.saveManifestation({ id: note.id, text: '已更新' }).id, note.id);
+  assert.ok(repo.removeManifestation(link.id));
+  assert.equal(repo.listManifestations().length, 1);
+  repo.restore(null);
+});
+
+test('manifestation links include folders, subfolders, and nested Self-Board entries', () => {
+  const targets = manifestationTargets({
+    content: [{ id: 'wiki', title: '练习', type: 'exercise', primaryWorkspace: 'Self-Board', folderId: 'child' }],
+    boardFolders: [
+      { id: 'parent', title: '工作坊', category: 'Tools & Methods' },
+      { id: 'child', title: '热身', category: 'Tools & Methods', parentId: 'parent' },
+    ],
+    explorationTopics: [{ id: 'topic', title: '徒步' }],
+    explorationEntries: [{ id: 'entry', topicId: 'topic', title: '路线' }],
+    collectionFolders: [{ id: 'reading', categoryId: 'default-books', title: '待读' }],
+    collectionItems: [{ id: 'book', categoryId: 'default-books', folderId: 'reading', title: '散文集' }],
+  });
+  assert.equal(targets.get('wiki-folder:child').url, '#/self-board/discover?category=Tools+%26+Methods&folder=child');
+  assert.equal(targets.get('content:wiki').label, 'Workshop Wiki / Tools & Methods / 工作坊 / 热身 / 练习');
+  assert.equal(targets.get('entry:entry').url, '#/self-board/explorations/topic?entry=entry');
+  assert.equal(targets.get('collection-item:book').label, '书籍与阅读 / 待读 / 散文集');
 });
 
 test('plan reminders land on Tokyo dates, including across years and leap days', () => {

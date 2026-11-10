@@ -1,4 +1,4 @@
-import { calendarHref, dateKey, inQuotaPeriod, todayDate } from './calendar.js';
+import { dateKey, inQuotaPeriod, todayDate } from './calendar.js';
 import { escapeHtml } from './html.js';
 import { icon } from './icons.js';
 import { boardContentHref, boardSections, collectionItemAddress, explorationAddress, href, inboxAddress } from './pages.js';
@@ -9,17 +9,13 @@ import { entriesFor, explorationEntryTitle, itemsFor, topicsFor } from './board-
 import { boardContent, boardSection } from './self-board-data.js';
 import { canEdit } from './apple-view.js';
 import { reminderRows } from './reminder-view.js';
+import { manifestationSection } from './manifestation-view.js';
 
 const kinds = { 'one-off': '单次', recurring: '重复规则', quota: '周期目标' };
 const kindHelp = {
   quota: '在每个周期的第一天提醒，按周期统计完成次数。',
 };
 const periods = { day: '日', week: '周', month: '月' };
-
-function calendarLink(period, from) {
-  return '<a class="header-icon" href="' + escapeHtml(calendarHref(todayDate(), period, from)) +
-    '" aria-label="打开 Calendar" title="Calendar">' + icon('calendar', 17) + '</a>';
-}
 
 function sourceGroups() {
   const state = studioStore.state;
@@ -115,13 +111,15 @@ function taskRows(tasks, allowSkip = false) {
 }
 
 export function autoView() {
-  return '<div class="section-heading auto-toolbar"><span class="subtle">' +
-    (connection.mode === 'preview' ? '本机预览 · 刷新清除' : connection.mode === 'private' ? '' :
-      connection.mode === 'loading' ? '正在连接私有工作台…' : '私有服务不可用') +
-    '</span><div class="planner-actions">' +
-    (canEdit() ? createIcon('新建计划', 'calendarAdd', 'data-plan-new') +
-      createIcon('新建待办', 'taskAdd', 'data-task-new') : '') + calendarLink('week', 'auto') + '</div></div>' +
+  const status = { preview: '本机预览 · 刷新清除', loading: '正在连接私有工作台…', unavailable: '私有服务不可用' }[connection.mode];
+  return '<div class="section-heading auto-toolbar">' +
+    (canEdit() ? '<div class="planner-actions" role="group" aria-label="Auto 操作">' +
+      createIcon('添加显化', 'fileAdd', 'data-manifestation-new aria-haspopup="dialog"') +
+      createIcon('新建计划', 'calendarAdd', 'data-plan-new') +
+      createIcon('新建待办', 'taskAdd', 'data-task-new') + '</div>' : '') +
+    (status ? '<span class="subtle">' + status + '</span>' : '') + '</div>' +
     '<section class="auto-section"><h2>计划</h2>' + planGroups(plannerRepository.listPlans()) + '</section>' +
+    manifestationSection() +
     '<section class="auto-section"><h2>待办</h2>' + taskRows(plannerRepository.standaloneTasks(), true) + '</section>';
 }
 
