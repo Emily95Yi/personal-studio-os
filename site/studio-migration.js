@@ -1,8 +1,9 @@
 import { canRelate, collections, currentVersion, eventSections, imageTypes, isSelfBoard, maxAssetBytes,
   objectFor, projectSections, relationKey, validImage } from './studio-data.js';
-import { boardRecords, boardSection, canAddSubfolder, contentTypes, discoverCategory, exerciseFields, isDiscoverType,
+import { boardRecords, boardSection, canAddSubfolder, contentTypes, discoverCategory, exerciseFields, isDiscoverType, isWorkshopWiki,
   reflectionColors, provenances, resourceKey, statuses, visibilities } from './self-board-data.js';
 import { categoryFor, categoryList, explorationTypes, isDefaultCategory, resourceTypes, validEntryTarget } from './board-library-data.js';
+import { cardRoles, eventFormats, publicationProjection, toolTypes, toolVisibility, wikiStatuses } from './workshop-library.js';
 import { safeUrl } from './html.js';
 
 export const transferFormat = 'yistudio-transfer-v1';
@@ -211,6 +212,29 @@ function validateRecords(state) {
       /^[A-Za-z0-9+/]*={0,2}$/.test(data), '附件格式或大小无效：' + asset.id);
   }
 
+  const dictionary = name => new Set(state[name].map(row => {
+    require(nonempty(row.title) && row.title.length <= 80, '标签或卡组名称无效：' + row.id);
+    return row.id;
+  }));
+  const tagIds = dictionary('workshopTags');
+  const cardSetIds = dictionary('cardSets');
+  for (const row of state.interactiveTools) {
+    require(nonempty(row.title) && row.title.length <= 200 && has(toolTypes, row.type) && has(toolVisibility, row.visibility) &&
+      typeof row.appLocation === 'string' && (!row.appLocation || (safeUrl(row.appLocation) && !row.appLocation.startsWith('./'))),
+    '互动工具字段无效：' + row.id);
+    optionalFields(row, ['description', 'audience', 'version', 'createdAt', 'updatedAt'], row.title);
+  }
+  for (const [kind, rows] of [['event', state.events], ['tool', state.interactiveTools]]) {
+    for (const row of rows) if (row.workshopPublication != null) {
+      const publication = row.workshopPublication;
+      const expected = publicationProjection(kind, row);
+      require(plain(publication) && nonempty(publication.preparedAt) && plain(publication.preview) &&
+        Object.keys(publication.preview).length === Object.keys(expected).length &&
+        Object.entries(expected).every(([key, value]) => typeof value === 'string' && publication.preview[key] === value),
+      '发布预览无效：' + row.id);
+    }
+  }
+
   for (const key of ['projects', 'events', 'content']) {
     for (const row of state[key]) {
       const unified = key === 'content' && Object.hasOwn(contentTypes, row.type);
@@ -249,7 +273,20 @@ function validateRecords(state) {
       optionalList(row, 'domains', row.title);
       optionalList(row, 'views', row.title);
       validateAssets(row, row.title);
+      if (key !== 'content') {
+        optionalList(row, 'tagIds', label);
+        require((row.tagIds ?? []).every(id => tagIds.has(id)), '找不到 Workshop 标签：' + label);
+      } else if (row.wikiStatus != null) {
+        require(isWorkshopWiki(row) && has(wikiStatuses, row.wikiStatus), '共通资源状态无效：' + label);
+      }
       if (key === 'events') {
+        optionalList(row, 'formats', label);
+        require((row.formats ?? []).every(format => has(eventFormats, format)), '活动形式无效：' + label);
+        if (row.cardUses != null) {
+          require(Array.isArray(row.cardUses) && row.cardUses.every(use => plain(use) && cardSetIds.has(use.cardSetId) &&
+            has(cardRoles, use.role) && typeof use.usageNote === 'string') &&
+            new Set(row.cardUses.map(use => use.cardSetId)).size === row.cardUses.length, '卡组用法无效：' + label);
+        }
         require(objectFor(state, 'project', row.projectId), row.title + ' 缺少所属 Project。');
         require(row.attendeeCount == null || typeof row.attendeeCount === 'string' ||
           (Number.isInteger(row.attendeeCount) && row.attendeeCount >= 0), row.title + ' 的人数无效。');
@@ -297,7 +334,14 @@ function validateRecords(state) {
   for (const edge of state.relations) {
     require(canRelate(state, edge.sourceType, edge.sourceId, edge.targetType, edge.targetId) && nonempty(edge.relationType),
       '关联缺少可用的对象或类型：' + edge.id);
-    optionalFields(edge, ['createdAt'], edge.id);
+    optionalFields(edge, ['createdAt', 'versionId'], edge.id);
+    if (edge.versionId) {
+      const eventIsSource = edge.sourceType === 'event' && edge.targetType === 'discover';
+      const eventIsTarget = edge.targetType === 'event' && edge.sourceType === 'discover';
+      const item = (eventIsSource || eventIsTarget) && objectFor(state, 'discover', eventIsSource ? edge.targetId : edge.sourceId);
+      require(isWorkshopWiki(item) && item.revisions?.some(version => version.id === edge.versionId),
+        '固定版本缺少关联的共通资源历史：' + edge.id);
+    }
     const pair = relationKey(edge);
     require(!edges.has(pair), '同一对对象有重复关联：' + edge.id);
     edges.add(pair);

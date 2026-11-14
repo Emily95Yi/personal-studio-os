@@ -77,7 +77,7 @@ test('manifestation links select individual entries and show their folder paths'
   });
   assert.deepEqual([...targets.keys()], ['content:wiki', 'topic:topic', 'entry:entry', 'collection-item:book']);
   assert.equal(targets.get('content:wiki').url, '#/self-board/content/wiki');
-  assert.equal(targets.get('content:wiki').label, 'Workshop Wiki / Tools & Methods / 工作坊 / 热身 / 练习');
+  assert.equal(targets.get('content:wiki').label, 'Common Resources / Tools & Methods / 工作坊 / 热身 / 练习');
   assert.equal(targets.get('entry:entry').url, '#/self-board/explorations/topic?entry=entry');
   assert.equal(targets.get('collection-item:book').label, '书籍与阅读 / 待读 / 散文集');
 });

@@ -16,7 +16,9 @@ import { allCalendarEvents, canEdit, eventDialog, openReview, settingsView, show
 import { connection, loadCalDav, loadFeed, loadPlanner, onPrivateChange, saveChanges } from './private-api.js';
 import { initAppleActions } from './apple-actions.js';
 import { eventDetail, projectOverview, workshopGallery } from './workshop-view.js';
+import { activitiesView, commonResourcesView, dictionariesView, interactiveToolView, interactiveToolsView } from './workshop-library-view.js';
 import { initWorkshopActions } from './workshop-actions.js';
+import { initWorkshopGalleryLayout } from './workshop-gallery-layout.js';
 import { initStudioImport, studioImportView } from './studio-import-view.js';
 import { boardDetail, boardView } from './self-board-view.js';
 import { initBoardActions, refreshHeaderSearch } from './self-board-actions.js';
@@ -29,6 +31,7 @@ import { beginStudioEdit, closeStudioSync, migrateLocalStudio, onStudioNotice, r
 const app = document.querySelector('#app');
 let studioStorageError = false;
 let mountBoardEditor;
+let mountWorkshopEditor;
 let mountLibrary;
 let topicLease;
 let refreshInbox;
@@ -75,6 +78,7 @@ function pageContext(route) {
   if (route.projectPath) ancestors.push([href(...route.projectPath), route.projectLabel]);
   if (route.brand) ancestors.push([publicHref(route.brandId), route.brand.label]);
 
+  if (route.wiki) return { title: route.recordTitle, ancestors: [] };
   if (['board', 'content-detail', 'capture'].includes(route.type)) {
     if (route.type === 'board' && !route.section && !route.params.has('view')) ancestors.pop();
     const title = route.entity ? contentTitle(route.record) : boardSections[route.section]?.label;
@@ -173,6 +177,11 @@ const views = {
   home: landing,
   overview: workspaceOverview,
   'workshop-gallery': workshopGallery,
+  'workshop-wiki': commonResourcesView,
+  'workshop-tools': interactiveToolsView,
+  'workshop-tool': interactiveToolView,
+  'workshop-activities': activitiesView,
+  'workshop-dictionaries': dictionariesView,
   board: boardView,
   capture: captureView,
   'content-detail': boardDetail,
@@ -227,6 +236,7 @@ function render({ focus = false } = {}) {
     } else if (focus) app.querySelector('main').focus({ preventScroll: true });
   }
   mountBoardEditor?.(route);
+  mountWorkshopEditor?.(route);
   mountLibrary?.(route);
   refreshInbox = mountCaptureBoard(app, route, refreshStudioSync, createFromCapture);
   if (route.entity === 'topic' && route.params.has('entry')) {
@@ -629,7 +639,8 @@ function pollVisibleFeed() {
 
 initAppleActions(app, render);
 initManifestationActions(app, refreshFocus);
-initWorkshopActions(app, render);
+mountWorkshopEditor = initWorkshopActions(app, render);
+initWorkshopGalleryLayout(app);
 mountBoardEditor = initBoardActions(app, render);
 mountLibrary = initLibraryActions(app, render);
 initStudioImport(app);

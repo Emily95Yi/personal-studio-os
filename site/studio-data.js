@@ -1,3 +1,5 @@
+import { externalWorkshopTool, workshopTools } from './workshop-external-tools.js';
+
 export const projectSections = {
   overview: 'Overview / 定位',
   inspiration: '主题与灵感',
@@ -27,10 +29,11 @@ export const eventSections = {
 
 export const reusableSections = ['flow', 'facilitation', 'questions', 'visual', 'playbook', 'session'];
 export const collections = ['projects', 'events', 'content', 'sessions', 'relations', 'assets', 'boardFolders', 'reflectionLabels',
-  'collectionCategories', 'collectionFolders', 'collectionItems', 'explorationTopics', 'explorationEntries', 'explorationEntryTypes'];
-export const relationObjectTypes = ['discover', 'topic', 'collection-item', 'project', 'event'];
+  'collectionCategories', 'collectionFolders', 'collectionItems', 'explorationTopics', 'explorationEntries', 'explorationEntryTypes',
+  'workshopTags', 'cardSets', 'interactiveTools'];
+export const relationObjectTypes = ['discover', 'topic', 'collection-item', 'project', 'event', 'tool'];
 const objectCollections = { project: 'projects', event: 'events', discover: 'content',
-  topic: 'explorationTopics', 'collection-item': 'collectionItems' };
+  topic: 'explorationTopics', 'collection-item': 'collectionItems', tool: 'interactiveTools' };
 export const maxAssetBytes = 12 * 1024 * 1024;
 export const imageTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'];
 
@@ -44,12 +47,14 @@ const fail = message => { throw new Error(message); };
 const find = (rows, id) => rows.find(item => item.id === id);
 
 export function objectFor(state, type, id) {
+  if (type === 'tool') return externalWorkshopTool(id) ?? find(state.interactiveTools ?? [], id);
   return Object.hasOwn(objectCollections, type) ? find(state[objectCollections[type]] ?? [], id) : undefined;
 }
 
 const boardObjectTypes = relationObjectTypes.slice(0, 3);
 const selfBoardObject = (type, item) => type === 'discover' ? isSelfBoard(item) : boardObjectTypes.includes(type);
-export const relationTargetTypes = type => boardObjectTypes.includes(type) ? relationObjectTypes : boardObjectTypes;
+export const relationTargetTypes = type => boardObjectTypes.includes(type) ? relationObjectTypes :
+  type === 'tool' ? ['discover', 'project', 'event'] : [...boardObjectTypes, 'tool'];
 
 export function isSelfBoard(item) {
   return Boolean(item && (item.primaryWorkspace === 'Self-Board' || (Array.isArray(item.domains) && item.domains.includes('Self-Board'))));
@@ -193,24 +198,32 @@ export function canRelate(state, aType, aId, bType, bId) {
   if (aType === bType && aId === bId) return false;
   const a = objectFor(state, aType, aId);
   const b = objectFor(state, bType, bId);
+  if (aType === 'tool' || bType === 'tool') {
+    const otherType = aType === 'tool' ? bType : aType;
+    const other = aType === 'tool' ? b : a;
+    return Boolean(a && b && (['project', 'event'].includes(otherType) || (otherType === 'discover' && isSelfBoard(other))));
+  }
   return Boolean(a && b && (selfBoardObject(aType, a) || selfBoardObject(bType, b)) &&
     (aType !== 'discover' || isSelfBoard(a)) && (bType !== 'discover' || isSelfBoard(b)));
 }
 
-export function saveRelation(state, { id, sourceType, sourceId, targetType, targetId, relationType }) {
+export function saveRelation(state, { id, sourceType, sourceId, targetType, targetId, relationType, versionId }) {
   if (!canRelate(state, sourceType, sourceId, targetType, targetId) ||
       objectFor(state, sourceType, sourceId)?.deletedAt || objectFor(state, targetType, targetId)?.deletedAt) fail('关联对象已不可用。');
   const candidate = { sourceType, sourceId, targetType, targetId, relationType: relationType?.trim() || 'related' };
   const existing = id && find(state.relations, id);
   if (id && !existing) fail('这条关联已不可用。');
+  if (existing?.versionId && relationKey(existing) !== relationKey(candidate)) fail('固定版本的关联须在 Workshop 中重新选择。');
   if (state.relations.some(edge => edge.id !== id && relationKey(edge) === relationKey(candidate))) {
     fail('这两个对象已经关联。');
   }
   if (existing) {
     Object.assign(existing, candidate);
+    if (versionId === '') delete existing.versionId;
+    else if (versionId) existing.versionId = versionId;
     return existing;
   }
-  const created = { ...candidate, id: nextId(), createdAt: now() };
+  const created = { ...candidate, id: nextId(), createdAt: now(), ...(versionId && { versionId }) };
   state.relations.push(created);
   return created;
 }
@@ -231,7 +244,7 @@ function directRelations(state, type, id) {
   }).filter(row => row.item && !row.item.deletedAt);
 }
 
-export function relatedObjects(state, type, id) {
+export function relatedObjects(state, type, id, { includeDirect = false } = {}) {
   const direct = directRelations(state, type, id);
   const derived = new Map();
   if (type === 'project') {
@@ -240,7 +253,7 @@ export function relatedObjects(state, type, id) {
     for (const event of state.events.filter(row => row.projectId === id)) {
       for (const { type: targetType, item } of directRelations(state, 'event', event.id)) {
         const key = keyFor(targetType, item);
-        if (!directIds.has(key)) {
+        if (includeDirect || !directIds.has(key)) {
           if (!derived.has(key)) derived.set(key, { item, type: targetType, via: [] });
           derived.get(key).via.push(event);
         }
@@ -252,11 +265,14 @@ export function relatedObjects(state, type, id) {
 
 export function relationCandidates(state, ownerType, ownerId, { type, query = '', tag = '', edgeId, includeLinked = false } = {}) {
   const types = relationTargetTypes(ownerType);
-  const blocked = new Set(directRelations(state, ownerType, ownerId).filter(row => row.edge.id !== edgeId)
+  const direct = directRelations(state, ownerType, ownerId);
+  const current = direct.find(row => row.edge.id === edgeId);
+  const blocked = new Set(direct.filter(row => row.edge.id !== edgeId)
     .map(row => JSON.stringify([row.type, row.item.id])));
   const needle = query.trim().toLocaleLowerCase();
-  return types.filter(key => !type || key === type).flatMap(key => (state[objectCollections[key]] ?? [])
-    .filter(item => !item.deletedAt && canRelate(state, ownerType, ownerId, key, item.id) &&
+  return types.filter(key => !type || key === type).flatMap(key => (key === 'tool' ? workshopTools(state) : state[objectCollections[key]] ?? [])
+    .filter(item => !item.deletedAt && ((item.wikiStatus ?? item.status) !== 'archived' || includeLinked ||
+      (current?.type === key && current.item.id === item.id)) && canRelate(state, ownerType, ownerId, key, item.id) &&
       (includeLinked || !blocked.has(JSON.stringify([key, item.id]))) && (!tag || (item.topics ?? item.tags)?.includes(tag)) &&
       [item.title, item.body, item.summary, item.description, item.theme, item.type, item.contentType, item.notes, item.url, ...(item.topics ?? item.tags ?? [])].join(' ').toLocaleLowerCase().includes(needle))
     .map(item => ({ type: key, item })));

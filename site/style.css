@@ -962,3 +962,65 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
   .capture-row-link { grid-template-columns: auto minmax(0, 1fr); }
   .capture-list small { grid-column: 2; }
 }
+
+.workshop-entries { margin-block-end: clamp(20px, 4vw, 36px); gap: 12px; }
+.workshop-entries .workspace-entry { min-height: 108px; padding: 14px 16px; gap: 8px; background: var(--surface); }
+.workshop-entries .entry-icon { width: 36px; background: var(--tint); }
+.workshop-entries .entry-icon svg { width: 20px; }
+.workshop-entries .entry-label { font-size: clamp(15px, 2vw, 20px); font-weight: 600; }
+.workshop-entries .workspace-entry:focus-visible { background: var(--card-hover-bg); }
+@media (max-width: 500px) {
+  .workshop-entries { grid-template-columns: 1fr; }
+  .workshop-entries .workspace-entry { min-height: 60px; grid-template-columns: auto 1fr; align-items: center; gap: 10px; }
+}
+.workshop-tabs { display: flex; flex-wrap: wrap; width: fit-content; max-width: 100%; margin-block-end: 14px; }
+.workshop-actions { flex-wrap: wrap; }
+.workshop-actions .work-actions { flex-wrap: wrap; }
+.workshop-panel { margin-block: 18px; }
+.workshop-panel .section-heading { flex-wrap: wrap; gap: 8px; }
+.workshop-panel h3 { margin-block: 12px 6px; }
+.workshop-panel li { min-width: 0; overflow-wrap: anywhere; }
+.workshop-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr)); gap: 10px; margin-block: 14px; }
+.workshop-filters label { display: grid; gap: 4px; min-width: 0; }
+.workshop-filters :is(input:not([type=checkbox]), select) {
+  padding: 8px; width: 100%; min-width: 0; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+}
+.workshop-filters :is(fieldset, .work-actions) { grid-column: 1 / -1; }
+.workshop-filters fieldset .work-check { display: inline-flex; margin: 3px 12px 3px 0; }
+.workshop-filters .work-actions { flex-wrap: wrap; }
+
+.project-board { display: grid; gap: 16px; margin-top: 14px; align-items: start; }
+.project-panel { position: relative; min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.project-panel-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+.project-panel-header h3 { min-width: 0; margin: 0; font-size: 16px; overflow-wrap: anywhere; }
+.project-panel-header a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.project-panel-controls { flex: none; }
+.project-panel-controls .work-icon { width: 40px; height: 40px; }
+.project-panel-controls .work-icon:disabled { opacity: .35; cursor: default; }
+[data-project-move=later] svg { transform: rotate(180deg); }
+.project-drag-handle { display: grid; place-items: center; width: 40px; height: 40px; color: var(--muted); cursor: grab; }
+.project-drag-handle:active { cursor: grabbing; }
+[data-project-dragging] { opacity: .55; }
+.project-panel[data-project-drop]::after {
+  content: ""; position: absolute; inset-inline: 0; height: 3px; border-radius: 3px; background: var(--ring); pointer-events: none;
+}
+.project-panel[data-project-drop=before]::after { inset-block-start: -10px; }
+.project-panel[data-project-drop=after]::after { inset-block-end: -10px; }
+@media (max-width: 720px) {
+  .project-layout-options { display: none; }
+}
+@media (min-width: 721px) {
+  .project-board[data-project-board=columns] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-project-board=columns] .project-panel[data-project-drop]::after { inset: 0 auto 0 -10px; width: 3px; height: auto; }
+  [data-project-board=columns] .project-panel[data-project-drop=after]::after { inset-inline: auto -10px; }
+}
+@media (pointer: coarse) {
+  .project-drag-handle { display: none; }
+}
+
+.tool-entries { margin-top: 14px; gap: 12px; }
+.tool-entries .workspace-entry { align-content: start; min-height: 140px; padding: 16px; gap: 8px; background: var(--surface); }
+.tool-entries .entry-icon { width: 36px; background: var(--tint); }
+.tool-entries .entry-icon svg { width: 20px; }
+.tool-entries .entry-label { font-size: clamp(15px, 2vw, 20px); font-weight: 600; }
+.tool-entries .workspace-entry:focus-visible { background: var(--card-hover-bg); }

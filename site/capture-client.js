@@ -22,6 +22,7 @@ const errors = {
   part_changed: '所选文件与已上传的分片不同，请重新选择文件。',
   files_unavailable: 'Studio 尚未连接私有文件存储。',
   device_limit: '有效授权已达上限，请先撤销不用的设备。',
+  archive_in_workshop: '请在 Workshop → Common Resources 中归档此资源。',
   use_native_editor: '已分类记录请在对应模块中编辑。',
 };
 export const captureMessage = code => errors[code] ?? errors.unavailable;

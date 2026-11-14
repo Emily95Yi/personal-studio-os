@@ -40,6 +40,7 @@ const paths = {
   published: '<circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.4 2.4 4.7-4.7"/>',
   unpublished: '<circle cx="12" cy="12" r="8"/><path d="M9 12h6"/>',
   arrow: '<path d="M4 12h15m-5-5 5 5-5 5"/>',
+  grip: '<path d="M8 6h.01M16 6h.01M8 12h.01M16 12h.01M8 18h.01M16 18h.01" stroke-width="3"/>',
   up: '<path d="m6 15 6-6 6 6"/>',
   down: '<path d="m6 9 6 6 6-6"/>',
   eye: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/>',

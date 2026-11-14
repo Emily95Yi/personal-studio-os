@@ -1,6 +1,6 @@
 import { ensureCaptureTopic } from '../site/capture-topic.js';
 import { emptyStudio } from '../site/studio-data.js';
-import { boardSection, initialDiscoverCategories, resourceKey } from '../site/self-board-data.js';
+import { boardSection, initialDiscoverCategories, isWorkshopWikiCategory, resourceKey } from '../site/self-board-data.js';
 import { categoryList, collectionCategoryLabel, foldersFor, inbox, topicsFor } from '../site/board-library-data.js';
 import { previewMigration, studioExport } from '../site/studio-migration.js';
 
@@ -48,9 +48,12 @@ export function captureOptions(state) {
       ] };
     }) },
     { label: 'Discover', groups: [
-      group('Workshop Wiki', initialDiscoverCategories.map(([name]) => option('discover', 'wiki', name, name))),
+      group('Resources', initialDiscoverCategories.filter(([name]) => !isWorkshopWikiCategory(name))
+        .map(([name]) => option('discover', 'wiki', name, name))),
       group('Personal Explorations', topicOrder.map(row => option('discover', 'personal', row.id, row.title))),
     ] },
+    { label: 'Workshop', groups: [group('Common Resources', initialDiscoverCategories.filter(([name]) => isWorkshopWikiCategory(name))
+      .map(([name]) => option('discover', 'wiki', name, name)))] },
   ];
 }
 

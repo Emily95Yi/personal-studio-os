@@ -40,6 +40,15 @@ export const initialDiscoverCategories = [
   [resourcesCategory, '资料与摘录', 'resource'],
 ];
 
+// The existing snapshot uses these strings as category keys (including on folders).
+export const workshopWikiCategories = initialDiscoverCategories.filter(([key]) => key !== resourcesCategory);
+export const isWorkshopWikiCategory = key => workshopWikiCategories.some(([category]) => category === key);
+export const isWorkshopWiki = row => {
+  if (!isSelfBoard(row)) return false;
+  const item = boardContent(row);
+  return isDiscoverType(item.type) && isWorkshopWikiCategory(discoverCategory(item));
+};
+
 export function discoverCategory(item) {
   if (item.discoverCategory?.trim()) return item.discoverCategory;
   if (item.type === 'exercise') return toolsCategory;
@@ -314,7 +323,7 @@ export function clearBoardTrash(state) {
   const removed = { discover: new Set(), topic: new Set(), 'collection-item': new Set() };
   const orphanAssets = new Set();
   const assetIds = row => [row.coverAssetId, ...(row.assetIds ?? []),
-    ...(row.revisions ?? []).flatMap(version => version.assetIds ?? [])];
+    ...(row.revisions ?? []).flatMap(version => [version.coverAssetId, ...(version.assetIds ?? [])])];
   for (const { type, item } of trash) {
     removed[type].add(item.id);
     if (type === 'discover') assetIds(item).forEach(id => orphanAssets.add(id));
@@ -345,7 +354,10 @@ export function markBoardContent(state, id, action) {
   const row = objectFor(state, 'discover', id);
   if (!isSelfBoard(row) || (row.deletedAt && action !== 'recover')) throw new Error('这条记录已不可用。');
   const stamp = new Date().toISOString();
-  if (action === 'delete') row.deletedAt = stamp;
+  if (action === 'delete') {
+    if (isWorkshopWiki(row)) throw new Error('请在 Common Resources 中归档这条资源。');
+    row.deletedAt = stamp;
+  }
   else if (action === 'recover') {
     if (boardSection(boardContent(row)) === 'discover' && existingCollectionUrl(state, row.sourceUrl)) {
       throw new Error('Collections 已保存这个链接，无法恢复重复资料。');

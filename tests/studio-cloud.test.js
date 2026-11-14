@@ -220,3 +220,40 @@ test('Studio save retries a temporary service error and recovers a lost save rec
     await leaseRelease;
   }
 });
+
+test('expanded Workshop records survive a revision-checked cloud delta without rewriting the original Wiki', async t => {
+  const { linkWiki, publicationProjection, saveCardSet, saveInteractiveTool, saveWorkshopTag } = await import('../site/workshop-library.js');
+  const { call, lock, save } = studioApi(t);
+  const token = crypto.randomUUID();
+  const before = emptyStudio();
+  const project = saveProject(before, { title: 'Series' });
+  const event = saveEvent(before, { title: 'Event', projectId: project.id });
+  const wiki = saveBoardContent(before, { title: 'Original Wiki', body: 'Original body', type: 'exercise' });
+  const legacy = studioExport(before);
+  for (const key of ['workshopTags', 'cardSets', 'interactiveTools']) delete legacy[key];
+  assert.equal((await lock(token)).status, 200);
+  assert.equal((await save(token, 0, legacy)).status, 200);
+  const saved = await (await call()).json();
+  const next = structuredClone(saved);
+  const tag = saveWorkshopTag(next, 'Series');
+  const cards = saveCardSet(next, 'OH');
+  saveEvent(next, { id: event.id, projectId: project.id, title: event.title, tagIds: [tag.id],
+    cardUses: [{ cardSetId: cards.id, role: 'supporting', usageNote: 'Keep private' }], formats: ['weaving'] });
+  const pin = linkWiki(next, { ownerType: 'event', ownerId: event.id, resourceId: wiki.id, mode: 'pinned_version' });
+  const tool = saveInteractiveTool(next, { title: 'Workshop tool', type: 'app', visibility: 'public',
+    appLocation: 'https://example.test/private-tool', version: '1' });
+  tool.workshopPublication = { preparedAt: new Date().toISOString(), preview: publicationProjection('tool', tool) };
+  const delta = studioDelta(saved, next);
+  assert.equal((await save(token, 0, delta)).status, 409);
+  assert.equal((await save(token, 1, delta)).status, 200);
+  const reloaded = await (await call()).json();
+  assert.equal(reloaded.content[0].createdAt, wiki.createdAt);
+  assert.equal(reloaded.content[0].body, wiki.body);
+  assert.equal(reloaded.content[0].revisions[0].id, pin.versionId);
+  assert.equal(reloaded.relations[0].versionId, pin.versionId);
+  assert.equal(reloaded.events[0].cardUses[0].cardSetId, cards.id);
+  assert.equal(reloaded.interactiveTools[0].id, tool.id);
+  assert.equal((await call('', { owner: '' })).status, 401);
+  assert.equal(await (await call('', { owner: 'another-owner' })).json(), null);
+  assert.equal((await call('/public')).status, 404);
+});

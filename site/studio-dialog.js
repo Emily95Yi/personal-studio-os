@@ -6,7 +6,7 @@ export function studioDialog(app, title, fields, save, after, submitLabel = '保
   box.setAttribute('aria-label', title);
   box.className = 'work-dialog ' + extraClass;
   box.innerHTML = '<form><h2>' + esc(title) + '</h2><div class="work-form-fields">' + fields +
-    '</div><p class="work-error" role="alert" hidden></p><div class="work-dialog-actions">' +
+    '</div><p role="status" data-work-saving hidden>正在保存…</p><p class="work-error" role="alert" hidden></p><div class="work-dialog-actions">' +
     '<button class="action-button secondary" type="button" data-work-close>取消</button>' +
     '<button type="submit" class="action-button">' + submitLabel + '</button></div></form>';
   const form = box.querySelector('form');
@@ -20,6 +20,8 @@ export function studioDialog(app, title, fields, save, after, submitLabel = '保
     const error = form.querySelector('[role="alert"]');
     error.hidden = true;
     form.inert = true;
+    const saving = form.querySelector('[data-work-saving]');
+    saving.hidden = false;
     try {
       const result = await save(data);
       box.close();
@@ -29,6 +31,7 @@ export function studioDialog(app, title, fields, save, after, submitLabel = '保
       error.hidden = false;
     } finally {
       form.inert = false;
+      saving.hidden = true;
       if (box.open && !submit.disabled) submit.focus();
     }
   });

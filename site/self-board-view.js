@@ -5,11 +5,12 @@ import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
 import { boardContentHref, boardHref, boardSections, discoverAddress, href } from './pages.js';
 import { boardContent, boardFolderPath, boardMoveFolders, boardRecords, boardSection, boardTrashRecords, canAddSubfolder, contentTypes, discoverCategory, discoverDirectory, exerciseFields,
-  isPublished, isWriting, matchContent, pinnedBoardFolders, reflectionColors, relationTypes, resourceKey } from './self-board-data.js';
+  isPublished, isWriting, isWorkshopWiki, isWorkshopWikiCategory, matchContent, pinnedBoardFolders, reflectionColors, relationTypes, resourceKey } from './self-board-data.js';
 import { contentTitle, isSelfBoard, objectFor, relatedObjects, studioStore } from './studio-data.js';
 import { attachments, imageUrl, markdown, objectHref, objectLabels, timestamp } from './workshop-view.js';
 import { entriesFor, itemsFor, libraryMatches, topicsFor } from './board-library-data.js';
 import { collectionDetail, collectionsView, discoverTabs, explorationsView, explorationTypeSettings, topicDetail } from './board-library-view.js';
+import { wikiDetails } from './workshop-library-view.js';
 import { plannerRepository } from './repository.js';
 
 const state = () => studioStore.state;
@@ -270,9 +271,11 @@ function deleteFolderIcon(folder) {
 }
 
 function discoverView(route, items) {
-  const folders = state().boardFolders ?? [];
-  const directory = discoverDirectory(items, folders);
-  const current = directory.find(({ name }) => name === route.params.get('category'));
+  const folders = (state().boardFolders ?? []).filter(folder => !isWorkshopWikiCategory(folder.category));
+  const directory = discoverDirectory(items, folders).filter(row => !isWorkshopWikiCategory(row.name));
+  const category = route.params.get('category') || folders.find(row => row.id === route.params.get('folder'))?.category ||
+    (route.view === 'all' && directory.length === 1 ? directory[0].name : '');
+  const current = directory.find(({ name }) => name === category);
   const inCategory = current ? folders.filter(folder => folder.category === current.name) : [];
   const folder = inCategory.find(row => row.id === route.params.get('folder'));
   const children = inCategory.filter(row => (row.parentId || '') === (folder?.id || ''))
@@ -288,7 +291,7 @@ function discoverView(route, items) {
   const categoryData = current ? ' data-sb-category="' + esc(current.name) + '"' : '';
   const folderData = folder ? ' data-sb-folder="' + esc(folder.id) + '"' : '';
   const className = 'sb-icon-plain';
-  const newFile = boardIcon('新建文件', 'fileAdd', { href: discoverAddress(current?.name, folder?.id, true), className });
+  const newFile = boardIcon('新建文件', 'fileAdd', { href: discoverAddress(current?.name || 'Resources', folder?.id, true), className });
   const canCreateFolder = current && (!folder || canAddSubfolder(folder));
   const rename = folder?.parentId ? renameFolderIcon(folder) : '';
   const folderAction = canCreateFolder ? boardIcon(folder ? '新建子文件夹' : '新建文件夹', 'folderAdd', {
@@ -297,12 +300,12 @@ function discoverView(route, items) {
   const actions = folderAction + boardIcon('导入资料', 'upload',
     { data: 'data-sb-import="resource"' + categoryData + folderData, className }) + newFile;
   const title = current ? discoverTrail(current.name, folder, { current: true }) : '';
-  return '<nav class="sb-directory" aria-label="知识目录">' + directory.map(({ name, description, count }) =>
+  const categories = directory.length > 1 ? '<nav class="sb-directory" aria-label="资源分类">' + directory.map(({ name, description, count }) =>
       '<a href="' + esc(discoverAddress(current?.name === name ? '' : name)) + '"' +
       (current?.name === name ? ' aria-current="page"' : '') +
       '><strong>' + esc(name) + '</strong><span>' + esc(description) + '</span><small>' + count + ' 条</small></a>').join('') +
-    '</nav>' +
-    '<div class="sb-list-heading sb-section-toolbar">' +
+    '</nav>' : '';
+  return categories + '<div class="sb-list-heading sb-section-toolbar">' +
     (title ? '<div class="sb-discover-location"><h3>' + title + '</h3>' +
       (folder ? pinFolderIcon(folder) : '') + '</div>' : '') +
     '<div class="sb-view-actions">' + actions + '</div></div>' +
@@ -310,7 +313,7 @@ function discoverView(route, items) {
       esc(discoverAddress(row.category, row.id)) + '"><span>' + icon('folder', 18) + ' ' + esc(row.title) + '</span>' +
       '<span class="sb-folder-arrow">' + icon('arrow', 14) + '</span></a>' +
       pinFolderIcon(row) + renameFolderIcon(row, '重命名 ' + row.title) + deleteFolderIcon(row) + '</li>').join('') + '</ul>' : '') +
-    (rows.length ? rowList(rows, 'discover') : '');
+    (rows.length ? rowList(rows, 'discover') : empty('这里还没有资料', '可以新建或导入外部资料。'));
 }
 
 function heading(title, description, actions = '') {
@@ -409,7 +412,7 @@ export function boardView(route) {
       (rows.length ? reflectionCards(rows) : empty('这里还没有记录', '可以先记下一句话。'));
   } else if (section === 'discover') {
     content = discoverTabs(route.tab) + (route.entity ? topicDetail(route.record, libraryRelations('topic', route.record), params.get('edit') === '1') :
-      route.tab === 'explorations' ? explorationsView() : discoverView(route, items.filter(item => boardSection(item) === section)));
+      route.tab === 'explorations' ? explorationsView() : discoverView(route, items.filter(item => boardSection(item) === section && !isWorkshopWiki(item))));
   } else if (section === 'collections') {
     content = route.entity ? collectionDetail(route.record, libraryRelations('collection-item', route.record)) : collectionsView(route);
   } else if (section === 'connections') {
@@ -467,7 +470,7 @@ function reviewPanel(item) {
     '<div data-sb-review-diff aria-live="polite"></div></section>';
 }
 
-export function boardDetail({ record }) {
+export function boardDetail({ record, wiki, parent, params }) {
   const item = boardContent(record);
   const section = boardSection(item);
   const writing = section === 'writing';
@@ -482,19 +485,20 @@ export function boardDetail({ record }) {
     ...exerciseFields, excerpt: '原文摘录', personalNotes: '我的笔记', aiNotes: 'AI 整理',
   };
   return '<section class="sb sb-detail"><article class="work-reading sb-reader" data-sb-card="' + id + '">' +
-    '<nav class="work-breadcrumb sb-breadcrumb" aria-label="面包屑"><a href="' + boardHref() + '">Self-Board</a><span aria-hidden="true">/</span>' +
-    '<a href="' + boardHref(section) + '">' + boardSections[section].label + '</a>' +
+    '<nav class="work-breadcrumb sb-breadcrumb" aria-label="面包屑">' + (wiki
+      ? '<a href="' + href('workshop') + '">Workshop</a>' + crumb + '<a href="' + esc(parent) + '">Common Resources</a>'
+      : '<a href="' + boardHref() + '">Self-Board</a>' + crumb + '<a href="' + boardHref(section) + '">' + boardSections[section].label + '</a>') +
     (section === 'discover' ? crumb + discoverTrail(discoverCategory(item), folder) : '') +
     crumb + '<span aria-current="page">' + titleOf(item) + '</span></nav>' +
     '<div data-sb-reading><header class="sb-reader-heading"><h1>' + titleOf(item) + '</h1>' +
     (item.summary ? '<p>' + esc(item.summary) + '</p>' : '') + '<div class="sb-reader-tools"><div class="sb-reader-meta">' +
     timeLabel(writing ? changed(item) : date(item)) + (writing ? writingBadge(item) : '') +
-    '</div><div class="sb-view-actions">' + boardIcon('编辑', 'edit', { data: 'data-sb-edit="' + id + '"', className }) +
+    '</div><div class="sb-view-actions">' + (wiki ? boardIcon('编辑资源', 'edit', { data: 'data-work-wiki-edit', className }) : boardIcon('编辑', 'edit', { data: 'data-sb-edit="' + id + '"', className })) +
     (reflection ? boardIcon('写成文章', 'develop', { data: 'data-sb-develop="' + id + '"', className }) : '') +
     (isWriting(item.type) ? boardIcon('审阅', 'review', { data: 'data-sb-review aria-pressed="false"', className }) : '') +
-    (section === 'discover' ? movePinnedIcon(item) : '') +
-    boardIcon('移到回收站', 'trash', { data: 'data-sb-mark="delete"', className }) +
-    (reflection || item.status === 'archived' ? '<details class="sb-more"><summary class="sb-icon sb-icon-plain" aria-label="更多操作" title="更多操作">' +
+    (!wiki && section === 'discover' ? movePinnedIcon(item) : '') +
+    (wiki ? '' : boardIcon('移到回收站', 'trash', { data: 'data-sb-mark="delete"', className })) +
+    (!wiki && (reflection || item.status === 'archived') ? '<details class="sb-more"><summary class="sb-icon sb-icon-plain" aria-label="更多操作" title="更多操作">' +
       icon('more', 17) + '</summary><div>' +
       (reflection ? button('标记为已回看', 'data-sb-mark="revisit"') : '') +
       (item.status === 'archived' ? button('移出旧归档', 'data-sb-mark="restore"') : '') + '</div></details>' : '') +
@@ -508,7 +512,7 @@ export function boardDetail({ record }) {
       (item.notionPageId ? '<p>Notion · ' + esc(item.notionPageId) + '</p>' : '') + '</section>' : '') +
     Object.entries(extra).filter(([key]) => item[key]).map(([key, label]) =>
       '<section class="sb-detail-field"><h3>' + label + '</h3>' + markdown(item[key]) + '</section>').join('') +
-    attachments(item.assetIds) + storedCaptureAttachment(item) +
+    attachments(item.assetIds) + storedCaptureAttachment(item) + (wiki ? wikiDetails(item, params?.get('version')) : '') +
     '</div><div data-sb-editor hidden></div>' +
     '<details class="sb-related" data-sb-related><summary>相关内容 <span>' + relatedTo(item.id).length + '</span></summary>' +
     boardRelations(item) + '</details></article></section>';

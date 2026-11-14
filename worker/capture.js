@@ -1,4 +1,4 @@
-import { resourceKey } from '../site/self-board-data.js';
+import { isWorkshopWiki, resourceKey } from '../site/self-board-data.js';
 import { captureError, captureOptions, checkPortable, detachProjection, projectCapture, readStudio, sql, unpack, verifyCaptureState } from './capture-state.js';
 import { cleanupUploads, downloadCapture, filesApi, fileType, requestKey, sha256, uuid } from './capture-files.js';
 import { getPlanner } from './planner.js';
@@ -148,6 +148,9 @@ async function mutate(env, owner, rows, change) {
   const conflicts = rows.length > 1 && !affectsStudio;
   if (conflicts) throw captureError('invalid_batch');
   for (const row of rows) {
+    const wiki = row.native_collection === 'content' && isWorkshopWiki(JSON.parse(row.document));
+    if (wiki &&
+        ['archived', 'deleted', 'inbox'].includes(change.status)) throw captureError('archive_in_workshop', 409);
     const prior = unpack(row);
     const fields = { ...prior };
     for (const [key, limit] of [['title', 200], ['originalText', 40000], ['userNote', 12000]]) {
@@ -165,6 +168,9 @@ async function mutate(env, owner, rows, change) {
       const projection = projectCapture(state, row, change.target, fields);
       collection = projection.collection;
       document = projection.record;
+      if (wiki && !isWorkshopWiki(document) && state.relations.some(edge =>
+        edge.sourceType === 'discover' && edge.sourceId === row.id ||
+        edge.targetType === 'discover' && edge.targetId === row.id)) throw captureError('native_conflict', 409);
       target = change.target;
     } else if (status === 'archived' && collection) {
       if (state) detachProjection(state, row);

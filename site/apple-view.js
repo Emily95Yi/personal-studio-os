@@ -252,7 +252,7 @@ export function showEvent(app, event) {
     '<p>' + escapeHtml(eventTimeLabel(event)) + (event.allDay ? '' : ' · 东京时间') + '</p>' +
     (event.location ? '<p>' + escapeHtml(event.location) + '</p>' : '') +
     (event.notes ? '<p class="prose">' + escapeHtml(event.notes) + '</p>' : '') +
-    '<p>' + (studio || automatic ? eventStatusLabel(event) : '来自 ' + escapeHtml(event.sourceLabel || 'iCloud')) + '</p>' +
+    '<p>' + (studio || automatic ? eventStatusLabel(event) : '来自 ' + escapeHtml(event.sourceLabel || 'iCloud') + ' · 只读') + '</p>' +
     (feedback ? '<p>' + feedback + '</p>' : '') +
     (automatic ? caldavEventActions(event) : '') +
     (launch || download || flag ? '<div class="widget-actions">' + launch + download + flag + '</div>' : '');

@@ -151,7 +151,10 @@ export function calendarView({ params }) {
   const { mode, date } = calendarSelection(params);
   const from = params.get('from');
   const legend = Object.entries(calendarSourceLabels).map(([source, label]) =>
-    '<li data-calendar-source="' + source + '">' + label + '</li>').join('');
+    '<li data-calendar-source="' + source + '">' + label + (source === 'A' ? ' · 读写' : ' · 只读') + '</li>').join('');
+  const { caldav, feed } = connection;
+  const stale = caldav.stale && caldav.events.length || caldav.secondary?.stale && caldav.secondary.events?.length ||
+    !caldav.secondary && feed.status === 'stale' && feed.events.length;
   const selectedDate = dateKey(date);
   const scheduled = plannerRepository.remindersOn(selectedDate);
   const due = plannerRepository.dueReminders();
@@ -169,6 +172,7 @@ export function calendarView({ params }) {
     dateLink(todayDate(), mode, '今天', from) + dateLink(movePeriod(date, mode, 1), mode, '›', from, ' aria-label="下一时段"') +
     '</div></div><div class="calendar-period"><h2>' + (date.getUTCMonth() + 1) + '月</h2>' +
     '<ul class="calendar-legend" aria-label="日历颜色">' + legend + '</ul></div>' +
+    (stale ? '<p class="work-meta" role="status">部分 Apple 日历读取失败，显示上次成功读取的日程。</p>' : '') +
     calendarGrid(date, mode, from) + agenda(date, mode) +
     (lists ? '<div class="calendar-lists">' + lists + '</div>' : '');
 }

@@ -1,3 +1,4 @@
+import { boardContent, discoverCategory, isWorkshopWiki, isWorkshopWikiCategory } from './self-board-data.js';
 import { contentTitle, objectFor, studioStore } from './studio-data.js';
 import { plannerRepository, selfBoardIncludes, studioRepository, workshopRepository } from './repository.js';
 
@@ -84,7 +85,19 @@ export function collectionsAddress({ category = 'all', folder = '' } = {}) {
   return boardHref('collections') + (query.size ? '?' + query : '');
 }
 
+export function commonResourcesAddress(params) {
+  const query = params?.toString();
+  return href('workshop', 'common-resources') + (query ? '?' + query : '');
+}
+export function wikiAddress(id) { return href('workshop', 'common-resources', id); }
+
 export function discoverAddress(category, folderId, creating = false) {
+  if (isWorkshopWikiCategory(category)) {
+    const params = new URLSearchParams({ category });
+    if (folderId) params.set('folder', folderId);
+    if (creating) params.set('view', 'new');
+    return commonResourcesAddress(params);
+  }
   const query = new URLSearchParams(creating ? { view: 'new' } : undefined);
   if (category) query.set('category', category);
   if (folderId) query.set('folder', folderId);
@@ -129,6 +142,14 @@ function boardRoute(workspace, section, id, params) {
     return record && !record.deletedAt ? { ...base, section: topic ? 'discover' : section, type: 'board',
       tab: topic ? 'explorations' : undefined, entity, record, parent, parentLabel } : missing(parent, parentLabel);
   }
+  if (section === 'discover' && !id) {
+    const folder = studioStore.state.boardFolders?.find(row => row.id === params.get('folder'));
+    const category = params.get('category') || folder?.category;
+    if (isWorkshopWikiCategory(category) || (!category && ['exercises', 'knowledge'].includes(params.get('view')))) {
+      if (category) params.set('category', category);
+      return { redirect: commonResourcesAddress(params) };
+    }
+  }
   if (section === 'discover' && !id && params.get('view') === 'new') {
     return { ...base, type: 'board', view: 'new', parent: discoverAddress(params.get('category'), params.get('folder')),
       parentLabel: 'Discover' };
@@ -144,6 +165,7 @@ function boardRoute(workspace, section, id, params) {
   if (id && ['content', 'discover', 'experience', 'reflect-create'].includes(section)) {
     const record = studioRepository.get(id);
     if (record && !record.deletedAt && selfBoardIncludes(record, ['experience', 'reflect-create'].includes(section) ? section : undefined)) {
+      if (isWorkshopWiki(record)) return workshopWikiRoute(workspaces.workshop, record, params);
       return { ...base, type: 'content-detail', record, recordTitle: contentTitle(record) };
     }
   }
@@ -183,16 +205,24 @@ function readProjectRoute(collectionRoute, [projectId, section, eventId, ...rest
   const route = { ...collectionRoute, type: 'project', project, projectPath, projectLabel };
   if (!section) return route;
   if (rest.length || (eventId && section !== 'events')) return missing(href(...projectPath), projectLabel);
-  if (section === 'resources') return { redirect: href(...projectPath, 'common') };
+  if (['overview', 'linked-resources', 'tools'].includes(section) && !eventId) return { ...route, tab: section };
+  if (section === 'resources') return { redirect: href(...projectPath, 'common') + (params.size ? '?' + params : '') };
   if (section === 'common') return {
     ...route, tab: 'common', documentId: params.get('document'), versionId: params.get('version'),
   };
   if (section !== 'events') return missing(href(...projectPath), projectLabel);
-  if (!eventId) return { redirect: href(...projectPath) };
+  if (!eventId) return { redirect: href(...projectPath) + (params.size ? '?' + params : '') };
 
   const event = workshopRepository.getEvent(projectId, eventId);
   if (!event) return missing(href(...projectPath), projectLabel);
-  return { ...route, type: 'event', event, eventLabel: event.title };
+  return { ...route, type: 'event', event, eventLabel: event.title, params };
+}
+
+function workshopWikiRoute(workspace, record, params) {
+  const back = new URLSearchParams({ category: discoverCategory(boardContent(record)) });
+  if (record.folderId) back.set('folder', record.folderId);
+  return { workspaceId: 'workshop', workspace, type: 'content-detail', wiki: true, record, params,
+    recordTitle: contentTitle(record), parent: commonResourcesAddress(back), parentLabel: 'Common Resources' };
 }
 
 export function readRoute(hash) {
@@ -224,6 +254,23 @@ export function readRoute(hash) {
       if (board) return board;
     }
     if (!section) return { type: root === 'workshop' ? 'workshop-gallery' : 'overview', workspaceId: root, workspace };
+    if (root === 'workshop' && ['common-resources', 'tools', 'activities', 'dictionaries'].includes(section) && segments.length <= 3) {
+      const params = new URLSearchParams(query);
+      const base = { workspaceId: root, workspace, params, parent: href(root), parentLabel: 'Workshop' };
+      if (section === 'common-resources') {
+        if (!pageId) return { ...base, type: 'workshop-wiki', page: { label: 'Common Resources' } };
+        const record = objectFor(studioStore.state, 'discover', pageId);
+        return isWorkshopWiki(record) && !record.deletedAt ? workshopWikiRoute(workspace, record, params) :
+          missing(commonResourcesAddress(), 'Common Resources');
+      }
+      if (section === 'tools') {
+        if (!pageId) return { ...base, type: 'workshop-tools', page: { label: 'Interactive Tools' } };
+        const tool = objectFor(studioStore.state, 'tool', pageId);
+        return tool ? { ...base, type: 'workshop-tool', tool, page: { label: tool.title },
+          parent: href('workshop', 'tools'), parentLabel: 'Interactive Tools' } : missing(href('workshop', 'tools'), 'Interactive Tools');
+      }
+      if (!pageId) return { ...base, type: 'workshop-' + section, page: { label: section === 'activities' ? '活动筛选' : '标签与卡组' } };
+    }
     if (root === 'workshop' && section === 'import' && !pageId) {
       return { type: 'workshop-import', workspaceId: root, workspace };
     }
@@ -234,7 +281,7 @@ export function readRoute(hash) {
       const collection = workspace.collections[section];
       const route = { type: 'collection', workspaceId: root, workspace, collectionId: section, collection, params: new URLSearchParams(query) };
       if (root === 'workshop' && section === 'projects') {
-        if (segments.length === 2) return { type: 'workshop-gallery', workspaceId: root, workspace, redirect: href(root) };
+        if (segments.length === 2) return { ...route, type: 'workshop-gallery' };
         return readProjectRoute(route, segments.slice(2), new URLSearchParams(query));
       }
       if (segments.length === 2) return route;

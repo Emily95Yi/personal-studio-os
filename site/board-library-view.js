@@ -34,7 +34,7 @@ const link = (address, label, selected = false) => '<a href="' + esc(address) + 
 
 export function discoverTabs(tab) {
   return '<nav class="segmented sb-module-tabs library-discover-tabs" aria-label="Discover 板块">' +
-    link(discoverAddress(), 'Workshop Wiki', tab !== 'explorations') +
+    link(discoverAddress(), 'Resources', tab !== 'explorations') +
     link(explorationAddress(), 'Personal Explorations', tab === 'explorations') + '</nav>';
 }
 

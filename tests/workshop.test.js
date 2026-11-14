@@ -5,7 +5,7 @@ import { currentVersion, adoptVersion, emptyStudio, relationCandidates, relatedO
   saveEvent, saveProject, saveRelation, saveSession, sessionsFor, studioStore } from '../site/studio-data.js';
 import { importMigration, mapLegacyArchive, previewMigration, studioExport } from '../site/studio-migration.js';
 import { testArchive, testMapping } from '../site/studio-fixture.js';
-import { markdown, objectHref } from '../site/workshop-view.js';
+import { markdown, objectHref, workshopGallery } from '../site/workshop-view.js';
 
 function fixture() {
   return mapLegacyArchive(testArchive, testMapping);
@@ -138,7 +138,13 @@ test('existing routes still resolve, including Workshop aliases and Calendar', (
     const project = objectHref('project', transfer.projects[0]);
     const event = objectHref('event', transfer.events[0]);
     const discover = objectHref('discover', transfer.content[0]);
-    assert.equal(readRoute('#/workshop/projects').redirect, '#/workshop');
+    const workshop = workshopGallery(readRoute('#/workshop'));
+    assert.equal((workshop.match(/class="workspace-entry"/g) ?? []).length, 3);
+    assert.ok(workshop.includes('href="' + event + '"'));
+    const projectsRoute = readRoute('#/workshop/projects');
+    assert.equal(projectsRoute.type, 'workshop-gallery');
+    assert.match(workshopGallery(projectsRoute), /poster-grid/);
+    assert.match(workshopGallery(readRoute('#/workshop/projects?view=projects')), /project-grid/);
     assert.equal(readRoute(project + '/resources').redirect, project + '/common');
     assert.equal(readRoute(project + '/common').tab, 'common');
     assert.equal(readRoute(project + '/events').redirect, project);

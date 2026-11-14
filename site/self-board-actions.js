@@ -1,7 +1,7 @@
 import { escapeHtml as esc } from './html.js';
 import { boardContentHref, boardHref, boardSections, discoverAddress, readRoute } from './pages.js';
 import { boardContent, boardFolderPath, boardRecords, boardSection, boardTrashRecords, clearBoardTrash, contentTypes, developThought, discoverCategory, discoverDirectory,
-  initialDiscoverCategories, isPublished, markBoardContent, moveBoardContentToPinnedFolder, moveBoardFile, pinnedBoardFolders, reflectionColors,
+  initialDiscoverCategories, isPublished, isWorkshopWikiCategory, markBoardContent, moveBoardContentToPinnedFolder, moveBoardFile, pinnedBoardFolders, reflectionColors,
   relationTypes, removeBoardFolder, removeReflectionLabel, resourceKey, resourcesCategory, saveBoardContent, saveBoardFolder,
   saveReflectionLabel, toggleBoardFolderPin } from './self-board-data.js';
 import { boardOptions, boardResults, searchResults, setReflectionOrder } from './self-board-view.js';
@@ -154,8 +154,8 @@ function captureFields(mode, { importing, labels, collectionCategory, linkDestin
       .map(([id, section]) => [id, section.label])), collection ? 'collections' : 'discover') +
     group('discover', captureOptions('discoverArea', 'Discover 板块', { wiki: 'Workshop Wiki', personal: 'Personal Explorations' },
       linkDestination === 'personal' ? 'personal' : 'wiki') +
-      group('wiki', captureOptions('discoverCategory', 'Wiki 分类',
-        Object.fromEntries(initialDiscoverCategories.map(([name]) => [name, name])), resourcesCategory) +
+      group('wiki', captureOptions('discoverCategory', '资源分类',
+        Object.fromEntries(initialDiscoverCategories.filter(([name]) => !isWorkshopWikiCategory(name)).map(([name]) => [name, name])), resourcesCategory) +
         '<div data-capture-folder>' + select('folderId', '文件夹（可选）',
           folderOptions(folders, categoryFolders(folders, resourcesCategory)), resourceFolder) + '</div>') +
       personalFields()) + collectionFields();
@@ -164,7 +164,7 @@ function captureFields(mode, { importing, labels, collectionCategory, linkDestin
 export function initBoardActions(app, render) {
   const open = id => { location.hash = boardContentHref(id); };
   const wikiDrafts = new Map();
-  let lastWiki = discoverAddress();
+  let lastResources = discoverAddress();
   function refresh(focusId) {
     const opened = new Set([...app.querySelectorAll('[data-sb-card] > details[open]')]
       .map(details => details.parentElement.dataset.sbCard));
@@ -409,7 +409,7 @@ export function initBoardActions(app, render) {
     const labels = studioStore.state.reflectionLabels ?? [];
     const chooseCategory = discover && (!creating || !category);
     const categoryList = 'sb-category-' + (item.id || 'new');
-    const categories = chooseCategory ? discoverDirectory(boardRecords(studioStore.state, true), studioStore.state.boardFolders) : [];
+    const categories = chooseCategory ? discoverDirectory(boardRecords(studioStore.state, true), studioStore.state.boardFolders).filter(row => !isWorkshopWikiCategory(row.name)) : [];
     const categoryField = chooseCategory ? field('discoverCategory', '分类', discoverCategory(item),
       'list="' + esc(categoryList) + '" required maxlength="80"') +
       '<datalist id="' + esc(categoryList) + '">' + categories.map(({ name }) => '<option value="' + esc(name) + '"></option>').join('') +
@@ -445,6 +445,7 @@ export function initBoardActions(app, render) {
             input.folderId = folderId || '';
           } else if (data.get('discoverCategory').trim() !== discoverCategory(item)) {
             input.discoverCategory = data.get('discoverCategory').trim();
+            if (isWorkshopWikiCategory(input.discoverCategory)) throw new Error('请从 Workshop 管理共通资源。');
             input.folderId = '';
           }
           input.sourceInfo = data.get('sourceInfo').trim();
@@ -792,10 +793,10 @@ export function initBoardActions(app, render) {
   return route => {
     if (route.section === 'search') app.querySelector('[data-sb-search] input').focus({ preventScroll: true });
     if (route.section === 'discover' && route.tab === 'explorations') {
-      const wikiTab = app.querySelector('.library-discover-tabs a');
-      if (wikiTab) wikiTab.href = lastWiki;
+      const resourcesTab = app.querySelector('.library-discover-tabs a');
+      if (resourcesTab) resourcesTab.href = lastResources;
     } else if (route.type === 'board' && route.section === 'discover') {
-      lastWiki = location.hash || discoverAddress();
+      lastResources = location.hash || discoverAddress();
     }
     if (route.view !== 'new') return;
     const host = app.querySelector('[data-sb-create-editor]');
@@ -803,7 +804,7 @@ export function initBoardActions(app, render) {
       editContent({ type: 'article', host, cancelTo: boardHref('writing') });
       return;
     }
-    const category = route.params.get('category') || undefined;
+    const category = route.params.get('category') || resourcesCategory;
     const folders = studioStore.state.boardFolders ?? [];
     const folder = folders.find(row => row.id === route.params.get('folder') && row.category === category);
     const directory = discoverDirectory(boardRecords(studioStore.state), folders);

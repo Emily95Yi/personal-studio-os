@@ -6,7 +6,7 @@ import { icon } from './icons.js';
 import { boardContentHref, boardSections, collectionItemAddress, explorationAddress, href, inboxAddress } from './pages.js';
 import { connection } from './private-api.js';
 import { plannerRepository } from './repository.js';
-import { boardFolderPath, boardRecords, boardSection, discoverCategory } from './self-board-data.js';
+import { boardFolderPath, boardRecords, boardSection, discoverCategory, isWorkshopWiki } from './self-board-data.js';
 import { contentTitle, studioStore } from './studio-data.js';
 
 const inboxGroup = 'Inbox';
@@ -27,7 +27,7 @@ export function manifestationTargets(state = studioStore.state) {
     if (section === 'discover') {
       const category = discoverCategory(record);
       const folder = wikiFolders.find(row => row.id === record.folderId && row.category === category);
-      path.push('Workshop Wiki', category, ...(folder ? boardFolderPath(wikiFolders, folder).map(row => row.title) : []));
+      path.push(isWorkshopWiki(record) ? 'Common Resources' : 'Resources', category, ...(folder ? boardFolderPath(wikiFolders, folder).map(row => row.title) : []));
     }
     add('content:' + record.id, boardSections[section].label, boardContentHref(record.id), ...path, contentTitle(record));
   }
