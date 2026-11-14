@@ -2,16 +2,16 @@ import { workshopTools } from './workshop-external-tools.js';
 import { escapeHtml as esc, safeUrl } from './html.js';
 import { studioDialog } from './studio-dialog.js';
 import { commonResourcesAddress, readRoute, wikiAddress } from './pages.js';
-import { contentTitle, addAsset, adoptVersion, currentVersion, eventSections, imageTypes, maxAssetBytes, projectSections,
-  objectFor, relationCandidates, relatedObjects, removeRelation, reusableFor, saveDiscover, saveEvent, saveProject, saveRelation,
+import { contentTitle, addAsset, adoptVersion, currentVersion, imageTypes, maxAssetBytes, projectSections,
+  objectFor, relationCandidates, relatedObjects, removeRelation, reusableFor, saveDiscover, saveProject, saveRelation,
   saveSession, sessionsFor, studioStore, studioTags, validImage } from './studio-data.js';
 import { boardContent, canAddSubfolder, discoverCategory, isWorkshopWikiCategory, saveBoardFolder, toggleBoardFolderPin,
   workshopWikiCategories } from './self-board-data.js';
-import { cardRoles, eventFormats, linkWiki, publicationProjection, saveCardSet, saveInteractiveTool, saveWiki, saveWorkshopTag,
+import { linkWiki, publicationProjection, saveCardSet, saveInteractiveTool, saveWiki, saveWorkshopTag,
   setWikiStatus, toolTypes, toolVisibility, wikiRecords, wikiStatus, wikiStatuses, workshopLinks } from './workshop-library.js';
-import { documentVersion, eventFields, objectHref, objectLabels, timestamp } from './workshop-view.js';
+import { documentVersion, objectHref, objectLabels, timestamp } from './workshop-view.js';
 
-const recordTypes = { project: 'Project', event: 'Event', discover: '资料' };
+const recordTypes = { project: 'Project', discover: '资料' };
 const textField = (key, label, value, options = '') =>
   '<label>' + label + '<input name="' + key + '" value="' + esc(value ?? '') + '" ' + options + '></label>';
 const textarea = (key, label, value, rows = 6) =>
@@ -38,9 +38,9 @@ export function retainedFiles(ids = []) {
   }).join('');
 }
 
-function coverFields(item, isEvent) {
-  const urlKey = isEvent ? 'posterUrl' : 'coverUrl';
-  const label = isEvent ? '海报' : '封面';
+function coverFields(item) {
+  const urlKey = 'coverUrl';
+  const label = '封面';
   return '<div class="work-form-pair">' + textField(urlKey, label + '链接', item[urlKey], 'placeholder="https://"') +
     fileField(label + '文件', 'cover', imageTypes.join(',')) + '</div>' +
     (item.coverAssetId ? '<label class="work-check"><input type="checkbox" name="clearCover">移除已上传图片</label>' : '');
@@ -61,39 +61,10 @@ function recordTags(item) {
     (item.tags?.length ? '<p class="work-meta">原标签 · ' + esc(item.tags.join('、')) + '</p>' : '') + '</fieldset>';
 }
 
-function activityFields(item) {
-  const cards = studioStore.state.cardSets;
-  return '<fieldset class="work-choices"><legend>活动形式</legend>' +
-    Object.entries(eventFormats).map(([id, label]) => checkField('format', id, label, item.formats?.includes(id))).join('') +
-    '</fieldset><fieldset class="work-choices"><legend>本场使用的卡组</legend>' + cards.map(card => {
-      const use = item.cardUses?.find(row => row.cardSetId === card.id);
-      return '<div class="work-form-pair">' + selectField('role-' + esc(card.id), esc(card.title),
-        [['', '未使用'], ...Object.entries(cardRoles)], use?.role ?? '') +
-        textField('note-' + esc(card.id), '使用说明', use?.usageNote, 'maxlength="1000"') + '</div>';
-    }).join('') +
-    textField('cardTitle', '登记并使用新卡组', '', 'maxlength="80"') +
-    '<div class="work-form-pair">' + selectField('cardRole', '新卡组角色', Object.entries(cardRoles), 'primary') +
-    textField('cardNote', '使用说明', '', 'maxlength="1000"') + '</div></fieldset>';
-}
-
-function readActivity(state, data) {
-  const uses = state.cardSets.flatMap(card => {
-    const role = data.get('role-' + card.id);
-    return Object.hasOwn(cardRoles, role) ? [{ cardSetId: card.id, role, usageNote: data.get('note-' + card.id).trim() }] : [];
-  });
-  const title = data.get('cardTitle').trim();
-  if (title) {
-    const card = saveCardSet(state, title);
-    if (uses.some(row => row.cardSetId === card.id)) throw new Error('该卡组已选择，请在对应行修改角色。');
-    uses.push({ cardSetId: card.id, role: data.get('cardRole'), usageNote: data.get('cardNote').trim() });
-  }
-  return { formats: data.getAll('format'), cardUses: uses };
-}
-
-function recordFields(type, item, projectId) {
+function recordFields(type, item) {
   const title = textField('title', '标题', item.title, 'required maxlength="200" autofocus');
   const tags = textField('tags', '标签', item.tags?.join('，'), 'placeholder="用逗号分隔"');
-  if (type === 'project') return title + textarea('description', '简介', item.description, 2) + recordTags(item) + coverFields(item, false);
+  if (type === 'project') return title + textarea('description', '简介', item.description, 2) + recordTags(item) + coverFields(item);
   if (type === 'discover') {
     return title + '<div class="work-form-pair">' + textField('contentType', '内容类型', item.contentType ?? item.category,
       'list="discover-types" placeholder="可选"') +
@@ -101,16 +72,9 @@ function recordFields(type, item, projectId) {
         .map(type => option(type, type)).join('') + '</datalist>' + tags + '</div>' +
       textarea('body', '正文 · Markdown', item.body ?? item.description, 8) +
       '<div class="work-form-pair">' + textField('sourceInfo', '来源说明', item.sourceInfo) +
-      textField('sourceUrl', '来源链接', item.sourceUrl, 'placeholder="https://"') + '</div>' + coverFields(item, false) +
+      textField('sourceUrl', '来源链接', item.sourceUrl, 'placeholder="https://"') + '</div>' + coverFields(item) +
       retainedFiles(item.assetIds) + fileField('附件', 'attachments', '', true);
   }
-  const reusable = item.id ? [] : reusableFor(studioStore.state, projectId);
-  return title + '<div class="work-form-pair">' + Object.entries(eventFields).map(([key, label]) =>
-    textField(key, label, item[key], key === 'date' ? 'type="date"' : key === 'attendeeCount' ?
-      'type="number" min="0" step="1"' : '')).join('') + '</div>' + recordTags(item) + activityFields(item) + coverFields(item, true) +
-    (reusable.length ? '<fieldset class="work-choices"><legend>采用 Project 共通内容</legend>' + reusable.map(session =>
-      '<label class="work-check"><input type="checkbox" name="adopt" value="' + esc(session.id) + '">' +
-      esc(currentVersion(session).title) + '</label>').join('') + '</fieldset>' : '');
 }
 
 export async function fileInput(file, imageOnly = false) {
@@ -162,11 +126,10 @@ export function initWorkshopActions(app, render) {
 
   function editRecord(type, edit, route) {
     const item = edit ? owner(route).item : {};
-    const projectId = route.project?.id;
-    dialog((edit ? '编辑 ' : '新建 ') + recordTypes[type], recordFields(type, item, projectId), async data => {
+    dialog((edit ? '编辑 ' : '新建 ') + recordTypes[type], recordFields(type, item), async data => {
       const cover = await fileInput(data.get('cover'), true);
       const files = await attachmentInputs(data);
-      const coverUrl = data.get(type === 'event' ? 'posterUrl' : 'coverUrl').trim();
+      const coverUrl = data.get('coverUrl').trim();
       if (coverUrl && !safeUrl(coverUrl)) throw new Error('图片链接须使用 HTTPS 或站内路径。');
       return studioStore.change(state => {
         const tags = data.has('tags') ? studioTags(data.get('tags')) : item.tags;
@@ -175,12 +138,6 @@ export function initWorkshopActions(app, render) {
         const coverAssetId = cover ? addAsset(state, cover) : data.has('clearCover') ? '' : item.coverAssetId;
         const common = { id: item.id, title: data.get('title'), ...(tags && { tags }), ...(tagIds && { tagIds }), coverAssetId };
         if (type === 'project') return saveProject(state, { ...common, description: data.get('description'), coverUrl });
-        if (type === 'event') {
-          const fields = Object.fromEntries(Object.keys(eventFields).map(key => [key, data.get(key).trim()]));
-          return saveEvent(state, { ...common, ...fields, ...readActivity(state, data), projectId, posterUrl: coverUrl,
-            ...(item.workshopPublication && (common.title.trim() !== item.title || fields.date !== (item.date || '') ||
-              fields.theme !== (item.theme || '')) && { workshopPublication: undefined }) }, data.getAll('adopt'));
-        }
         return saveDiscover(state, { ...common, contentType: data.get('contentType').trim(),
           body: data.get('body'), sourceInfo: data.get('sourceInfo'), sourceUrl: data.get('sourceUrl').trim(),
           coverUrl, assetIds: withAssets(state, data, files) });
@@ -191,13 +148,10 @@ export function initWorkshopActions(app, render) {
     });
   }
 
-  function editSession(id, { type, item }, reopen, view) {
+  function editSession(id, { type, item }, reopen) {
     const session = id && sessionsFor(studioStore.state, type, item.id).find(row => row.id === id);
     const current = currentVersion(session);
-    const filter = { flow: ['flow', 'facilitation', 'questions', 'preparation'], materials: ['visual', 'artifact'],
-      review: ['notes', 'review', 'session'] }[view];
-    const sections = type === 'event' ? Object.fromEntries(Object.entries(eventSections)
-      .filter(([key]) => !filter || filter.includes(key))) : projectSections;
+    const sections = projectSections;
     const section = session?.section;
     const select = !section ? '<label>内容类型<select name="section" required><option value="">请选择</option>' +
       Object.entries(sections).map(([key, label]) => option(key, label)).join('') + '</select></label>' : '';
@@ -263,7 +217,15 @@ export function initWorkshopActions(app, render) {
     let versionId;
     const form = dialog('比较 Project 版本', fields, data =>
       studioStore.change(state => adoptVersion(state, event.id, data.get('source'), versionId)),
-    saved => refresh('[data-work-document="' + CSS.escape(saved.id) + '"] summary', [...reopen, saved.id]), '采用此版本', 'work-compare');
+    saved => {
+      const target = '[data-event-document="' + CSS.escape(saved.id) + '"]';
+      refresh(target + ' > summary', reopen);
+      const details = app.querySelector(target);
+      if (details) {
+        details.open = true;
+        details.scrollIntoView({ block: 'nearest' });
+      }
+    }, '采用此版本', 'work-compare');
     if (sourceId) form.elements.source.value = sourceId;
     const compare = () => {
       const key = form.elements.source.value;
@@ -453,7 +415,7 @@ export function initWorkshopActions(app, render) {
     const route = readRoute(location.hash);
     const reopen = [...app.querySelectorAll('[data-work-document][open]')].map(node => node.dataset.workDocument);
     if (workRecord) editRecord(workRecord, button.hasAttribute('data-record-edit'), route);
-    if (workSession !== undefined) editSession(workSession, owner(route), reopen, route.params?.get('view'));
+    if (workSession !== undefined) editSession(workSession, owner(route), reopen);
     if (workRelation !== undefined) editRelation(workRelation, owner(route), reopen);
     if (workAdopt !== undefined) compareVersions(route.event, workAdopt, reopen);
     const { workWikiEdit, workWikiStatus, workWikiFolder, workLink, workPin, workToolEdit, workDictionary, workPublish, workUnpublish } = button.dataset;

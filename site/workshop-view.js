@@ -1,14 +1,15 @@
 import { escapeHtml as esc, safeUrl } from './html.js';
 import { icon } from './icons.js';
-import { boardContentHref, collectionItemAddress, commonResourcesAddress, explorationAddress, href, wikiAddress } from './pages.js';
+import { boardContentHref, collectionItemAddress, commonResourcesAddress, explorationAddress, href, wikiAddress, workshopEventAddress } from './pages.js';
 import { workshopRepository } from './repository.js';
-import { contentTitle, currentVersion, eventSections, imageTypes, objectFor, projectSections, relatedObjects,
-  reusableFor, sessionsFor, studioStore } from './studio-data.js';
+import { contentTitle, currentVersion, imageTypes, objectFor, projectSections, relatedObjects,
+  sessionsFor, studioStore } from './studio-data.js';
 
 import { isWorkshopWiki } from './self-board-data.js';
 import { tagsFor } from './workshop-library.js';
-import { galleryLayout, orderedProjects } from './workshop-gallery-layout.js';
-import { activityMetadata, linkedWorkshopPanel, publicationPanel, workshopTabs } from './workshop-library-view.js';
+import { groupEvents, legacyProjectOrder, orderedEvents, orderedProjects, projectKey } from './workshop-event-data.js';
+import { creationForm, eventStatus, orderControls } from './workshop-event-view.js';
+import { linkedWorkshopPanel, workshopTabs } from './workshop-library-view.js';
 
 export const objectLabels = { project: 'Project', event: 'Event', discover: 'Self-board', topic: 'Personal Explorations',
   'collection-item': 'Collections', tool: 'Interactive Tool' };
@@ -21,7 +22,7 @@ export function objectHref(type, item) {
   if (type === 'tool') return href('workshop', 'tools', item.id);
   if (type === 'topic') return explorationAddress(item.id);
   if (type === 'collection-item') return collectionItemAddress(item.id);
-  if (type === 'event') return href('workshop', 'projects', item.projectId, 'events', item.id);
+  if (type === 'event') return workshopEventAddress(item.id);
   return href('workshop', 'projects', item.id);
 }
 
@@ -141,11 +142,6 @@ function action(label, data) {
   return '<button type="button" class="action-button" ' + data + '>' + esc(label) + '</button>';
 }
 
-function linkIcon(name, label, address) {
-  return '<a class="header-icon work-icon" href="' + address + '" title="' + esc(label) + '" aria-label="' + esc(label) +
-    '">' + icon(name) + '</a>';
-}
-
 function cover(kind, url) {
   return '<div class="gallery-cover cover-' + kind + '">' +
     (url ? '<img src="' + esc(url) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' :
@@ -155,14 +151,15 @@ function cover(kind, url) {
 function galleryCard(type, item) {
   const detail = type === 'event' ? item.date : item.description;
   return '<a class="gallery-card" href="' + objectHref(type, item) + '">' +
-    cover(type, imageUrl(item, type === 'event' ? 'posterUrl' : 'coverUrl')) +
+    cover(type, imageUrl(item, type === 'event' ? 'posterUrl' : 'coverUrl') || imageUrl(item)) +
     '<div class="gallery-copy"><strong>' + esc(item.title) + '</strong>' +
-    (detail ? '<p>' + esc(detail) + '</p>' : '') + '</div></a>';
+    (detail ? '<p>' + esc(detail) + '</p>' : '') + (type === 'event' ? '<p class="event-card-tags">' +
+      esc([...tagsFor(studioStore.state, item).slice(0, 3).map(tag => '#' + tag), eventStatus(item)].filter(Boolean).join(' · ')) + '</p>' : '') + '</div></a>';
 }
 
 function workshopEntries() {
   const entries = [
-    [href('workshop', 'projects'), 'Projects', 'workshop'],
+    [href('workshop', 'projects') + '?view=projects', 'Projects', 'workshop'],
     [commonResourcesAddress(), 'Common Resources', 'file'],
     [href('workshop', 'tools'), 'Interactive Tools', 'auto'],
   ];
@@ -171,56 +168,84 @@ function workshopEntries() {
     '</span><span class="entry-label">' + label + '</span></a>').join('') + '</nav>';
 }
 
-function projectEventBoard(projects, layout) {
-  if (!projects.length) return '<p class="work-empty">暂无 Project。</p>';
-  const canMove = projects.length > 1;
-  return '<p class="visually-hidden" role="status" data-project-order-status></p>' +
-    '<div class="project-board" data-project-board="' + layout + '">' + projects.map((project, index) => {
-      const events = workshopRepository.listEvents(project.id)
-        .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-      const title = esc(project.title);
-      const titleId = 'project-panel-' + encodeURIComponent(project.id);
-      const controls = canMove ? '<div class="work-actions project-panel-controls">' +
-        smallAction('up', '上移 ' + project.title, 'data-project-move="earlier"' + (index === 0 ? ' disabled' : '')) +
-        smallAction('up', '下移 ' + project.title, 'data-project-move="later"' + (index === projects.length - 1 ? ' disabled' : '')) +
-        '<span class="project-drag-handle" draggable="true" data-project-drag title="拖动板块排序">' + icon('grip') + '</span></div>' : '';
-      return '<section class="project-panel" data-project-panel="' + esc(project.id) + '" aria-labelledby="' + titleId + '">' +
-        '<div class="project-panel-header"><h3 id="' + titleId + '"><a href="' + objectHref('project', project) + '">' + title + '</a></h3>' +
-        controls + '</div>' +
-        (events.length ? '<div class="gallery-grid poster-grid">' + events.map(event => galleryCard('event', event)).join('') + '</div>' :
-          '<p class="work-empty">暂无 Event</p>') + '</section>';
-    }).join('') + '</div>';
-}
-
-function galleryLayoutActions(layout) {
-  return '<div class="segmented project-layout-options" role="group" aria-label="Project 板块排列">' +
-    [['stack', '上下排列'], ['columns', '左右排列']].map(([value, label]) =>
-      '<button type="button" data-gallery-layout="' + value + '" aria-pressed="' + (layout === value) + '">' + label + '</button>'
-    ).join('') + '</div>';
+function eventCards(events, kind, projectId = '', { sort = false, projects = [], query = '' } = {}) {
+  const matches = events.filter(event => [event.title, event.theme, ...tagsFor(studioStore.state, event)]
+    .join(' ').toLocaleLowerCase().includes(query));
+  const grid = '<div class="gallery-grid poster-grid" data-event-group="' + esc(projectId) + '">';
+  return grid + matches.map((event, i) => {
+    const move = sort && kind ? orderControls(kind, event, matches, i, { projectId }) : '';
+    const group = sort && projects.length ? '<label class="event-group-picker"><span class="visually-hidden">移动 ' +
+      esc(event.title) + ' 到 Project</span><select data-event-move-project data-id="' + esc(event.id) + '">' +
+      [{ id: '', title: '未分组' }, ...projects].map(project => '<option value="' + esc(project.id) + '"' +
+        (project.id === projectKey(event) ? ' selected' : '') + '>' + esc(project.title) + '</option>').join('') + '</select></label>' : '';
+    return '<div class="event-card-wrap"' + (sort && kind ? ' data-order-item="' + kind + '" data-id="' + esc(event.id) + '"' : '') +
+      '>' + galleryCard('event', event) + (move || group ? '<div class="event-card-tools">' + move + group + '</div>' : '') + '</div>';
+  }).join('') + (!matches.length ? '<p class="work-empty">暂无 Event</p>' : '') + '</div>';
 }
 
 export function workshopGallery({ collectionId, params }) {
-  const projects = workshopRepository.listProjects();
+  const state = studioStore.state;
+  const projectListRows = workshopRepository.listProjects();
+  const legacyOrder = legacyProjectOrder(projectListRows);
+  const projects = orderedProjects(projectListRows, legacyOrder);
   const projectList = params?.get('view') === 'projects';
-  const path = href('workshop', 'projects');
-  const layout = galleryLayout();
-  const gallery = projectList
-    ? (projects.length ? '<div class="gallery-grid project-grid">' + projects.map(project => galleryCard('project', project)).join('') +
-      '</div>' : '<p class="work-empty">暂无 Project</p>')
-    : projectEventBoard(orderedProjects(projects), layout);
-  const title = projectList ? 'Project 列表' : 'Events';
-  return (collectionId ? '' : workshopEntries()) + '<section aria-label="' + title + '">' +
-    '<div class="section-heading work-heading workshop-actions"><h2>' + title + '</h2>' +
-    '<div class="work-actions">' + (!projectList && projects.length > 1 ? galleryLayoutActions(layout) : '') +
-    '<a class="return-link" href="' + (projectList ? path : path + '?view=projects') + '">' +
-    (projectList ? '查看 Events' : 'Project 列表') + '</a>' +
-    '<a class="return-link" href="' + href('workshop', 'activities') + '">活动筛选</a>' +
-    '<a class="return-link" href="' + href('workshop', 'dictionaries') + '">标签与卡组</a>' + linkIcon('import', '数据迁移', href('workshop', 'import')) +
-    action('新建 Project', 'data-work-record="project"') + '</div></div>' + gallery + '</section>';
+  const grouped = params?.get('view') === 'grouped';
+  const sort = params?.get('order') === 'manual';
+  const q = params?.get('q') ?? '';
+  const path = projectList ? href('workshop', 'projects') : collectionId ? href('workshop', 'projects') : href('workshop');
+  const address = (view, reorder = sort) => {
+    const query = new URLSearchParams();
+    if (view) query.set('view', view);
+    if (reorder) query.set('order', 'manual');
+    if (q.trim() && !reorder && view !== 'projects') query.set('q', q);
+    return path + (query.size ? '?' + query : '');
+  };
+  const settings = '<details class="workshop-menu"><summary class="header-icon" title="Workshop 设置" aria-label="Workshop 设置">' +
+    icon('settings') + '</summary><div><a href="' + href('workshop', 'projects') + '?view=projects">Projects</a>' +
+    '<a href="' + href('workshop', 'dictionaries') + '">标签与卡组</a><a href="' + href('workshop', 'import') +
+    '">数据迁移</a>' + (legacyOrder.length ? '<button class="text-button" type="button" data-event-import-order>同步本机 Project 排序</button>' : '') +
+    '</div></details>';
+  const tabs = projectList ? '<a class="return-link" href="' + href('workshop') + '">全部 Events</a>' :
+    workshopTabs([['all', '全部', address('')], ['grouped', '按 Project 分组', address('grouped')]],
+      grouped ? 'grouped' : 'all', 'Event 排列');
+  const heading = '<div class="section-heading work-heading workshop-actions"><h2>' + (projectList ? 'Projects' : 'Events') +
+    '</h2><div class="work-actions">' +
+    (projectList ? smallAction('add', '新建 Project', 'data-work-record="project"') :
+      smallAction('add', '新建 Event', 'data-event-new aria-expanded="false"') +
+      smallAction('search', '搜索 Events', 'data-event-search-toggle aria-expanded="' + Boolean(q) + '"')) + settings + '</div></div>' +
+    '<div class="event-gallery-controls">' + tabs + '<a class="header-icon' + (sort ? ' event-order-active' : '') +
+    '" href="' + esc(address(projectList ? 'projects' : grouped ? 'grouped' : '', !sort)) +
+    '" aria-label="' + (sort ? '完成排序' : '手动排序') + '" title="' + (sort ? '完成排序' : '手动排序') + '">' +
+    icon(sort ? 'check' : 'grip') + '</a></div>';
+  const search = projectList ? '' : '<form class="work-filters event-gallery-search" data-work-filter="' + path +
+    '" data-event-search' + (q ? '' : ' hidden') + '><input name="q" type="search" aria-label="搜索 Events" placeholder="搜索 Events" value="' +
+    esc(q) + '">' + (grouped ? '<input type="hidden" name="view" value="grouped">' : '') +
+    '<button type="submit" class="action-button secondary">搜索</button><a class="return-link" href="' + href('workshop', 'activities') +
+    '">高级筛选</a></form>';
+  const query = q.trim().toLocaleLowerCase();
+  let gallery;
+  if (projectList) {
+    gallery = projects.length ? '<div class="gallery-grid project-grid">' + projects.map((project, i) =>
+      '<div class="event-card-wrap" data-order-item="project" data-id="' + esc(project.id) + '">' + galleryCard('project', project) +
+      (sort ? orderControls('project', project, projects, i) : '') + '</div>').join('') + '</div>' :
+      '<p class="work-empty">暂无 Project</p>';
+  } else if (grouped) {
+    gallery = '<div class="project-board event-project-board">' + [...projects, { id: '', title: '未分组' }].map((project, i) => {
+      const name = project.id ? '<a href="' + objectHref('project', project) + '">' + esc(project.title) + '</a>' : esc(project.title);
+      return '<section class="project-panel" data-event-panel="' + esc(project.id) + '"' +
+        (project.id && sort ? ' data-order-item="project" data-id="' + esc(project.id) + '"' : '') + '>' +
+        '<div class="project-panel-header"><h3>' + name + '</h3>' + (project.id && sort ? orderControls('project', project, projects, i) : '') +
+        '</div>' + eventCards(groupEvents(state, project.id), 'group-event', project.id, { sort, projects, query }) + '</section>';
+    }).join('') + '</div>';
+  } else {
+    gallery = eventCards(orderedEvents(state), 'event', '', { sort, projects, query });
+  }
+  return (collectionId ? '' : workshopEntries()) + '<section class="event-workspace" data-event-gallery>' + heading +
+    (!projectList ? creationForm(state) : '') + search + '<p class="event-save-status" data-order-status role="status"></p>' + gallery + '</section>';
 }
 
 export function projectOverview({ project, projectPath, tab = 'events', documentId, versionId }) {
-  const events = workshopRepository.listEvents(project.id);
+  const events = groupEvents(studioStore.state, project.id);
   const path = href(...projectPath);
   const nav = workshopTabs([
     ['overview', 'Overview', path + '/overview'], ['events', 'Events', path],
@@ -229,7 +254,7 @@ export function projectOverview({ project, projectPath, tab = 'events', document
   ], tab, 'Project 视图');
   const actionPanel = '<div class="work-actions">' +
     smallAction('edit', '编辑 Project', 'data-work-record="project" data-record-edit') +
-    (tab === 'common' ? action('新建文档', 'data-work-session') : tab === 'events' ? action('新建 Event', 'data-work-record="event"') : '') +
+    (tab === 'common' ? action('新建文档', 'data-work-session') : tab === 'events' ? smallAction('add', '新建 Event', 'data-event-new aria-expanded="false"') : '') +
     '</div>';
   const state = studioStore.state;
   const tags = tagsFor(state, project);
@@ -239,53 +264,17 @@ export function projectOverview({ project, projectPath, tab = 'events', document
     (eventTags.length ? '<p class="work-meta">Event 标签汇总 · ' + esc(eventTags.join('、')) + '</p>' : '');
   const gallery = '<p><a class="return-link" href="' + href('workshop', 'activities') + '?' +
     new URLSearchParams({ project: project.id }) + '">筛选本 Project 的活动</a></p>' +
-    (events.length ? '<div class="gallery-grid poster-grid">' + events.map(event => galleryCard('event', event)).join('') +
-      '</div>' : '<p class="work-empty">暂无 Event</p>');
+    eventCards(events);
   const panels = {
-    overview: metadata + '<div class="work-reading">' + documents('project', project.id, { sectionsOnly: ['overview'] }) + '</div>',
+    overview: metadata + '<div class="work-reading">' + projectDocuments(project.id, { sectionsOnly: ['overview'] }) + '</div>',
     events: (project.description ? '<p class="page-note">' + esc(project.description) + '</p>' : '') + gallery,
-    common: '<div class="work-reading">' + documents('project', project.id, { documentId, versionId }) +
+    common: '<div class="work-reading">' + projectDocuments(project.id, { documentId, versionId }) +
       relatedPanel('project', project.id, { workshop: false }) + '</div>',
     'linked-resources': linkedWorkshopPanel('project', project, 'wiki'),
     tools: linkedWorkshopPanel('project', project, 'tool'),
   };
-  return '<div class="section-heading work-heading workshop-actions">' + nav + actionPanel + '</div>' + panels[tab];
-}
-
-export function eventDetail({ event, params }) {
-  const poster = imageUrl(event, 'posterUrl');
-  const fields = Object.entries(eventFields).filter(([key]) => event[key] != null && event[key] !== '')
-    .map(([key, label]) => '<div><dt>' + label + '</dt><dd>' + esc(event[key]) + '</dd></div>').join('');
-  const tabs = [['overview', 'Overview'], ['flow', 'Flow'], ['materials', 'Materials & Cards'],
-    ['resources', 'Resources'], ['review', 'Review'], ['publish', 'Publish']];
-  const requested = params?.get('view');
-  const tab = tabs.some(([key]) => key === requested) ? requested : 'overview';
-  const path = objectHref('event', event);
-  const state = studioStore.state;
-  const tags = tagsFor(state, event);
-  const overview = '<div class="event-hero' + (poster ? ' has-poster' : '') + '">' +
-    (poster ? '<img class="event-poster" src="' + esc(poster) + '" alt="活动海报" referrerpolicy="no-referrer">' : '') +
-    '<div><div class="section-heading work-heading"><h2>Overview</h2>' +
-    smallAction('edit', '编辑 Event', 'data-work-record="event" data-record-edit') + '</div>' +
-    (fields ? '<dl class="event-fields">' + fields + '</dl>' : '') +
-    (tags.length ? '<p class="work-meta">Event 标签 · ' + esc(tags.join('、')) + '</p>' : '') + '</div></div>';
-  const docs = (sectionsOnly, title = '本场文档') => '<div class="work-reading"><div class="section-heading work-heading"><h2>' +
-    title + '</h2><div class="work-actions">' +
-    (reusableFor(state, event.projectId).length ? smallAction('link', '采用 Project 共通内容', 'data-work-adopt') : '') +
-    action('新建文档', 'data-work-session') + '</div></div>' +
-    (documents('event', event.id, { sectionsOnly }) || '<p class="work-empty">暂无文档。</p>') + '</div>';
-  const panels = {
-    overview: () => overview + docs(undefined, '全部本场文档'),
-    flow: () => docs(['flow', 'facilitation', 'questions', 'preparation']),
-    materials: () => '<div class="work-actions">' + smallAction('edit', '编辑卡组与活动形式', 'data-work-record="event" data-record-edit') +
-      '</div>' + activityMetadata(state, event) + docs(['visual', 'artifact']),
-    resources: () => linkedWorkshopPanel('event', event, 'wiki') + linkedWorkshopPanel('event', event, 'tool') +
-      relatedPanel('event', event.id, { workshop: false }),
-    review: () => docs(['notes', 'review', 'session']),
-    publish: () => publicationPanel('event', event),
-  };
-  return workshopTabs(tabs.map(([id, title]) => [id, title, id === 'overview' ? path : path + '?view=' + id]),
-    tab, 'Event 视图') + panels[tab]();
+  return '<div class="section-heading work-heading workshop-actions">' + nav + actionPanel + '</div>' +
+    (tab === 'events' ? creationForm(state, { projectId: project.id }) : '') + panels[tab];
 }
 
 export function timestamp(value) {
@@ -323,10 +312,9 @@ export function documentVersion(version) {
   return from + boardBody(version) + attachments(version.assetIds) + provenance(version);
 }
 
-function documents(type, id, { documentId, versionId, sectionsOnly } = {}) {
-  const sections = type === 'project' ? projectSections : eventSections;
-  const sessions = sessionsFor(studioStore.state, type, id);
-  return Object.entries(sections).filter(([section]) => !sectionsOnly || sectionsOnly.includes(section)).map(([section, label]) => {
+function projectDocuments(id, { documentId, versionId, sectionsOnly } = {}) {
+  const sessions = sessionsFor(studioStore.state, 'project', id);
+  return Object.entries(projectSections).filter(([section]) => !sectionsOnly || sectionsOnly.includes(section)).map(([section, label]) => {
     const group = sessions.filter(item => item.section === section);
     if (!group.length) return '';
     return '<section class="work-document-group"><h2>' + label + '</h2>' + group.map(session => {

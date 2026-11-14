@@ -1,6 +1,6 @@
 import { calendarDays, calendarHref, calendarSelection, dateKey, formatDay, movePeriod, todayDate } from './calendar.js';
 import { plannerRepository, workshopRepository } from './repository.js';
-import { href } from './pages.js';
+import { href, workshopEventAddress } from './pages.js';
 import { escapeHtml } from './html.js';
 import { taskCalendarAction, taskSourceLink } from './auto-view.js';
 import { allCalendarEvents, agendaEventStatus, calendarSourceLabels, canEdit, onDay, reviewForm } from './apple-view.js';
@@ -104,7 +104,7 @@ function agenda(date, mode) {
       '<ul class="agenda-list">' + appointmentRows + '</ul></section>' : '') +
     (checked ? '<p class="habit-record">习惯 · 已打卡</p>' : '') +
     (events.length ? '<ul class="event-agenda">' + events.map(event => '<li><a href="' +
-      href('workshop', 'projects', event.projectId, 'events', event.id) + '">' + escapeHtml(event.theme || event.title) +
+      workshopEventAddress(event.id) + '">' + escapeHtml(event.theme || event.title) +
       '</a><small>Workshop</small></li>').join('') + '</ul>' : '') + '</section>';
 }
 

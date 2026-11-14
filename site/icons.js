@@ -41,6 +41,8 @@ const paths = {
   unpublished: '<circle cx="12" cy="12" r="8"/><path d="M9 12h6"/>',
   arrow: '<path d="M4 12h15m-5-5 5 5-5 5"/>',
   grip: '<path d="M8 6h.01M16 6h.01M8 12h.01M16 12h.01M8 18h.01M16 18h.01" stroke-width="3"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+  paperclip: '<path d="m9 13 5.5-5.5a2 2 0 1 1 2.8 2.8l-7.1 7.1a4 4 0 1 1-5.6-5.6l8.5-8.5a5 5 0 0 1 7 7l-8.5 8.5"/>',
   up: '<path d="m6 15 6-6 6 6"/>',
   down: '<path d="m6 9 6 6 6-6"/>',
   eye: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/>',

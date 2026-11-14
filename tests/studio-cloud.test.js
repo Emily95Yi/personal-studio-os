@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { createHandler } from '../worker/index.js';
 import { beginStudioEdit, startStudioSync } from '../site/studio-cloud.js';
-import { addAsset, emptyStudio, saveEvent, saveProject, studioStore } from '../site/studio-data.js';
+import { addAsset, createStudioStore, emptyStudio, saveEvent, saveProject, studioStore } from '../site/studio-data.js';
 import { studioDelta } from '../site/studio-delta.js';
 import { saveBoardContent } from '../site/self-board-data.js';
 import { studioExport } from '../site/studio-migration.js';
@@ -256,4 +256,95 @@ test('expanded Workshop records survive a revision-checked cloud delta without r
   assert.equal((await call('', { owner: '' })).status, 401);
   assert.equal(await (await call('', { owner: 'another-owner' })).json(), null);
   assert.equal((await call('/public')).status, 404);
+});
+
+test('cloud writes proceed without IndexedDB and a late local read cannot replace the cloud state', async () => {
+  let resolveOpen;
+  const store = createStudioStore(() => new Promise(resolve => { resolveOpen = resolve; }));
+  const local = store.load();
+  store.receiveCloud(emptyStudio(), 7);
+  store.useCloud(async (next, expected) => {
+    assert.equal(expected, 7);
+    assert.equal(next.events[0].title, 'Cloud event');
+    return 8;
+  });
+  await store.change(state => saveEvent(state, { title: 'Cloud event' }));
+  resolveOpen({ transaction: () => ({ objectStore: () => ({ get() {
+    const request = { result: { ...emptyStudio(), revision: 1 } };
+    queueMicrotask(() => request.onsuccess());
+    return request;
+  } }) }) });
+  await local;
+  assert.equal(store.state.revision, 8);
+  assert.equal(store.state.events[0].title, 'Cloud event');
+});
+
+test('Event-first edits, independent orders and shared resource assignments persist through the private Worker', async t => {
+  const { activeFlow, addEventResource, archiveEventFlow, copyEventFlow, duplicateEvent, eventResources,
+    groupEvents, moveWorkshopItem, orderedEvents, saveEventDocument } = await import('../site/workshop-event-data.js');
+  const { adoptVersion, currentVersion, saveSession } = await import('../site/studio-data.js');
+  const { saveCardSet, saveWorkshopTag } = await import('../site/workshop-library.js');
+  const { call, lock, save } = studioApi(t);
+  const token = crypto.randomUUID();
+  const old = emptyStudio();
+  const a = saveProject(old, { title: 'A' });
+  const b = saveProject(old, { title: 'B' });
+  const card = saveCardSet(old, 'OH');
+  const first = saveEvent(old, { title: 'Old event', projectId: a.id,
+    cardUses: [{ cardSetId: card.id, role: 'supporting', usageNote: 'Keep this note' }] });
+  const file = addAsset(old, { name: 'plan.txt', mime: 'text/plain', data: btoa('Keep this file') });
+  const source = saveSession(old, { ownerType: 'project', ownerId: a.id, section: 'flow', title: 'Introduction', body: 'Adopted', assetIds: [file] });
+  const adopted = adoptVersion(old, first.id, source.id);
+  const review = saveEventDocument(old, first.id, { section: 'review', title: 'Recorded', body: 'Actual proceedings' });
+  await lock(token);
+  assert.equal((await save(token, 0, studioExport(old))).status, 200);
+
+  const next = structuredClone(old);
+  const draft = saveEvent(next, { title: 'Independent', tagIds: ['dialogue', 'writing'].map(name => saveWorkshopTag(next, name).id) });
+  assert.equal(draft.status, 'draft');
+  assert.equal(draft.projectId, '');
+  const idea = saveEventDocument(next, draft.id, { section: 'overview', title: 'Idea', body: 'Free form' });
+  const step = saveEventDocument(next, draft.id, { section: 'flow', title: 'First', body: 'Instructions', assetIds: [file] });
+  const other = saveEventDocument(next, draft.id, { section: 'flow', title: 'Second', body: '', details: { workshopMinutes: 10 } }, step.id);
+  assert.deepEqual(activeFlow(next, draft.id).map(row => row.id), [step.id, other.id]);
+  const edited = saveEventDocument(next, draft.id, { id: step.id, section: 'flow', title: 'First', body: 'Updated', assetIds: [file] });
+  assert.equal(edited.id, step.id);
+  assert.equal(edited.versions.length, 2);
+  const use = { kind: 'card', id: card.id, role: 'primary', note: 'Opening' };
+  addEventResource(next, draft, use, step.id);
+  addEventResource(next, draft, use, other.id);
+  addEventResource(next, draft, { kind: 'asset', assetId: file }, step.id);
+  addEventResource(next, draft, { kind: 'link', url: 'https://example.test', title: 'Link' });
+  assert.equal(draft.cardUses.length, 1);
+  assert.deepEqual(draft.cardUses[0].workshopFlowIds, [step.id, other.id]);
+
+  moveWorkshopItem(next, { kind: 'event', id: draft.id, target: first.id });
+  moveWorkshopItem(next, { kind: 'group-event', id: draft.id, projectId: b.id });
+  moveWorkshopItem(next, { kind: 'group-event', id: first.id, target: draft.id, projectId: b.id, after: true });
+  assert.deepEqual(groupEvents(next, b.id).map(row => row.id), [draft.id, first.id]);
+  moveWorkshopItem(next, { kind: 'group-event', id: first.id, projectId: '' });
+  moveWorkshopItem(next, { kind: 'project', id: b.id, target: a.id });
+  moveWorkshopItem(next, { kind: 'flow', id: other.id, target: step.id, eventId: draft.id });
+  assert.deepEqual(activeFlow(next, draft.id).map(row => row.id), [other.id, step.id]);
+
+  const cloned = duplicateEvent(next, next.events.find(row => row.id === first.id), { title: 'Copy' },
+    { flow: true, planning: true, resources: true });
+  assert.equal(next.sessions.some(row => row.ownerId === cloned.id && row.section === 'review'), false);
+  const reused = copyEventFlow(next, cloned, step);
+  assert.equal(currentVersion(reused).body, 'Updated');
+  archiveEventFlow(next, draft, step.id);
+  assert.deepEqual(draft.cardUses[0].workshopFlowIds, [other.id]);
+
+  assert.equal((await save(token, 1, studioDelta(old, next))).status, 200);
+  assert.equal((await save(token, 1, studioDelta(old, next))).status, 409);
+  const snapshot = await (await call()).json();
+  assert.deepEqual(orderedEvents(snapshot).slice(0, 2).map(row => row.id), [draft.id, first.id]);
+  assert.equal(snapshot.events.find(row => row.id === first.id).projectId, '');
+  assert.equal(snapshot.events.find(row => row.id === first.id).cardUses[0].usageNote, 'Keep this note');
+  assert.deepEqual(snapshot.sessions.find(row => row.id === adopted.id), adopted);
+  assert.deepEqual(snapshot.sessions.find(row => row.id === review.id), review);
+  assert.equal(currentVersion(snapshot.sessions.find(row => row.id === idea.id)).body, 'Free form');
+  const saved = snapshot.events.find(row => row.id === draft.id);
+  assert.equal(eventResources(snapshot, saved).find(entry => entry.kind === 'card').row.role, 'primary');
+  assert.equal(snapshot.assets.length, 1);
 });

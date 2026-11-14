@@ -137,6 +137,7 @@ test('existing routes still resolve, including Workshop aliases and Calendar', (
     importMigration(state, transfer, state.revision);
     const project = objectHref('project', transfer.projects[0]);
     const event = objectHref('event', transfer.events[0]);
+    const legacyEvent = project + '/events/' + encodeURIComponent(transfer.events[0].id);
     const discover = objectHref('discover', transfer.content[0]);
     const workshop = workshopGallery(readRoute('#/workshop'));
     assert.equal((workshop.match(/class="workspace-entry"/g) ?? []).length, 3);
@@ -149,6 +150,10 @@ test('existing routes still resolve, including Workshop aliases and Calendar', (
     assert.equal(readRoute(project + '/common').tab, 'common');
     assert.equal(readRoute(project + '/events').redirect, project);
     assert.equal(readRoute(event).type, 'event');
+    assert.equal(readRoute(legacyEvent + '?view=materials').redirect, event + '?view=materials');
+    saveEvent(state, { id: transfer.events[0].id, title: transfer.events[0].title, projectId: '' });
+    assert.equal(readRoute(legacyEvent).redirect, event);
+    assert.match(workshopGallery(readRoute('#/workshop?view=grouped')), /未分组/);
     assert.equal(readRoute(discover).type, 'content-detail');
     assert.equal(readRoute('#/self-board/experience').type, 'collection');
     assert.equal(readRoute('#/calendar?view=week&date=2026-09-12').type, 'calendar');

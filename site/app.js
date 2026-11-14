@@ -15,10 +15,11 @@ import { reminderDialog } from './reminder-view.js';
 import { allCalendarEvents, canEdit, eventDialog, openReview, settingsView, showEntryForm, showEvent, statusBanner } from './apple-view.js';
 import { connection, loadCalDav, loadFeed, loadPlanner, onPrivateChange, saveChanges } from './private-api.js';
 import { initAppleActions } from './apple-actions.js';
-import { eventDetail, projectOverview, workshopGallery } from './workshop-view.js';
+import { projectOverview, workshopGallery } from './workshop-view.js';
+import { eventDetail } from './workshop-event-view.js';
 import { activitiesView, commonResourcesView, dictionariesView, interactiveToolView, interactiveToolsView } from './workshop-library-view.js';
 import { initWorkshopActions } from './workshop-actions.js';
-import { initWorkshopGalleryLayout } from './workshop-gallery-layout.js';
+import { initWorkshopEventActions } from './workshop-event-actions.js';
 import { initStudioImport, studioImportView } from './studio-import-view.js';
 import { boardDetail, boardView } from './self-board-view.js';
 import { initBoardActions, refreshHeaderSearch } from './self-board-actions.js';
@@ -29,9 +30,9 @@ import { beginStudioEdit, closeStudioSync, migrateLocalStudio, onStudioNotice, r
   startStudioSync, studioNotice, studioSync } from './studio-cloud.js';
 
 const app = document.querySelector('#app');
-let studioStorageError = false;
 let mountBoardEditor;
 let mountWorkshopEditor;
+let mountWorkshopEvent;
 let mountLibrary;
 let topicLease;
 let refreshInbox;
@@ -218,7 +219,7 @@ function render({ focus = false } = {}) {
   const workshopBreadcrumb = workshop && (route.projectPath || route.type === 'workshop-import')
     ? '<nav class="work-breadcrumb" aria-label="面包屑">' + context.ancestors.map(([address, label]) =>
       '<a href="' + address + '">' + escapeHtml(label) + '</a>').join('<span aria-hidden="true">/</span>') + '</nav>' : '';
-  const storageWarning = studioStorageError && (workshop || route.workspaceId === 'self-board')
+  const storageWarning = studioSync.localError && studioSync.mode !== 'cloud' && (workshop || route.workspaceId === 'self-board')
     ? '<p class="work-error" role="alert">无法读取此浏览器的 Studio 数据。</p>' : '';
   app.innerHTML = '<a class="skip" href="#main">跳到内容</a>' + header(route, context) +
     '<main id="main" class="page-main" tabindex="-1"' +
@@ -237,6 +238,7 @@ function render({ focus = false } = {}) {
   }
   mountBoardEditor?.(route);
   mountWorkshopEditor?.(route);
+  mountWorkshopEvent?.(route);
   mountLibrary?.(route);
   refreshInbox = mountCaptureBoard(app, route, refreshStudioSync, createFromCapture);
   if (route.entity === 'topic' && route.params.has('entry')) {
@@ -640,7 +642,7 @@ function pollVisibleFeed() {
 initAppleActions(app, render);
 initManifestationActions(app, refreshFocus);
 mountWorkshopEditor = initWorkshopActions(app, render);
-initWorkshopGalleryLayout(app);
+mountWorkshopEvent = initWorkshopEventActions(app, render);
 mountBoardEditor = initBoardActions(app, render);
 mountLibrary = initLibraryActions(app, render);
 initStudioImport(app);
@@ -677,11 +679,6 @@ window.addEventListener('pageshow', event => { if (event.persisted) location.rel
 document.addEventListener('visibilitychange', pollVisibleFeed);
 setInterval(pollVisibleFeed, 30_000);
 setInterval(pollStudioContent, 30_000);
-try {
-  await studioStore.load();
-} catch {
-  studioStorageError = true;
-}
 await startStudioSync();
 await prepareTopicEdit();
 render();

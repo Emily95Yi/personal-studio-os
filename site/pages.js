@@ -188,6 +188,8 @@ export function href(...segments) {
   return '#/' + segments.map(encodeURIComponent).join('/');
 }
 
+export const workshopEventAddress = id => href('workshop', 'events', id);
+
 export function publicHref(brandId, pageId = 'home') {
   return pageId === 'home' ? href('public', brandId) : href('public', brandId, pageId);
 }
@@ -213,9 +215,9 @@ function readProjectRoute(collectionRoute, [projectId, section, eventId, ...rest
   if (section !== 'events') return missing(href(...projectPath), projectLabel);
   if (!eventId) return { redirect: href(...projectPath) + (params.size ? '?' + params : '') };
 
-  const event = workshopRepository.getEvent(projectId, eventId);
+  const event = objectFor(studioStore.state, 'event', eventId);
   if (!event) return missing(href(...projectPath), projectLabel);
-  return { ...route, type: 'event', event, eventLabel: event.title, params };
+  return { redirect: workshopEventAddress(event.id) + (params.size ? '?' + params : '') };
 }
 
 function workshopWikiRoute(workspace, record, params) {
@@ -253,7 +255,13 @@ export function readRoute(hash) {
       const board = boardRoute(workspace, section, pageId, new URLSearchParams(query));
       if (board) return board;
     }
-    if (!section) return { type: root === 'workshop' ? 'workshop-gallery' : 'overview', workspaceId: root, workspace };
+    if (!section) return { type: root === 'workshop' ? 'workshop-gallery' : 'overview', workspaceId: root, workspace,
+      params: new URLSearchParams(query) };
+    if (root === 'workshop' && section === 'events' && pageId && segments.length === 3) {
+      const event = objectFor(studioStore.state, 'event', pageId);
+      if (!event) return missing(href(root), workspace.label);
+      return { type: 'event', workspaceId: root, workspace, event, eventLabel: event.title, params: new URLSearchParams(query) };
+    }
     if (root === 'workshop' && ['common-resources', 'tools', 'activities', 'dictionaries'].includes(section) && segments.length <= 3) {
       const params = new URLSearchParams(query);
       const base = { workspaceId: root, workspace, params, parent: href(root), parentLabel: 'Workshop' };

@@ -4,6 +4,7 @@ import { boardRecords, boardSection, canAddSubfolder, contentTypes, discoverCate
   reflectionColors, provenances, resourceKey, statuses, visibilities } from './self-board-data.js';
 import { categoryFor, categoryList, explorationTypes, isDefaultCategory, resourceTypes, validEntryTarget } from './board-library-data.js';
 import { cardRoles, eventFormats, publicationProjection, toolTypes, toolVisibility, wikiStatuses } from './workshop-library.js';
+import { areaFor } from './workshop-event-data.js';
 import { safeUrl } from './html.js';
 
 export const transferFormat = 'yistudio-transfer-v1';
@@ -218,6 +219,18 @@ function validateRecords(state) {
   }));
   const tagIds = dictionary('workshopTags');
   const cardSetIds = dictionary('cardSets');
+  const sessions = new Map(state.sessions.map(row => [row.id, row]));
+  const validOrder = value => value == null || (Number.isSafeInteger(value) && value >= 0);
+  const validateUse = (row, eventId, label) => {
+    optionalFields(row, ['workshopRole', 'workshopUsage', 'workshopQuantity'], label);
+    optionalList(row, 'workshopFlowIds', label);
+    const ids = row.workshopFlowIds ?? [];
+    require(ids.length === new Set(ids).size && ids.every(id => {
+      const session = sessions.get(id);
+      return session?.ownerType === 'event' && session.ownerId === eventId &&
+        areaFor(session.section) === 'flow' && !session.workshopArchivedAt;
+    }), '资源的流程关联无效：' + label);
+  };
   for (const row of state.interactiveTools) {
     require(nonempty(row.title) && row.title.length <= 200 && has(toolTypes, row.type) && has(toolVisibility, row.visibility) &&
       typeof row.appLocation === 'string' && (!row.appLocation || (safeUrl(row.appLocation) && !row.appLocation.startsWith('./'))),
@@ -280,25 +293,44 @@ function validateRecords(state) {
         require(isWorkshopWiki(row) && has(wikiStatuses, row.wikiStatus), '共通资源状态无效：' + label);
       }
       if (key === 'events') {
+        require(validOrder(row.workshopOrder) && validOrder(row.workshopGroupOrder), 'Event 排序无效：' + label);
         optionalList(row, 'formats', label);
         require((row.formats ?? []).every(format => has(eventFormats, format)), '活动形式无效：' + label);
         if (row.cardUses != null) {
           require(Array.isArray(row.cardUses) && row.cardUses.every(use => plain(use) && cardSetIds.has(use.cardSetId) &&
             has(cardRoles, use.role) && typeof use.usageNote === 'string') &&
             new Set(row.cardUses.map(use => use.cardSetId)).size === row.cardUses.length, '卡组用法无效：' + label);
+          row.cardUses.forEach(use => validateUse(use, row.id, label));
         }
-        require(objectFor(state, 'project', row.projectId), row.title + ' 缺少所属 Project。');
+        if (row.workshopResources != null) {
+          require(Array.isArray(row.workshopResources), 'Event 资源须为列表：' + label);
+          const ids = new Set();
+          const references = new Set();
+          for (const resource of row.workshopResources) {
+            require(plain(resource) && nonempty(resource.id) && !ids.has(resource.id) &&
+              (resource.kind === 'asset' ? assets.has(resource.assetId) :
+                resource.kind === 'link' ? nonempty(resource.url) && safeUrl(resource.url) :
+                  resource.kind === 'material' && nonempty(resource.title)), 'Event 资源无效：' + label);
+            optionalFields(resource, ['title', 'role'], label);
+            const key = JSON.stringify([resource.kind, resource.assetId ?? resource.url ?? resource.title]);
+            require(!references.has(key), 'Event 资源重复：' + label);
+            references.add(key);
+            ids.add(resource.id);
+            validateUse(resource, row.id, label);
+          }
+        }
+        require(row.projectId == null || row.projectId === '' || objectFor(state, 'project', row.projectId),
+          row.title + ' 的所属 Project 已不可用。');
         require(row.attendeeCount == null || typeof row.attendeeCount === 'string' ||
           (Number.isInteger(row.attendeeCount) && row.attendeeCount >= 0), row.title + ' 的人数无效。');
       }
+      if (key === 'projects') require(validOrder(row.workshopOrder), 'Project 排序无效：' + label);
     }
   }
 
-  const sessions = new Map(state.sessions.map(row => [row.id, row]));
   function validOrigin(session, sourceId) {
     const original = sessions.get(sourceId);
-    const event = objectFor(state, 'event', session.ownerId);
-    return session.ownerType === 'event' && original?.ownerType === 'project' && original.ownerId === event?.projectId ? original : null;
+    return session.ownerType === 'event' && original?.ownerType === 'project' ? original : null;
   }
 
   const adoptions = new Set();
@@ -307,6 +339,9 @@ function validateRecords(state) {
     require(objectFor(state, session.ownerType, session.ownerId) && has(sections, session.section) &&
       Array.isArray(session.versions), '文档缺少有效归属、类型或版本：' + session.id);
     optionalFields(session, ['createdAt', 'updatedAt'], session.id);
+    optionalFields(session, ['workshopArchivedAt'], session.id);
+    require(validOrder(session.workshopOrder) && (!session.workshopArchivedAt ||
+      (session.ownerType === 'event' && areaFor(session.section) === 'flow')), '流程状态无效：' + session.id);
     const ids = new Set();
     if (session.adoptedFrom) {
       require(validOrigin(session, session.adoptedFrom), '文档的采用来源无效：' + session.id);
@@ -319,6 +354,8 @@ function validateRecords(state) {
         typeof version.body === 'string', '文档版本无效：' + session.id);
       ids.add(version.id);
       optionalFields(version, ['sourceInfo', 'sourceUrl', 'createdAt'], version.title);
+      optionalFields(version, ['workshopPrompts', 'workshopNotes'], version.title);
+      require(validOrder(version.workshopMinutes), '流程时长无效：' + version.title);
       validateAssets(version, version.title);
       if (version.source) {
         const source = version.source;
@@ -335,6 +372,8 @@ function validateRecords(state) {
     require(canRelate(state, edge.sourceType, edge.sourceId, edge.targetType, edge.targetId) && nonempty(edge.relationType),
       '关联缺少可用的对象或类型：' + edge.id);
     optionalFields(edge, ['createdAt', 'versionId'], edge.id);
+    const eventId = edge.sourceType === 'event' ? edge.sourceId : edge.targetType === 'event' ? edge.targetId : undefined;
+    validateUse(edge, eventId, edge.id);
     if (edge.versionId) {
       const eventIsSource = edge.sourceType === 'event' && edge.targetType === 'discover';
       const eventIsTarget = edge.targetType === 'event' && edge.sourceType === 'discover';

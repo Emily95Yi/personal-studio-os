@@ -347,6 +347,9 @@ export function clearBoardTrash(state) {
   for (const row of [...state.content, ...state.projects, ...state.events, ...state.sessions.flatMap(session => session.versions)]) {
     assetIds(row).forEach(id => orphanAssets.delete(id));
   }
+  for (const event of state.events) {
+    for (const resource of event.workshopResources ?? []) orphanAssets.delete(resource.assetId);
+  }
   state.assets = state.assets.filter(asset => !orphanAssets.has(asset.id));
 }
 

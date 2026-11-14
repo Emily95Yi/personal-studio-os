@@ -157,18 +157,6 @@ export function linkedWorkshopPanel(type, owner, kind) {
         '<ul class="work-relations">' + inherited.map(item => row(item)).join('') + '</ul></details>' : '') + (kind === 'wiki' ? group('固定版本采用', fixed, true) : '')) + '</section>';
 }
 
-export function activityMetadata(state, event) {
-  const groups = (event.cardUses ?? []).map(use => {
-    const card = state.cardSets.find(row => row.id === use.cardSetId);
-    return card ? '<li>' + esc(card.title + ' · ' + cardRoles[use.role]) + (use.usageNote ? '<p>' + esc(use.usageNote) + '</p>' : '') + '</li>' : '';
-  });
-  const legacy = [event.format, event.form, event.activityFormat].flat().filter(value => typeof value === 'string' && value);
-  return '<section class="workshop-panel"><h2>卡组与活动形式</h2>' +
-    (groups.length ? '<ul class="work-relations">' + groups.join('') + '</ul>' : empty('暂无卡组用法。')) +
-    ((event.formats ?? []).length ? '<p>' + esc(event.formats.map(key => eventFormats[key] || key).join(' · ')) + '</p>' : '') +
-    (legacy.length ? '<p class="work-meta">原记录 · ' + esc(legacy.join(' · ')) + '</p>' : '') + '</section>';
-}
-
 export function activitiesView({ params }) {
   const state = studio();
   const formats = params.getAll('format');

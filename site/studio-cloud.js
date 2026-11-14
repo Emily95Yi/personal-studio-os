@@ -3,13 +3,14 @@ import { collections, emptyStudio, studioStore } from './studio-data.js';
 import { studioExport } from './studio-migration.js';
 import { studioDelta } from './studio-delta.js';
 
-export const studioSync = { mode: 'loading', migration: false, message: '' };
+export const studioSync = { mode: 'loading', migration: false, localError: false, message: '' };
 let revision = -1;
 let currentLease;
 let acquiring;
 let releasing;
 let refreshing;
 let localTransfer;
+let localReady;
 const changes = new EventTarget();
 
 export function onStudioNotice(handler) { changes.addEventListener('notice', handler); }
@@ -61,12 +62,13 @@ async function request(path = '', { method = 'GET', value, headers = {}, keepali
   }
 }
 
-async function fetchSnapshot() {
+async function fetchSnapshot({ inspectLocal = false } = {}) {
   const response = await request('?revision=' + revision, { retry: true });
   if (response.status === 204) return false;
   const next = Number(response.headers.get('X-Studio-Revision'));
   const snapshot = await response.json();
   if (!Number.isSafeInteger(next) || next < 0 || (next > 0 && !snapshot)) throw new Error('云端内容读取失败。');
+  if (next === 0 && inspectLocal) await localReady;
   revision = next;
   studioSync.migration = next === 0 && Boolean(localTransfer);
   if (!studioSync.migration) {
@@ -78,15 +80,18 @@ async function fetchSnapshot() {
 }
 
 export async function startStudioSync() {
-  const transfer = studioExport(studioStore.state);
-  if (collections.some(key => transfer[key].length)) localTransfer = transfer;
+  localReady = studioStore.load().then(snapshot => {
+    const transfer = studioExport(snapshot ?? studioStore.state);
+    if (collections.some(key => transfer[key].length)) localTransfer = transfer;
+  }).catch(() => { studioSync.localError = true; });
   try {
-    await fetchSnapshot();
+    await fetchSnapshot({ inspectLocal: true });
     studioSync.mode = 'cloud';
   } catch (error) {
     studioSync.mode = error.status === 404 ? 'local' : 'error';
     if (studioSync.mode === 'error') studioNotice('云端连接失败。刷新页面后可以重试。');
   }
+  if (studioSync.mode !== 'cloud') await localReady;
   if (studioSync.mode !== 'local') studioStore.useCloud(saveCloud);
 }
 
@@ -120,7 +125,7 @@ export async function beginStudioEdit({ migration = false } = {}) {
       currentLease = lease;
       if (lockedRevision !== revision) {
         endLease(lease);
-        throw new Error('云端有更新。请刷新页面后再编辑。');
+        throw Object.assign(new Error('云端有更新。请先查看最新内容。'), { code: 'conflict' });
       }
       lease.timer = setInterval(() => {
         void request('/lease', { method: 'PUT', value: { token } }).catch(error => {

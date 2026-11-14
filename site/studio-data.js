@@ -121,10 +121,10 @@ export function saveDiscover(state, input) {
 
 export function saveEvent(state, input, sourceIds = []) {
   const existing = input.id && objectFor(state, 'event', input.id);
-  if (!objectFor(state, 'project', input.projectId) || (existing && existing.projectId !== input.projectId)) {
-    fail('Project 已不可用。');
-  }
-  const event = saveRecord(state.events, input);
+  const projectId = Object.hasOwn(input, 'projectId') ? input.projectId || '' : existing?.projectId || '';
+  if (projectId && !objectFor(state, 'project', projectId)) fail('Project 已不可用。');
+  const event = saveRecord(state.events, { ...(!existing && { status: 'draft' }), ...input, projectId,
+    ...(existing && (existing.projectId || '') !== projectId && { workshopGroupOrder: undefined }) });
   for (const id of new Set(sourceIds)) adoptVersion(state, event.id, id);
   return event;
 }
@@ -147,8 +147,11 @@ export function saveSession(state, input) {
   }
   if (!title.trim()) fail('请输入标题。');
   const stamp = now();
-  const source = currentVersion(session)?.source;
-  const version = { id: nextId(), title: title.trim(), body, assetIds, sourceInfo, sourceUrl, createdAt: stamp,
+  const previous = currentVersion(session);
+  const source = previous?.source;
+  const version = { ...(ownerType === 'event' && previous),
+    ...(ownerType === 'event' && input.details),
+    id: nextId(), title: title.trim(), body, assetIds, sourceInfo, sourceUrl, createdAt: stamp,
     ...(source ? { source: { ...source, mode: 'custom' } } : {}) };
   if (session) {
     session.versions.push(version);
@@ -173,6 +176,7 @@ export function adoptVersion(state, eventId, sourceId, versionId) {
   if (!sourceVersion || (versionId && sourceVersion.id !== versionId)) fail('Project 版本已变化，请重新比较。');
   let session = sessionsFor(state, 'event', eventId).find(item => item.adoptedFrom === sourceId);
   const current = currentVersion(session);
+  if (session?.workshopArchivedAt) delete session.workshopArchivedAt;
   if (current?.source?.versionId === sourceVersion.id && current.source.mode === 'adopted') return session;
   const stamp = now();
   const version = { ...structuredClone(sourceVersion), id: nextId(), createdAt: stamp,
@@ -214,6 +218,9 @@ export function saveRelation(state, { id, sourceType, sourceId, targetType, targ
   const existing = id && find(state.relations, id);
   if (id && !existing) fail('这条关联已不可用。');
   if (existing?.versionId && relationKey(existing) !== relationKey(candidate)) fail('固定版本的关联须在 Workshop 中重新选择。');
+  if (existing?.workshopFlowIds?.length && relationKey(existing) !== relationKey(candidate)) {
+    fail('这条关联用于 Event 流程，请先在 Workshop 解除环节关联。');
+  }
   if (state.relations.some(edge => edge.id !== id && relationKey(edge) === relationKey(candidate))) {
     fail('这两个对象已经关联。');
   }
@@ -294,23 +301,28 @@ export function createStudioStore(open = database) {
   let state = emptyStudio();
   let cloud;
   let pending;
+  let receivedCloud = false;
   return {
     get state() { return state; },
     useCloud(save) { cloud = save; },
-    receiveCloud(snapshot, revision) { state = { ...normalizeStudio(snapshot), revision }; },
+    receiveCloud(snapshot, revision) {
+      receivedCloud = true;
+      state = { ...normalizeStudio(snapshot), revision };
+    },
     load() {
       pending ??= (async () => {
         db ??= await open();
-        state = await new Promise((resolve, reject) => {
+        const snapshot = await new Promise((resolve, reject) => {
           const request = db.transaction('studio').objectStore('studio').get('data');
           request.onsuccess = () => resolve(normalizeStudio(request.result));
           request.onerror = () => reject(request.error);
         });
+        if (!receivedCloud) state = snapshot;
+        return snapshot;
       })().catch(error => { pending = undefined; throw error; });
       return pending;
     },
     async change(update, options) {
-      await this.load();
       if (cloud) {
         const previous = state;
         const next = structuredClone(previous);
@@ -319,6 +331,7 @@ export function createStudioStore(open = database) {
         state = next;
         return result;
       }
+      await this.load();
       return new Promise((resolve, reject) => {
         const transaction = db.transaction('studio', 'readwrite');
         const store = transaction.objectStore('studio');
