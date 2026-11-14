@@ -7,7 +7,7 @@ import { boardContentHref, boardHref, boardSections, discoverAddress, href } fro
 import { boardContent, boardFolderPath, boardMoveFolders, boardRecords, boardSection, boardTrashRecords, canAddSubfolder, contentTypes, discoverCategory, discoverDirectory, exerciseFields,
   isPublished, isWriting, isWorkshopWiki, isWorkshopWikiCategory, matchContent, pinnedBoardFolders, reflectionColors, relationTypes, resourceKey } from './self-board-data.js';
 import { contentTitle, isSelfBoard, objectFor, relatedObjects, studioStore } from './studio-data.js';
-import { attachments, imageUrl, markdown, objectHref, objectLabels, timestamp } from './workshop-view.js';
+import { attachments, boardBody, imageUrl, markdown, objectHref, objectLabels, timestamp } from './workshop-view.js';
 import { entriesFor, itemsFor, libraryMatches, topicsFor } from './board-library-data.js';
 import { collectionDetail, collectionsView, discoverTabs, explorationsView, explorationTypeSettings, topicDetail } from './board-library-view.js';
 import { wikiDetails } from './workshop-library-view.js';
@@ -504,7 +504,7 @@ export function boardDetail({ record, wiki, parent, params }) {
       (item.status === 'archived' ? button('移出旧归档', 'data-sb-mark="restore"') : '') + '</div></details>' : '') +
     '</div></div></header>' +
     '<div data-sb-article-copy>' + (cover ? '<img class="discover-cover" src="' + esc(cover) + '" alt="" referrerpolicy="no-referrer">' : '') +
-    '<div class="sb-reading-body">' + markdown(item.body) + '</div></div>' + (isWriting(item.type) ? reviewPanel(item) : '') +
+    '<div class="sb-reading-body">' + boardBody(item) + '</div></div>' + (isWriting(item.type) ? reviewPanel(item) : '') +
     (source || item.sourceInfo || item.originalPath || item.originalBlockRange || item.notionPageId ? '<section class="sb-detail-field"><h3>原始来源</h3>' +
       (source ? '<a href="' + esc(source) + '" rel="noreferrer">' + esc(item.sourceInfo || source) + '</a>' : '<p>' + esc(item.sourceInfo || '') + '</p>') +
       (item.originalPath ? '<p>' + esc(item.originalPath) + '</p>' : '') +

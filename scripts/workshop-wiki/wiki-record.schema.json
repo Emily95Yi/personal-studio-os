@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:yi-studio:legacy-workshop-wiki-record:v1",
+  "title": "Legacy Workshop Wiki normalized transfer record",
+  "description": "Intermediate contract only; inspect actual legacy and destination schemas before import. Do not fabricate content.",
+  "type": "object",
+  "required": ["legacyRef", "title", "category", "content", "sourceRecord", "metadata", "relations", "mediaSlots"],
+  "properties": {
+    "legacyRef": {
+      "type": "object",
+      "required": ["system", "db", "store", "key"],
+      "properties": {
+        "system": {"const": "workshop-dashboard"},
+        "db": {"type": "string"},
+        "store": {"type": "string"},
+        "key": {"type": "string", "description": "Stable canonical JSON encoding of the original IndexedDB key"},
+        "id": {"type": ["string", "number", "null"]},
+        "legacyUrl": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "title": {"type": "string"},
+    "category": {
+      "type": "object",
+      "required": ["legacyId", "legacyName", "target"],
+      "properties": {
+        "legacyId": {"type": ["string", "number", "null"]},
+        "legacyName": {"type": ["string", "null"]},
+        "target": {"enum": ["tools_methods", "prompts_facilitation", "concepts_principles", "selfboard_resources", "needs_review"]},
+        "mappingEvidence": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "content": {
+      "type": "object",
+      "required": ["format", "raw"],
+      "properties": {
+        "format": {"enum": ["markdown", "html", "text", "richtext", "json", "unknown"]},
+        "raw": {"type": "string", "description": "Unabridged original textual content"},
+        "sourceRawField": {"type": ["string", "null"]},
+        "sha256": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "sourceRecord": {"type": "object", "description": "Original record or lossless pointer into the raw archive"},
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "tags": {"type": "array", "items": {"type": "string"}},
+        "links": {"type": "array", "items": {"type": "string"}},
+        "folderPath": {"type": ["string", "null"]},
+        "createdAt": {"type": ["string", "null"]},
+        "updatedAt": {"type": ["string", "null"]},
+        "status": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "targetLegacyId": {"type": ["string", "number", "null"]},
+          "kind": {"type": "string"},
+          "scope": {"enum": ["wiki", "project", "event", "tool", "resource", "unknown"]},
+          "pinnedVersion": {"type": ["string", "number", "null"]}
+        },
+        "additionalProperties": true
+      }
+    },
+    "mediaSlots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["mediaSlotId", "status"],
+        "properties": {
+          "mediaSlotId": {"type": "string"},
+          "legacyMediaId": {"type": ["string", "number", "null"]},
+          "anchor": {"type": ["string", "null"]},
+          "order": {"type": ["integer", "null"]},
+          "name": {"type": ["string", "null"]},
+          "mime": {"type": ["string", "null"]},
+          "caption": {"type": ["string", "null"]},
+          "alt": {"type": ["string", "null"]},
+          "status": {"enum": ["pending_upload", "uploaded", "unresolved"]},
+          "targetFileId": {"type": ["string", "null"]}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

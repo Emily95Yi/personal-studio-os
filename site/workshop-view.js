@@ -31,7 +31,7 @@ export function imageUrl(item, urlKey = 'coverUrl') {
   return safeUrl(item[urlKey]);
 }
 
-function inline(text) {
+function inline(text, deferImages = false) {
   const tokens = /(!?)\[([^\]\n]+)\]\(([^)\s]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*/g;
   let result = '';
   let cursor = 0;
@@ -41,7 +41,7 @@ function inline(text) {
     const link = url && safeUrl(url);
     if (link) {
       result += image
-        ? '<img loading="lazy" referrerpolicy="no-referrer" src="' + esc(link) + '" alt="' + esc(label) + '">'
+        ? (deferImages ? esc('图片待补' + (label ? ' · ' + label : '')) : '<img loading="lazy" referrerpolicy="no-referrer" src="' + esc(link) + '" alt="' + esc(label) + '">')
         : '<a href="' + esc(link) + '" rel="noreferrer">' + esc(label) + '</a>';
     } else if (code) result += '<code>' + esc(code) + '</code>';
     else if (strong) result += '<strong>' + esc(strong) + '</strong>';
@@ -52,12 +52,13 @@ function inline(text) {
   return result + esc(text.slice(cursor));
 }
 
-export function markdown(body = '') {
+export function markdown(body = '', deferImages = false) {
+  const renderInline = text => inline(text, deferImages);
   const lines = body.replace(/\r\n?/g, '\n').split('\n');
   const blocks = [];
   let paragraph = [];
   const flush = () => {
-    if (paragraph.length) blocks.push('<p>' + paragraph.map(inline).join('<br>') + '</p>');
+    if (paragraph.length) blocks.push('<p>' + paragraph.map(renderInline).join('<br>') + '</p>');
     paragraph = [];
   };
   for (let i = 0; i < lines.length; i += 1) {
@@ -74,7 +75,7 @@ export function markdown(body = '') {
     if (heading) {
       flush();
       const level = Math.min(heading[1].length + 2, 6);
-      blocks.push('<h' + level + '>' + inline(heading[2]) + '</h' + level + '>');
+      blocks.push('<h' + level + '>' + renderInline(heading[2]) + '</h' + level + '>');
       continue;
     }
     const list = /^\s*[-*+]\s+(.+)$/.test(line) ? ['ul', /^\s*[-*+]\s+(.+)$/] :
@@ -83,7 +84,7 @@ export function markdown(body = '') {
       flush();
       const [tag, pattern] = list;
       const items = [];
-      while (i < lines.length && pattern.test(lines[i])) items.push('<li>' + inline(pattern.exec(lines[i++])[1]) + '</li>');
+      while (i < lines.length && pattern.test(lines[i])) items.push('<li>' + renderInline(pattern.exec(lines[i++])[1]) + '</li>');
       i -= 1;
       blocks.push('<' + tag + '>' + items.join('') + '</' + tag + '>');
       continue;
@@ -91,7 +92,7 @@ export function markdown(body = '') {
     if (/^>\s?/.test(line)) {
       flush();
       const quotes = [];
-      while (i < lines.length && /^>\s?/.test(lines[i])) quotes.push(inline(lines[i++].replace(/^>\s?/, '')));
+      while (i < lines.length && /^>\s?/.test(lines[i])) quotes.push(renderInline(lines[i++].replace(/^>\s?/, '')));
       i -= 1;
       blocks.push('<blockquote>' + quotes.join('<br>') + '</blockquote>');
       continue;
@@ -100,6 +101,35 @@ export function markdown(body = '') {
   }
   flush();
   return '<div class="work-markdown">' + blocks.join('') + '</div>';
+}
+
+export function boardBody({ body = '', bodyFormat, mediaSlots }) {
+  if (!Array.isArray(mediaSlots) && bodyFormat !== 'text') return markdown(body);
+  let displayed = '';
+  let cursor = 0;
+  const detached = [];
+  const pending = (slot, label = slot.placement === 'cover' ? '封面待补' : '图片待补') =>
+    [label, slot.alt || slot.name || slot.caption].filter(Boolean).join(' · ');
+  const slots = (mediaSlots ?? []).filter(slot => slot?.status === 'pending_upload')
+    .sort((a, b) => (a.offset ?? Infinity) - (b.offset ?? Infinity));
+  for (const slot of slots) {
+    const { offset, length, reference } = slot;
+    const text = Number.isInteger(offset) && offset >= cursor && Number.isInteger(length) && length > 0
+      ? body.slice(offset, offset + length) : '';
+    const inline = slot.placement === 'inline' && offset + length <= body.length &&
+      (reference ? text === reference : /^!\[|^<img\b/i.test(text) && /data:/i.test(text));
+    if (inline) {
+      displayed += body.slice(cursor, offset) + pending(slot).replace(/[\[\]`*<>]/g, '');
+      cursor = offset + length;
+    } else {
+      detached.push(pending(slot, slot.placement === 'attachment' && slot.mime && !slot.mime.startsWith('image/')
+        ? '附件待补' : undefined));
+    }
+  }
+  displayed += body.slice(cursor);
+  const content = bodyFormat === 'text' ? '<div class="work-markdown"><div class="work-markdown-plain">' +
+    esc(displayed) + '</div></div>' : markdown(displayed, slots.some(slot => slot.placement === 'inline'));
+  return content + (detached.length ? '<ul class="work-files">' + detached.map(label => '<li>' + esc(label) + '</li>').join('') + '</ul>' : '');
 }
 
 export function smallAction(name, label, data = '') {
@@ -290,7 +320,7 @@ export function documentVersion(version) {
   const from = reference && project ? '<p class="work-meta">' + (source.mode === 'custom' ? '本场版本 · 基于 ' : '采用 ') +
     '<a href="' + esc(sourceLink) + '">' + esc(reference.title) + '</a> · ' +
     esc(timestamp(reference.createdAt)) + '</p>' : '';
-  return from + markdown(version.body) + attachments(version.assetIds) + provenance(version);
+  return from + boardBody(version) + attachments(version.assetIds) + provenance(version);
 }
 
 function documents(type, id, { documentId, versionId, sectionsOnly } = {}) {

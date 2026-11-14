@@ -7,3 +7,5 @@ node_modules/
 /wrangler.production.toml
 /wrangler.calendar-test.toml
 /.backups/
+
+/migration-output/

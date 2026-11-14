@@ -16,7 +16,7 @@ export const wikiStatus = row => row.wikiStatus ?? (row.status === 'archived' ? 
 export const wikiRecords = state => boardRecords(state, true).filter(isWorkshopWiki);
 
 const snapshotFields = [
-  'title', 'body', 'summary', 'assetIds', 'coverAssetId', 'coverUrl', 'sourceInfo', 'sourceUrl', 'provenance',
+  'title', 'body', 'bodyFormat', 'mediaSlots', 'summary', 'assetIds', 'coverAssetId', 'coverUrl', 'sourceInfo', 'sourceUrl', 'provenance',
   'captureSourceUrl', 'captureHasAttachment', 'personalNotes', 'originalPath', 'originalBlockRange', 'notionPageId',
   'excerpt', 'aiNotes', 'steps', 'duration', 'materials', 'scenarios', 'facilitation',
 ];

@@ -414,6 +414,7 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .work-reading summary, .work-import-result summary { cursor: pointer; }
 .work-reading summary:focus-visible, .work-dialog textarea:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .work-reading :is(.work-meta, .work-markdown, .work-files) a, .work-markdown a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.work-markdown-plain { white-space: pre-wrap; }
 .work-markdown { max-width: 67ch; overflow-wrap: anywhere; }
 .work-markdown > :is(h3, h4, h5, h6) { margin: 12px 0 5px; font-size: 1em; }
 .work-markdown > :is(p, ul, ol, blockquote, pre) { margin: 7px 0; }
