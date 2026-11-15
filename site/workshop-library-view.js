@@ -48,6 +48,7 @@ export function commonResourcesView({ params }) {
   const missing = params.get('missing');
   const folder = state.boardFolders.find(row => row.id === params.get('folder') && row.category === category);
   const needle = (params.get('q') || '').trim().toLocaleLowerCase();
+  const showCards = kind === 'card' || deckId || missing || needle;
   const reference = params.get('reference');
   const [type, ...id] = (reference || '').split(':');
   const related = reference && relatedObjects(state, type, id.join(':'));
@@ -55,7 +56,8 @@ export function commonResourcesView({ params }) {
   const scope = { exercises: ['exercise'], knowledge: ['knowledge', 'note'] }[params.get('view')];
   const rows = all.filter(item => {
     const date = updateDate(item);
-    return (!category || discoverCategory(item) === category) &&
+    return (showCards || item.resourceKind !== 'card') &&
+      (!category || discoverCategory(item) === category) &&
       (!Array.isArray(scope) || scope.includes(item.type)) &&
       (!folder || item.folderId === folder.id || state.boardFolders.some(row => row.id === item.folderId && row.parentId === folder.id)) &&
       (!params.get('status') || wikiStatus(item) === params.get('status')) &&

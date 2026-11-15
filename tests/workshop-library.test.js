@@ -186,6 +186,13 @@ test('structured Wiki filters, gallery, backlinks and pinned read views survive 
   try {
     const renderList = query => commonResourcesView(readRoute('#/workshop/common-resources?' + query));
     const detail = id => boardDetail(readRoute(wikiAddress(id)));
+    assert.match(renderList(''), /Deck profile/);
+    assert.doesNotMatch(renderList(''), /Card missing description|Card with description/);
+    assert.doesNotMatch(renderList(new URLSearchParams({ category: tools })), /Card missing description|Card with description/);
+    assert.match(renderList('kind=card'), /Card with description/);
+    assert.match(renderList('deck=' + deck.id), /Card with description/);
+    assert.match(renderList('missing=description'), /Card missing description/);
+    assert.match(renderList('q=blue+stripes'), /Card with description/);
     assert.match(renderList('kind=method&q=updated+procedure'), /Method record/);
     assert.doesNotMatch(renderList('kind=method&q=searchable+procedure'), /Method record/);
     assert.match(renderList('kind=card&missing=description'), /Card missing description/);
