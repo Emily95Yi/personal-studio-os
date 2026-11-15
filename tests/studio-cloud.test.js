@@ -348,3 +348,74 @@ test('Event-first edits, independent orders and shared resource assignments pers
   assert.equal(eventResources(snapshot, saved).find(entry => entry.kind === 'card').row.role, 'primary');
   assert.equal(snapshot.assets.length, 1);
 });
+
+test('Worker saves structured resources and Event usage while rejecting overwritten pins and invalid imports', async t => {
+  const { call, lock, save } = studioApi(t);
+  const { saveCardSet, saveWiki, linkWiki, searchEvents, workshopLinks } = await import('../site/workshop-library.js');
+  const { addEventResource, editEventResource, eventResources } = await import('../site/workshop-event-data.js');
+  const token = crypto.randomUUID();
+  const initial = emptyStudio();
+  const project = saveProject(initial, { title: 'Project' });
+  const event = saveEvent(initial, { title: 'Test event', projectId: project.id });
+  const deck = saveCardSet(initial, 'OH Cards');
+  const legacy = saveWiki(initial, { title: 'Legacy', type: 'exercise', body: 'Original',
+    discoverCategory: 'Tools & Methods', wikiStatus: 'active' });
+  linkWiki(initial, { ownerType: 'project', ownerId: project.id, resourceId: legacy.id });
+  await lock(token);
+  assert.equal((await save(token, 0, studioExport(initial))).status, 200);
+  assert.deepEqual(searchEvents(initial, { wiki: legacy.id }), []);
+
+  const structured = structuredClone(initial);
+  const profile = saveWiki(structured, { title: 'OH Cards', resourceKind: 'card_set', cardSetId: deck.id, wikiStatus: 'active' });
+  assert.equal(profile.cardSetId, deck.id);
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL8sAAAAASUVORK5CYII=';
+  const front = addAsset(structured, { name: 'front.png', mime: 'image/png', data: png });
+  const back = addAsset(structured, { name: 'back.png', mime: 'image/png', data: png });
+  const card = saveWiki(structured, { title: 'Card', resourceKind: 'card', wikiStatus: 'active', cardSetId: deck.id,
+    resourceData: { number: ' A-01 ', description: 'A circle', frontAssetId: front, backAssetId: back },
+    resourceLinks: [legacy.id] });
+  assert.equal(card.resourceData.number, 'A-01');
+  assert.throws(() => saveWiki(structured, { title: 'Duplicate', resourceKind: 'card', wikiStatus: 'draft',
+    cardSetId: deck.id, resourceData: { number: 'ａ-01' } }), /编号必须唯一/);
+  const fixed = addEventResource(structured, structured.events[0], { kind: 'wiki', id: card.id, mode: 'pinned_version',
+    usage: { status: 'selected', purpose: 'Opening', selection: 'Short prompt' } });
+  assert.deepEqual(workshopLinks(structured, 'event', event, 'wiki').inherited.map(row => row.item.id), [legacy.id]);
+  assert.deepEqual(searchEvents(structured, { wiki: card.id }).map(row => row.id), [event.id]);
+  assert.equal((await save(token, 1, studioDelta(initial, structured))).status, 200);
+
+  const edited = structuredClone(structured);
+  const editedCard = saveWiki(edited, { id: card.id, resourceData: { number: 'A-02', description: 'Current only', backAssetId: back },
+    resourceLinks: [] });
+  editEventResource(edited, edited.events[0], eventResources(edited, edited.events[0]).find(entry => entry.id === fixed.id).key, {
+    mode: 'pinned_version', versionId: fixed.versionId, flowIds: [],
+    usage: { status: 'used', purpose: 'Opening', selection: 'Short prompt', adjustments: 'Split into pairs', feedback: 'Helpful' },
+  });
+  assert.equal(editedCard.revisions.length, 1);
+  assert.equal((await save(token, 2, studioDelta(structured, edited))).status, 200);
+  const current = await (await call()).json();
+  const readCard = current.content.find(row => row.id === card.id);
+  const adopted = readCard.revisions.find(row => row.id === fixed.versionId);
+  assert.deepEqual(adopted.resourceData, card.resourceData);
+  assert.deepEqual(adopted.resourceLinks, [legacy.id]);
+  assert.equal(readCard.resourceData.description, 'Current only');
+  assert.deepEqual(current.content.find(row => row.id === legacy.id), legacy);
+  const edge = current.relations.find(row => row.id === fixed.id);
+  assert.equal(edge.versionId, fixed.versionId);
+  assert.equal(edge.usage.feedback, 'Helpful');
+  assert.equal(Object.hasOwn(readCard, 'usage'), false);
+
+  for (const corrupt of [
+    snapshot => { snapshot.content.find(row => row.id === card.id).revisions[0].resourceData.description = 'Tampered'; },
+    snapshot => { snapshot.assets.find(row => row.id === front).name = 'overwritten.png'; },
+    snapshot => { snapshot.content.find(row => row.id === card.id).resourceLinks = ['missing']; },
+    snapshot => { snapshot.content.find(row => row.id === card.id).resourceData.backAssetId = 'missing'; },
+    snapshot => { snapshot.relations.find(row => row.id === fixed.id).usage.status = 'unknown'; },
+    snapshot => { snapshot.relations.find(row => row.sourceType === 'project').usage = { status: 'used' }; },
+    snapshot => { snapshot.content.push({ ...readCard, id: 'duplicate', revisions: [] }); },
+  ]) {
+    const invalid = structuredClone(current);
+    corrupt(invalid);
+    assert.equal((await save(token, 3, studioDelta(current, invalid))).status, 400);
+  }
+  assert.equal((await call()).headers.get('X-Studio-Revision'), '3');
+});

@@ -46,7 +46,9 @@ export const isWorkshopWikiCategory = key => workshopWikiCategories.some(([categ
 export const isWorkshopWiki = row => {
   if (!isSelfBoard(row)) return false;
   const item = boardContent(row);
-  return isDiscoverType(item.type) && isWorkshopWikiCategory(discoverCategory(item));
+  const category = discoverCategory(item);
+  return isDiscoverType(item.type) && (isWorkshopWikiCategory(category) ||
+    (category === resourcesCategory && item.resourceKind === 'general'));
 };
 
 export function discoverCategory(item) {
@@ -322,8 +324,9 @@ export function clearBoardTrash(state) {
   if (!trash.length) return;
   const removed = { discover: new Set(), topic: new Set(), 'collection-item': new Set() };
   const orphanAssets = new Set();
-  const assetIds = row => [row.coverAssetId, ...(row.assetIds ?? []),
-    ...(row.revisions ?? []).flatMap(version => [version.coverAssetId, ...(version.assetIds ?? [])])];
+  const directAssets = row => [row.coverAssetId, ...(row.assetIds ?? []),
+    row.resourceData?.frontAssetId, row.resourceData?.backAssetId];
+  const assetIds = row => [...directAssets(row), ...(row.revisions ?? []).flatMap(directAssets)];
   for (const { type, item } of trash) {
     removed[type].add(item.id);
     if (type === 'discover') assetIds(item).forEach(id => orphanAssets.add(id));

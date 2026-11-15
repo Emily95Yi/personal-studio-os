@@ -1,6 +1,7 @@
 import { safeUrl } from './html.js';
 import { addAsset, currentVersion, objectFor, relatedObjects, saveEvent, saveRelation, saveSession, sessionsFor } from './studio-data.js';
 import { linkWiki, saveCardSet, wikiRecords } from './workshop-library.js';
+import { validateEventUsage } from './workshop-resource-data.js';
 
 export const eventAreas = {
   overview: ['overview', 'visual', 'recruitment'],
@@ -112,13 +113,15 @@ function attach(row, flowId) {
 }
 
 export function addEventResource(state, event, input, flowId) {
+  if (input.usage !== undefined) validateEventUsage(input.usage);
+  const usage = input.usage === undefined ? {} : { usage: structuredClone(input.usage) };
   const existing = eventResources(state, event);
   if (input.kind === 'card' || input.kind === 'new-card') {
     const card = input.kind === 'new-card' ? saveCardSet(state, input.title) : state.cardSets.find(row => row.id === input.id);
     if (!card) throw new Error('卡组已不可用。');
     const current = existing.find(row => row.kind === 'card' && row.id === card.id);
     if (current) return attach(current.row, flowId);
-    const row = { cardSetId: card.id, role: input.role || 'primary', usageNote: input.note || '', workshopQuantity: input.quantity || '' };
+    const row = { cardSetId: card.id, role: input.role || 'primary', usageNote: input.note || '', workshopQuantity: input.quantity || '', ...usage };
     (event.cardUses ??= []).push(row);
     return attach(row, flowId);
   }
@@ -132,6 +135,7 @@ export function addEventResource(state, event, input, flowId) {
     row.workshopRole = input.role || '';
     row.workshopUsage = input.note || '';
     row.workshopQuantity = input.quantity || '';
+    Object.assign(row, usage);
     return attach(row, flowId);
   }
   if (!['asset', 'link', 'material'].includes(input.kind)) throw new Error('请选择资源类型。');
@@ -146,12 +150,13 @@ export function addEventResource(state, event, input, flowId) {
   if (current) return attach(current.row, flowId);
   const row = { id: crypto.randomUUID(), kind: input.kind, title: input.title || input.url || '',
     ...(assetId && { assetId }), ...(input.url && { url: input.url }), role: input.role || '',
-    workshopUsage: input.note || '', workshopQuantity: input.quantity || '' };
+    workshopUsage: input.note || '', workshopQuantity: input.quantity || '', ...usage };
   (event.workshopResources ??= []).push(row);
   return attach(row, flowId);
 }
 
 export function editEventResource(state, event, key, input) {
+  if (input.usage !== undefined) validateEventUsage(input.usage);
   const entry = eventResources(state, event).find(row => row.key === key);
   if (!entry) throw new Error('资源已不可用。');
   let { row } = entry;
@@ -169,6 +174,7 @@ export function editEventResource(state, event, key, input) {
   }
   row.workshopQuantity = input.quantity;
   row.workshopFlowIds = assignments(input.flowIds);
+  if (input.usage !== undefined) row.usage = structuredClone(input.usage);
   return entry;
 }
 
@@ -207,10 +213,11 @@ function copyDocument(state, eventId, source, afterId) {
 function copyResource(state, event, entry, flowIds) {
   const { row } = entry;
   const wiki = entry.kind === 'edge' && wikiRecords(state).some(item => item.id === entry.item.id);
+  const usage = row.usage && { status: 'candidate', purpose: row.usage.purpose ?? '', selection: row.usage.selection ?? '' };
   const input = { kind: wiki ? 'wiki' : entry.kind === 'edge' ? 'related' : entry.kind,
     id: entry.item?.id ?? entry.id, type: entry.type, title: row.title, url: row.url, assetId: row.assetId,
     role: row.role || row.workshopRole, relationType: row.relationType, note: row.usageNote ?? row.workshopUsage,
-    quantity: row.workshopQuantity,
+    quantity: row.workshopQuantity, usage,
     mode: row.versionId ? 'pinned_version' : 'live', versionId: row.versionId };
   const existing = eventResources(state, event).find(other => other.kind === 'edge' && other.type === entry.type &&
     other.item.id === entry.item?.id);
@@ -223,6 +230,7 @@ function copyResource(state, event, entry, flowIds) {
     if (input.role) copy.workshopRole = input.role;
     if (input.note) copy.workshopUsage = input.note;
     if (input.quantity) copy.workshopQuantity = input.quantity;
+    if (usage) copy.usage = usage;
   }
   for (const id of flowIds) attach(copy, id);
 }

@@ -5,11 +5,12 @@ import { commonResourcesAddress, readRoute, wikiAddress } from './pages.js';
 import { contentTitle, addAsset, adoptVersion, currentVersion, imageTypes, maxAssetBytes, projectSections,
   objectFor, relationCandidates, relatedObjects, removeRelation, reusableFor, saveDiscover, saveProject, saveRelation,
   saveSession, sessionsFor, studioStore, studioTags, validImage } from './studio-data.js';
-import { boardContent, canAddSubfolder, discoverCategory, isWorkshopWikiCategory, saveBoardFolder, toggleBoardFolderPin,
+import { boardContent, canAddSubfolder, discoverCategory, isWorkshopWikiCategory, resourcesCategory, saveBoardFolder, toggleBoardFolderPin,
   workshopWikiCategories } from './self-board-data.js';
 import { linkWiki, publicationProjection, saveCardSet, saveInteractiveTool, saveWiki, saveWorkshopTag,
   setWikiStatus, toolTypes, toolVisibility, wikiRecords, wikiStatus, wikiStatuses, workshopLinks } from './workshop-library.js';
 import { documentVersion, objectHref, objectLabels, timestamp } from './workshop-view.js';
+import { cardNumberLimit, matchesResourceText, resourceImages, resourceTemplate, resourceTemplates, resourceTextLimit } from './workshop-resource-data.js';
 
 const recordTypes = { project: 'Project', discover: '资料' };
 const textField = (key, label, value, options = '') =>
@@ -244,33 +245,65 @@ export function initWorkshopActions(app, render) {
     compare();
   }
 
-  function editWiki(route) {
+  function editWiki(route, deckId) {
     const state = studioStore.state;
-    const item = route.record ? boardContent(route.record) : null;
+    const item = route.record && !deckId ? boardContent(route.record) : null;
     const selectedCategory = item ? discoverCategory(item) : route.params.get('category');
-    const category = isWorkshopWikiCategory(selectedCategory) ? selectedCategory : workshopWikiCategories[0][0];
-    const folderId = item?.folderId ?? route.params.get('folder') ?? '';
-    const categories = workshopWikiCategories.map(([key]) => [key, key]);
+    const initialKind = item ? item.resourceKind ?? '' : deckId ? 'card' : resourceTemplate(route.params.get('kind')) ? route.params.get('kind') : 'general';
+    const categories = [...workshopWikiCategories, [resourcesCategory, '通用资源', 'resource']];
+    const category = categories.some(([key]) => key === selectedCategory) ? selectedCategory : resourcesCategory;
+    const folderId = deckId ? item?.folderId ?? route.record?.folderId ?? '' : item?.folderId ?? route.params.get('folder') ?? '';
+    const availableLinks = wikiRecords(state).filter(row => row.id !== item?.id);
     const form = dialog(item ? '编辑共通资源' : '新建共通资源',
-      textField('title', '标题', item?.title, 'maxlength="200" autofocus') +
-      selectField('category', '分类', categories, category) +
+      textField('title', '标题', item?.title, 'maxlength="200" autofocus' + (!item || item.resourceKind ? ' required' : '')) +
+      (item?.resourceKind || deckId ? '<p class="work-meta">模板 · ' + esc(resourceTemplate(initialKind)?.label ?? '') + '</p>' :
+        selectField('resourceKind', '资源模板', [...(item ? [['', '原有 Wiki']] : []),
+          ...Object.entries(resourceTemplates).map(([key, template]) => [key, template.label])], initialKind)) +
+      selectField('category', '分类', categories.map(([key]) => [key, key]), category) +
+      '<div class="work-form-fields" data-resource-fields></div>' +
+      '<details' + (item ? ' open' : '') + '><summary>正文、来源与附件</summary><div class="work-form-fields">' +
       selectField('folderId', '文件夹', [], '') +
       selectField('status', '状态', Object.entries(wikiStatuses), item ? wikiStatus(item) : 'draft') +
       textField('tags', '标签（逗号分隔）', item?.topics.join('，')) +
-      textarea('body', '正文 · Markdown', item?.body, 10) +
+      textarea('body', '正文 · Markdown', item?.body, 5) +
       textField('sourceInfo', '来源说明', item?.sourceInfo) + textField('sourceUrl', '来源链接', item?.sourceUrl) +
-      retainedFiles(item?.assetIds) + fileField('添加附件', 'attachments', '', true),
+      retainedFiles(item?.assetIds) + fileField('添加附件', 'attachments', '', true) + '</div></details>' +
+      (availableLinks.length ? '<details><summary>关联资源</summary>' +
+        textField('relatedQuery', '搜索关联资源', '', 'type="search"') + '<div class="resource-link-choices">' +
+        availableLinks.map(row => '<div data-resource-option="' + esc(row.id) + '">' +
+          checkField('resourceLink', row.id, contentTitle(row), item?.resourceLinks?.includes(row.id)) + '</div>').join('') +
+        '</div></details>' : ''),
     async data => {
-      const files = await attachmentInputs(data);
+      const resourceKind = data.get('resourceKind') ?? initialKind;
+      const template = resourceTemplate(resourceKind);
+      const [files, ...images] = await Promise.all([attachmentInputs(data), ...Object.keys(resourceImages)
+        .map(key => fileInput(data.get(key), true))]);
       return studioStore.change(snapshot => {
-        const category = data.get('category');
+        const nextCategory = template?.category || data.get('category');
+        const resourceData = {};
+        if (template) {
+          for (const key of Object.keys(template.fields)) {
+            const value = data.get('field-' + key)?.trim();
+            if (value) resourceData[key] = value;
+          }
+          Object.keys(resourceImages).forEach((key, index) => {
+            const retained = !data.has('clear-' + key) && item?.resourceData?.[key];
+            const id = images[index] ? addAsset(snapshot, images[index]) : retained;
+            if (id) resourceData[key] = id;
+          });
+        }
+        const choice = data.get('cardSetId') || deckId || item?.cardSetId;
+        const links = data.getAll('resourceLink');
         return saveWiki(snapshot, { id: item?.id, title: data.get('title'), body: data.get('body'),
-          type: item?.type ?? workshopWikiCategories.find(([id]) => id === category)?.[2],
+          type: item?.type ?? categories.find(([id]) => id === nextCategory)?.[2],
           topics: studioTags(data.get('tags')), sourceInfo: data.get('sourceInfo').trim(), sourceUrl: data.get('sourceUrl').trim(),
-          discoverCategory: category, folderId: data.get('folderId'), wikiStatus: data.get('status'),
-          assetIds: withAssets(snapshot, data, files) });
+          discoverCategory: nextCategory, folderId: data.get('folderId'), wikiStatus: data.get('status'),
+          assetIds: withAssets(snapshot, data, files),
+          ...(template && { resourceKind, resourceData }),
+          ...((links.length || item?.resourceLinks) && { resourceLinks: links }),
+          ...(['card', 'card_set'].includes(resourceKind) && choice && { cardSetId: choice }) });
       });
-    }, saved => { if (item) refresh('[data-work-wiki-edit]'); else location.hash = wikiAddress(saved.id); });
+    }, saved => { if (item) refresh('[data-work-wiki-edit]'); else location.hash = wikiAddress(saved.id); }, '保存', 'resource-dialog');
     const updateFolders = selected => {
       const rows = state.boardFolders.filter(row => row.category === form.elements.category.value);
       form.elements.folderId.replaceChildren(new Option('分类根目录', ''), ...rows.map(row => {
@@ -279,8 +312,50 @@ export function initWorkshopActions(app, render) {
       }));
       form.elements.folderId.value = rows.some(row => row.id === selected) ? selected : '';
     };
+    const updateTemplate = () => {
+      const kind = form.elements.resourceKind?.value ?? initialKind;
+      const template = resourceTemplate(kind);
+      const categoryControl = form.elements.category;
+      categoryControl.disabled = Boolean(template?.category);
+      if (template?.category) categoryControl.value = template.category;
+      else if (!kind && categoryControl.value === resourcesCategory) categoryControl.value = category;
+      categoryControl.querySelector('option[value="Resources"]').disabled = !kind;
+      updateFolders(folderId);
+      const fields = form.querySelector('[data-resource-fields]');
+      if (!template) {
+        fields.innerHTML = '';
+        return;
+      }
+      const profiles = new Set(availableLinks.filter(row => row.resourceKind === 'card_set').map(row => row.cardSetId));
+      const options = state.cardSets.filter(row => kind !== 'card_set' || !profiles.has(row.id)).map(row => [row.id, row.title]);
+      const fixedDeck = deckId || (item?.resourceKind === 'card_set' ? item.cardSetId : '');
+      const deck = kind === 'card' || kind === 'card_set'
+        ? fixedDeck ? '<p class="work-meta">所属卡组 · ' + esc(state.cardSets.find(row => row.id === fixedDeck)?.title ?? '') + '</p>' :
+          selectField('cardSetId', kind === 'card' ? '所属卡组' : '关联卡组',
+            [['', kind === 'card' ? '请选择卡组' : '按标题登记卡组'], ...options], item?.cardSetId ?? '') : '';
+      const number = kind === 'card' ? textField('field-number', '编号', item?.resourceData?.number,
+        'required maxlength="' + cardNumberLimit + '"') : '';
+      fields.innerHTML = deck + number + '<details' + (item?.resourceKind ? ' open' : '') +
+        '><summary>模板字段与图片</summary><div class="work-form-fields">' +
+        Object.entries(template.fields).filter(([key]) => key !== 'number').map(([key, label]) =>
+          textarea('field-' + key, label, item?.resourceData?.[key], 2)).join('') +
+        Object.entries(resourceImages).map(([key, label]) => {
+          const asset = state.assets.find(row => row.id === item?.resourceData?.[key]);
+          return fileField(label, key, imageTypes.join(',')) +
+            (asset ? checkField('clear-' + key, '1', '移除' + label + ' · ' + asset.name, false) : '');
+        }).join('') + '</div></details>';
+      if (kind === 'card' && form.elements.cardSetId) form.elements.cardSetId.required = true;
+      for (const field of fields.querySelectorAll('textarea')) field.maxLength = resourceTextLimit;
+    };
     form.elements.category.addEventListener('change', () => updateFolders(folderId));
-    updateFolders(folderId);
+    form.elements.resourceKind?.addEventListener('change', updateTemplate);
+    form.elements.relatedQuery?.addEventListener('input', event => {
+      const needle = event.target.value.trim().toLocaleLowerCase();
+      for (const [index, node] of [...form.querySelectorAll('[data-resource-option]')].entries()) {
+        node.hidden = !node.querySelector('input').checked && !matchesResourceText(availableLinks[index], needle);
+      }
+    });
+    updateTemplate();
   }
 
   function editWikiFolder(route, rename) {
@@ -420,6 +495,7 @@ export function initWorkshopActions(app, render) {
     if (workAdopt !== undefined) compareVersions(route.event, workAdopt, reopen);
     const { workWikiEdit, workWikiStatus, workWikiFolder, workLink, workPin, workToolEdit, workDictionary, workPublish, workUnpublish } = button.dataset;
     if (workWikiEdit !== undefined) editWiki(route);
+    if (button.dataset.workAddCard) editWiki(route, button.dataset.workAddCard);
     if (workWikiFolder === '' || workWikiFolder === 'rename') editWikiFolder(route, workWikiFolder === 'rename');
     if (workWikiFolder === 'pin') {
       const folderId = route.params.get('folder');

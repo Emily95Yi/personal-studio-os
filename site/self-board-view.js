@@ -3,14 +3,14 @@ import { storedCaptureAttachment } from './capture-client.js';
 import { weekPreview } from './planner-view.js';
 import { escapeHtml as esc } from './html.js';
 import { icon } from './icons.js';
-import { boardContentHref, boardHref, boardSections, discoverAddress, href } from './pages.js';
+import { boardContentHref, boardHref, boardSections, commonResourcesAddress, discoverAddress, href } from './pages.js';
 import { boardContent, boardFolderPath, boardMoveFolders, boardRecords, boardSection, boardTrashRecords, canAddSubfolder, contentTypes, discoverCategory, discoverDirectory, exerciseFields,
   isPublished, isWriting, isWorkshopWiki, isWorkshopWikiCategory, matchContent, pinnedBoardFolders, reflectionColors, relationTypes, resourceKey } from './self-board-data.js';
 import { contentTitle, isSelfBoard, objectFor, relatedObjects, studioStore } from './studio-data.js';
 import { attachments, boardBody, imageUrl, markdown, objectHref, objectLabels, timestamp } from './workshop-view.js';
 import { entriesFor, itemsFor, libraryMatches, topicsFor } from './board-library-data.js';
 import { collectionDetail, collectionsView, discoverTabs, explorationsView, explorationTypeSettings, topicDetail } from './board-library-view.js';
-import { wikiDetails } from './workshop-library-view.js';
+import { wikiDetails, wikiVersionView } from './workshop-library-view.js';
 import { plannerRepository } from './repository.js';
 
 const state = () => studioStore.state;
@@ -243,9 +243,11 @@ function relationList(rows) {
 
 const crumb = '<span class="sb-crumb-divider" aria-hidden="true">/</span>';
 
-function discoverTrail(category, folder, { current = false } = {}) {
-  const path = [[category, discoverAddress(category)], ...(folder ?
-    boardFolderPath(state().boardFolders ?? [], folder).map(row => [row.title, discoverAddress(category, row.id)]) : [])];
+function discoverTrail(category, folder, { current = false, wiki = false } = {}) {
+  const addressFor = id => wiki ? commonResourcesAddress(new URLSearchParams({ category, ...(id && { folder: id }) })) :
+    discoverAddress(category, id);
+  const path = [[category, addressFor()], ...(folder ?
+    boardFolderPath(state().boardFolders ?? [], folder).map(row => [row.title, addressFor(row.id)]) : [])];
   return path.map(([title, address], index) => current && index === path.length - 1 ? esc(title) :
     '<a href="' + esc(address) + '">' + esc(title) + '</a>').join(crumb);
 }
@@ -472,6 +474,7 @@ function reviewPanel(item) {
 
 export function boardDetail({ record, wiki, parent, params }) {
   const item = boardContent(record);
+  if (wiki && params?.get('version')) return wikiVersionView(item, params.get('version'));
   const section = boardSection(item);
   const writing = section === 'writing';
   const cover = imageUrl(item);
@@ -488,7 +491,7 @@ export function boardDetail({ record, wiki, parent, params }) {
     '<nav class="work-breadcrumb sb-breadcrumb" aria-label="面包屑">' + (wiki
       ? '<a href="' + href('workshop') + '">Workshop</a>' + crumb + '<a href="' + esc(parent) + '">Common Resources</a>'
       : '<a href="' + boardHref() + '">Self-Board</a>' + crumb + '<a href="' + boardHref(section) + '">' + boardSections[section].label + '</a>') +
-    (section === 'discover' ? crumb + discoverTrail(discoverCategory(item), folder) : '') +
+    (section === 'discover' ? crumb + discoverTrail(discoverCategory(item), folder, { wiki }) : '') +
     crumb + '<span aria-current="page">' + titleOf(item) + '</span></nav>' +
     '<div data-sb-reading><header class="sb-reader-heading"><h1>' + titleOf(item) + '</h1>' +
     (item.summary ? '<p>' + esc(item.summary) + '</p>' : '') + '<div class="sb-reader-tools"><div class="sb-reader-meta">' +
@@ -512,7 +515,7 @@ export function boardDetail({ record, wiki, parent, params }) {
       (item.notionPageId ? '<p>Notion · ' + esc(item.notionPageId) + '</p>' : '') + '</section>' : '') +
     Object.entries(extra).filter(([key]) => item[key]).map(([key, label]) =>
       '<section class="sb-detail-field"><h3>' + label + '</h3>' + markdown(item[key]) + '</section>').join('') +
-    attachments(item.assetIds) + storedCaptureAttachment(item) + (wiki ? wikiDetails(item, params?.get('version')) : '') +
+    attachments(item.assetIds) + storedCaptureAttachment(item) + (wiki ? wikiDetails(item) : '') +
     '</div><div data-sb-editor hidden></div>' +
     '<details class="sb-related" data-sb-related><summary>相关内容 <span>' + relatedTo(item.id).length + '</span></summary>' +
     boardRelations(item) + '</details></article></section>';

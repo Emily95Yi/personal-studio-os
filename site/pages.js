@@ -224,7 +224,8 @@ function workshopWikiRoute(workspace, record, params) {
   const back = new URLSearchParams({ category: discoverCategory(boardContent(record)) });
   if (record.folderId) back.set('folder', record.folderId);
   return { workspaceId: 'workshop', workspace, type: 'content-detail', wiki: true, record, params,
-    recordTitle: contentTitle(record), parent: commonResourcesAddress(back), parentLabel: 'Common Resources' };
+    recordTitle: contentTitle(record.revisions?.find(row => row.id === params.get('version')) ?? record),
+    parent: commonResourcesAddress(back), parentLabel: 'Common Resources' };
 }
 
 export function readRoute(hash) {

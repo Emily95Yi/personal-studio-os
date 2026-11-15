@@ -5,6 +5,7 @@ import { addAsset, contentTitle, currentVersion, eventSections, objectFor, relat
 import { fileInput } from './workshop-actions.js';
 import { saveWorkshopTag, wikiRecords, wikiStatus } from './workshop-library.js';
 import { eventFields, objectHref } from './workshop-view.js';
+import { matchesResourceText, usageFields } from './workshop-resource-data.js';
 import { activeFlow, addEventResource, archiveEventFlow, copyEventFlow, duplicateEvent, editEventResource,
   eventResources, legacyProjectOrder, moveWorkshopItem, orderedProjects, removeEventResource, saveEventDocument, setFlowResources } from './workshop-event-data.js';
 import { areaLabels, creationForm, documentFields, flowAssignment, initialSections, metadataFields, option,
@@ -50,7 +51,12 @@ function readResource(data, file) {
   if (kind === 'asset' && file && assetId) throw new Error('请只选择一个文件。');
   return { kind, id, type, file, assetId, url: value(data, 'resourceUrl'), title: value(data, 'resourceTitle'),
     role: value(data, 'role'), note: value(data, 'note'), quantity: value(data, 'quantity'),
-    mode: value(data, 'mode') || 'live', versionId: value(data, 'versionId') };
+    mode: value(data, 'mode') || 'live', versionId: value(data, 'versionId'), usage: readEventUsage(data) };
+}
+
+function readEventUsage(data) {
+  return { status: value(data, 'usage-status'),
+    ...Object.fromEntries(Object.keys(usageFields).map(key => [key, value(data, 'usage-' + key)]).filter(([, text]) => text)) };
 }
 
 function saveMetadata(state, event, data, cover) {
@@ -71,8 +77,12 @@ function saveMetadata(state, event, data, cover) {
 
 function candidateRows(state, event, kind) {
   if (kind === 'card') return state.cardSets.map(item => ({ type: 'card', item }));
-  if (kind === 'wiki') return wikiRecords(state).filter(item => wikiStatus(item) !== 'archived' && !item.deletedAt)
-    .map(item => ({ type: 'discover', item }));
+  if (kind === 'wiki') {
+    const linked = new Set(eventResources(state, event).filter(row => row.kind === 'edge' && row.type === 'discover')
+      .map(row => row.item.id));
+    return wikiRecords(state).filter(item => wikiStatus(item) !== 'archived' && !linked.has(item.id))
+      .map(item => ({ type: 'discover', item }));
+  }
   const wikiIds = new Set(wikiRecords(state).map(row => row.id));
   return relationCandidates(state, 'event', event.id, { includeLinked: true })
     .filter(({ type, item }) => type !== 'discover' || !wikiIds.has(item.id));
@@ -126,8 +136,7 @@ export function initWorkshopEventActions(app, render) {
       const filter = () => {
         const old = picker.value;
         const term = host.querySelector('[data-event-resource-query]').value.trim().toLocaleLowerCase();
-        const options = rows.filter(({ item }) => [contentTitle(item), ...(item.topics ?? []), ...(item.tags ?? [])]
-          .join(' ').toLocaleLowerCase().includes(term));
+        const options = rows.filter(({ item }) => matchesResourceText(item, term));
         picker.replaceChildren(new Option(options.length ? '请选择' : '没有匹配的资源', ''), ...options.map(({ type, item }) =>
           new Option(contentTitle(item), JSON.stringify([type, item.id]))));
         if ([...picker.options].some(row => row.value === old)) picker.value = old;
@@ -288,7 +297,8 @@ export function initWorkshopEventActions(app, render) {
           const entry = area === 'resources' && eventResources(state, event).find(row => row.key === editId);
           if (entry) {
             editEventResource(state, event, editId, { role: value(data, 'role'), note: value(data, 'note'),
-              quantity: value(data, 'quantity'), flowIds: data.getAll('flowId'), mode: value(data, 'mode'), versionId: value(data, 'versionId') });
+              quantity: value(data, 'quantity'), flowIds: data.getAll('flowId'), mode: value(data, 'mode'),
+              versionId: value(data, 'versionId'), usage: readEventUsage(data) });
             return editId;
           }
           if (area === 'resources' && !editId && mode !== 'document') {

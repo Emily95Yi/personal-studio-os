@@ -2,11 +2,12 @@ import { externalWorkshopTool, workshopTools } from './workshop-external-tools.j
 import { escapeHtml as esc, safeUrl } from './html.js';
 import { icon } from './icons.js';
 import { commonResourcesAddress, href, wikiAddress } from './pages.js';
-import { boardContent, boardFolderPath, discoverCategory, exerciseFields, isWorkshopWikiCategory, workshopWikiCategories } from './self-board-data.js';
+import { boardContent, boardFolderPath, discoverCategory, exerciseFields, isWorkshopWikiCategory, resourcesCategory, workshopWikiCategories } from './self-board-data.js';
 import { contentTitle, relatedObjects, studioStore } from './studio-data.js';
 import { cardRoles, eventFormats, formatsFor, publicationProjection, searchEvents, tagsFor, toolTypes, toolVisibility,
   wikiRecords, wikiStatus, wikiStatuses, workshopLinks } from './workshop-library.js';
 import { documentVersion, imageUrl, markdown, objectHref, relatedPanel, timestamp } from './workshop-view.js';
+import { cardGallery, matchResourceTemplate, matchesResourceText, resourceImages, resourceTemplate, resourceTemplates } from './workshop-resource-data.js';
 
 import { storedCaptureAttachment } from './capture-client.js';
 
@@ -40,7 +41,11 @@ function updateDate(item) {
 export function commonResourcesView({ params }) {
   const state = studio();
   const all = wikiRecords(state);
-  const category = isWorkshopWikiCategory(params.get('category')) ? params.get('category') : '';
+  const categories = [...workshopWikiCategories.map(([key]) => key), resourcesCategory];
+  const category = categories.includes(params.get('category')) ? params.get('category') : '';
+  const kind = params.get('kind');
+  const deckId = params.get('deck');
+  const missing = params.get('missing');
   const folder = state.boardFolders.find(row => row.id === params.get('folder') && row.category === category);
   const needle = (params.get('q') || '').trim().toLocaleLowerCase();
   const reference = params.get('reference');
@@ -57,8 +62,8 @@ export function commonResourcesView({ params }) {
       (!params.get('tag') || [...item.topics, ...(item.tags ?? [])].includes(params.get('tag'))) &&
       (!params.get('since') || date >= params.get('since')) && (!params.get('until') || date && date <= params.get('until')) &&
       (!referenced || referenced.has(item.id)) &&
-      (!needle || [item.title, item.body, item.summary, item.personalNotes, item.sourceInfo, item.sourceUrl, ...item.topics]
-        .join(' ').toLocaleLowerCase().includes(needle));
+      (!deckId || item.cardSetId === deckId) &&
+      matchResourceTemplate(item, kind, missing) && matchesResourceText(item, needle);
   });
   const linkLocation = (key, id) => {
     const next = new URLSearchParams(params);
@@ -78,7 +83,10 @@ export function commonResourcesView({ params }) {
     ...workshopTools(state).map(row => ['tool:' + row.id, 'Tool · ' + row.title]),
   ];
   const filters = form(commonResourcesAddress(),
-    searchField(params) + picker('category', '分类', workshopWikiCategories.map(([key]) => [key, key]), params) +
+    searchField(params) + picker('category', '分类', categories.map(key => [key, key]), params) +
+    picker('kind', '资源模板', Object.entries(resourceTemplates).map(([key, template]) => [key, template.label]), params) +
+    picker('deck', '卡组', titled(state.cardSets), params) +
+    picker('missing', '单卡待补', [['image', '缺正面或背面图片'], ['description', '缺客观描述'], ['either', '缺图片或描述']], params) +
     picker('tag', '标签', [...new Set(all.flatMap(row => [...row.topics, ...(row.tags ?? [])]))].sort().map(tag => [tag, tag]), params) +
     picker('status', '状态', Object.entries(wikiStatuses), params) + picker('reference', '引用位置', references, params) +
     dateFilter('since', '更新日从', params) + dateFilter('until', '更新日到', params) +
@@ -93,26 +101,85 @@ export function commonResourcesView({ params }) {
         'data-work-wiki-folder="pin" aria-pressed="' + Boolean(folder.pinned) + '"') : '') +
     '</div></div>' + filters + trail + (folders.length ? '<ul class="work-relations">' + folders.map(row =>
       '<li>' + link(linkLocation(row.category, row.id), row.title) + '</li>').join('') + '</ul>' : '') +
-    (rows.length ? '<ul class="work-relations">' + rows.map(row =>
+    (kind === 'card' || missing ? renderCardGallery(rows) : rows.length ? '<ul class="work-relations">' + rows.map(row =>
       '<li><div>' + link(wikiAddress(row.id), contentTitle(row)) + '<small>' +
-      esc([discoverCategory(row), wikiStatuses[wikiStatus(row)], ...row.topics, timestamp(row.updatedAt)].filter(Boolean).join(' · ')) +
+      esc([resourceTemplate(row.resourceKind)?.label, discoverCategory(row), wikiStatuses[wikiStatus(row)], ...row.topics,
+        timestamp(row.updatedAt)].filter(Boolean).join(' · ')) +
       '</small></div></li>').join('') + '</ul>' : empty('没有匹配的共通资源。'));
+}
+
+function resourceImage(assetId, label) {
+  const src = assetId && imageUrl({ coverAssetId: assetId });
+  return src ? '<img src="' + esc(src) + '" alt="' + esc(label) + '" loading="lazy">' : '';
+}
+
+function renderCardGallery(rows) {
+  return rows.length ? '<div class="gallery-grid poster-grid resource-card-gallery">' + rows.map(row => {
+    const data = row.resourceData;
+    return '<a class="gallery-card" href="' + esc(wikiAddress(row.id)) + '"><div class="gallery-cover cover-event">' +
+      (resourceImage(data.frontAssetId, '正面图片') || resourceImage(data.backAssetId, '背面图片') ||
+        '<span class="work-meta">待补图片</span>') + '</div><div class="gallery-copy"><strong>' +
+      esc(data.number + ' · ' + contentTitle(row)) + '</strong>' +
+      (!data.description?.trim() ? '<p>待补描述</p>' : '') + '</div></a>';
+  }).join('') + '</div>' : empty('没有匹配的单卡。');
+}
+
+function resourceLinks(ids) {
+  const byId = new Map(wikiRecords(studio()).map(row => [row.id, row]));
+  return ids.map(id => byId.get(id)).filter(Boolean).map(row => '<li>' + link(wikiAddress(row.id), contentTitle(row)) + '</li>').join('');
+}
+
+function templateDetails(item) {
+  const template = resourceTemplate(item.resourceKind);
+  const images = Object.entries(resourceImages).map(([key, label]) => {
+    const image = resourceImage(item.resourceData?.[key], label);
+    return image ? '<figure>' + image + '<figcaption>' + label + '</figcaption></figure>' : '';
+  }).join('');
+  const fields = Object.entries(template?.fields ?? {}).filter(([key]) => item.resourceData?.[key]).map(([key, label]) =>
+    '<div><dt>' + label + '</dt><dd>' + esc(item.resourceData[key]) + '</dd></div>').join('');
+  const links = item.resourceLinks?.length ? resourceLinks(item.resourceLinks) : '';
+  return (template ? '<p class="work-meta">' + esc(template.label) + '</p>' : '') +
+    (images ? '<div class="resource-images">' + images + '</div>' : '') +
+    (fields ? '<dl class="resource-template-fields">' + fields + '</dl>' : '') +
+    (links ? '<h3>关联资源</h3><ul class="work-relations">' + links + '</ul>' : '');
 }
 
 function wikiVersion(version, resourceId) {
   const cover = imageUrl(version);
   return (cover ? '<img class="discover-cover" src="' + esc(cover) + '" alt="" referrerpolicy="no-referrer">' : '') +
-    documentVersion(version) + (version.captureSourceUrl && /^https?:\/\//i.test(version.captureSourceUrl)
+    templateDetails(version) + documentVersion(version) + (version.captureSourceUrl && /^https?:\/\//i.test(version.captureSourceUrl)
       ? '<p class="work-meta">' + esc(version.captureSourceUrl) + '</p>' : '') +
     Object.entries({ ...exerciseFields, personalNotes: '我的笔记', excerpt: '原文摘录', aiNotes: 'AI 整理' })
       .filter(([key]) => version[key]).map(([key, label]) => '<h3>' + label + '</h3>' + markdown(version[key])).join('') +
     storedCaptureAttachment({ id: resourceId, captureHasAttachment: version.captureHasAttachment });
 }
 
-export function wikiDetails(item, versionId) {
-  const rows = relatedObjects(studio(), 'discover', item.id).direct;
+export function wikiVersionView(item, versionId) {
+  const version = item.revisions?.find(row => row.id === versionId);
+  return '<article class="work-reading sb-reader"><header class="section-heading"><h1>' +
+    esc(version?.title || contentTitle(item)) + '</h1>' + link(wikiAddress(item.id), '查看当前版本') + '</header>' +
+    (version ? '<p class="work-meta">历史版本 · ' + esc(timestamp(version.createdAt)) + '</p>' + wikiVersion(version, item.id) :
+      '<p role="alert">找不到所选历史版本。</p>') + '</article>';
+}
+
+export function wikiDetails(item) {
+  const state = studio();
+  const rows = relatedObjects(state, 'discover', item.id).direct;
   const references = rows.filter(row => ['event', 'project', 'tool'].includes(row.type));
-  return '<section class="workshop-panel"><h2>资源状态</h2><p class="work-meta">' +
+  const backlinks = wikiRecords(state).filter(row => row.resourceLinks?.includes(item.id));
+  const deck = state.cardSets.find(row => row.id === item.cardSetId);
+  const profile = deck && wikiRecords(state).find(row => row.resourceKind === 'card_set' && row.cardSetId === deck.id);
+  const galleryUrl = deck && commonResourcesAddress(new URLSearchParams({ kind: 'card', deck: deck.id }));
+  const deckView = item.resourceKind === 'card_set' && deck
+    ? '<section class="workshop-panel"><div class="section-heading"><h2>单卡画廊</h2>' +
+      workshopAction('新增单卡', 'data-work-add-card="' + esc(deck.id) + '"') + '</div>' +
+      renderCardGallery(cardGallery(state, deck.id)) + '</section>'
+    : item.resourceKind === 'card' && deck ? '<p class="work-meta">所属卡组 · ' +
+      link(profile ? wikiAddress(profile.id) : galleryUrl, profile?.title || deck.title) + '</p>' : '';
+  return '<section class="workshop-panel">' + templateDetails(item) + deckView +
+    (backlinks.length ? '<h3>被以下资源关联</h3><ul class="work-relations">' + backlinks.map(row =>
+      '<li>' + link(wikiAddress(row.id), contentTitle(row)) + '</li>').join('') + '</ul>' : '') +
+    '<h2>资源状态</h2><p class="work-meta">' +
     esc([wikiStatuses[wikiStatus(item)], ...(item.topics ?? [])].join(' · ')) + '</p>' +
     workshopAction(wikiStatus(item) === 'archived' ? '恢复为使用中' : '归档资源', 'data-work-wiki-status') + '</section>' +
     '<section class="workshop-panel"><h2>引用位置</h2>' +
@@ -121,8 +188,9 @@ export function wikiDetails(item, versionId) {
       '</small></div></li>').join('') + '</ul>' : empty('还没有 Project、Event 或工具引用。')) + '</section>' +
     '<section class="workshop-panel"><h2>版本历史</h2>' +
     ((item.revisions ?? []).length ? (item.revisions ?? []).slice().reverse().map(row =>
-      '<details class="work-history"' + (versionId === row.id ? ' open' : '') + '><summary>' +
+      '<details class="work-history"><summary>' +
       esc((row.title || contentTitle(item)) + (row.createdAt ? ' · ' + timestamp(row.createdAt) : '')) + '</summary>' +
+      link(wikiAddress(item.id) + '?' + new URLSearchParams({ version: row.id }), '打开此版本') +
       wikiVersion(row, item.id) + '</details>').join('') : empty('还没有历史版本。')) + '</section>';
 }
 
@@ -152,7 +220,7 @@ export function linkedWorkshopPanel(type, owner, kind) {
   return '<section class="workshop-panel"><div class="section-heading"><h2>' + title + '</h2>' +
     workshopAction(kind === 'tool' ? '关联工具' : '引用共通资源', 'data-work-link="' + kind + '"') + '</div>' +
     group(type === 'event' ? 'Event 直接引用' : 'Project 明确引用', directRows, true) +
-    (type === 'project' ? group('经由 Event 使用', derived) :
+    (type === 'project' ? group('经由 Event 关联', derived) :
       (inherited.length ? '<details class="work-history"><summary>Project 引用（' + inherited.length + '）</summary>' +
         '<ul class="work-relations">' + inherited.map(item => row(item)).join('') + '</ul></details>' : '') + (kind === 'wiki' ? group('固定版本采用', fixed, true) : '')) + '</section>';
 }

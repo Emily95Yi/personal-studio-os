@@ -5,6 +5,7 @@ import { documentVersion, eventFields, imageUrl, markdown, objectHref, smallActi
 import { publicationPanel } from './workshop-library-view.js';
 import { cardRoles, eventFormats, formatsFor, tagsFor, workshopLinks } from './workshop-library.js';
 import { activeFlow, areaFor, eventAreas, eventAttachmentReferences, eventResources } from './workshop-event-data.js';
+import { usageFields as eventUsageLabels, usageStatuses, usageTextLimit } from './workshop-resource-data.js';
 
 export const areaLabels = { overview: 'Overview', flow: 'Flow', resources: 'Resources', review: 'Records & Review' };
 export const initialSections = { overview: 'overview', flow: 'flow', resources: 'artifact', review: 'review' };
@@ -110,6 +111,13 @@ function usageFields({ role = '', note = '', quantity = '', card = false } = {})
     field('quantity', '数量（可选）', quantity) + '</div>' + field('note', '用法 / 备注（可选）', note);
 }
 
+function eventUsageFields(usage = {}) {
+  return '<fieldset class="event-usage-fields"><legend>本场用法</legend>' +
+    select('usage-status', '使用状态', Object.entries(usageStatuses), usage.status || 'candidate') +
+    Object.entries(eventUsageLabels).map(([key, label]) => textArea('usage-' + key, label, usage[key],
+      'maxlength="' + usageTextLimit + '"', 2)).join('') + '</fieldset>';
+}
+
 export function resourceFields(state, event, entry) {
   const { row } = entry;
   const isWiki = entry.kind === 'edge' && workshopLinks(state, 'event', event, 'wiki').direct.some(link => link.edge.id === entry.id);
@@ -117,6 +125,7 @@ export function resourceFields(state, event, entry) {
     usageFields({ role: row.role ?? row.workshopRole, note: row.usageNote ?? row.workshopUsage, quantity: row.workshopQuantity,
       card: entry.kind === 'card' }) +
     (isWiki ? wikiOptions(entry.item, row.versionId) : '') +
+    eventUsageFields(row.usage) +
     '<fieldset class="event-checks"><legend>关联环节</legend>' +
     activeFlow(state, event.id).map(session => check('flowId', currentVersion(session).title, row.workshopFlowIds?.includes(session.id), session.id))
       .join('') + '</fieldset>';
@@ -146,7 +155,7 @@ export function resourceInputFields(kind) {
     link: field('resourceUrl', '链接', '', 'placeholder="https://"') + field('resourceTitle', '名称（可选）', '', 'maxlength="200"'),
     'new-card': field('resourceTitle', '卡组名称', '', 'maxlength="80"'),
   };
-  return fields[kind] + usageFields({ card: ['card', 'new-card'].includes(kind) });
+  return fields[kind] + usageFields({ card: ['card', 'new-card'].includes(kind) }) + eventUsageFields();
 }
 
 export function flowAssignment(state, event) {
@@ -160,23 +169,28 @@ function resourceTitle(entry) {
   if (entry.kind === 'edge') url = objectHref(entry.type, entry.item) + (row.versionId ? '?' + new URLSearchParams({ version: row.versionId }) : '');
   if (entry.kind === 'link') url = safeUrl(row.url);
   if (entry.kind === 'asset') return '<button class="text-button" type="button" data-work-download="' + esc(row.assetId) + '">' + esc(entry.title) + '</button>';
-  return url ? '<a href="' + esc(url) + '" rel="noreferrer">' + esc(entry.title) + '</a>' : '<span>' + esc(entry.title) + '</span>';
+  const version = row.versionId && entry.item?.revisions?.find(item => item.id === row.versionId);
+  return url ? '<a href="' + esc(url) + '" rel="noreferrer">' + esc(version?.title || entry.title) + '</a>' : '<span>' + esc(entry.title) + '</span>';
 }
 
-function resourceRow(entry, state, preview = false) {
+function resourceRow(entry, state, preview = false, inherited = false) {
   const { row } = entry;
   const role = entry.kind === 'card' ? cardRoles[row.role] : row.role || row.workshopRole ||
     (['used_in_event', 'related'].includes(row.relationType) ? '' : row.relationType);
-  const labels = [role, row.versionId ? '固定版本' : '',
+  const usage = inherited ? undefined : row.usage;
+  const labels = [role, row.versionId ? '固定版本' : '', usageStatuses[usage?.status],
     row.workshopQuantity ? '数量 ' + row.workshopQuantity : '',
     ...(preview ? [] : (row.workshopFlowIds ?? []).map(id => currentVersion(state.sessions.find(session => session.id === id))?.title))]
     .filter(Boolean);
   const note = row.usageNote ?? row.workshopUsage;
+  const usageDetails = Object.entries(eventUsageLabels).filter(([key]) => usage?.[key]).map(([key, label]) =>
+    '<div><dt>' + label + '</dt><dd>' + esc(usage[key]) + '</dd></div>').join('');
   const controls = preview ? '' : '<div class="work-actions">' + editButton('编辑资源用法', 'resources', entry.key) +
     smallAction('trash', '移除资源', 'data-event-remove-resource="' + esc(entry.key) + '"') + '</div>';
   return '<li' + (!preview ? ' data-event-saved="' + esc(entry.key) + '" tabindex="-1"' : '') + '><div>' + resourceTitle(entry) +
     (labels.length ? '<small>' + esc(labels.join(' · ')) + '</small>' : '') +
-    (note ? '<p class="event-resource-note">' + esc(note) + '</p>' : '') + '</div>' + controls + '</li>';
+    (note ? '<p class="event-resource-note">' + esc(note) + '</p>' : '') +
+    (usageDetails ? '<dl class="resource-template-fields">' + usageDetails + '</dl>' : '') + '</div>' + controls + '</li>';
 }
 
 function docPreview(state, session, area, { flow, index = 0, resources, selected } = {}) {
@@ -256,8 +270,8 @@ export function eventDetail({ event, params }) {
     (owners.length ? '<small>' + esc(owners.map(session => currentVersion(session).title).join(' · ')) + '</small>' : '') +
     '</div>' + smallAction('link', '关联此附件', 'data-event-target="resources" data-event-asset="' + esc(id) + '"') + '</li>').join('') + '</ul>' : '';
   const inherited = ['wiki', 'tool'].flatMap(kind => workshopLinks(state, 'event', event, kind).inherited);
-  const projectLinks = inherited.length ? '<details class="work-history"><summary>Project 资源</summary><ul class="event-resource-list">' +
-    inherited.map(entry => resourceRow({ ...entry, row: entry.edge, kind: 'edge', title: entry.item.title || '未命名资源' }, state, true)).join('') +
+  const projectLinks = inherited.length ? '<details class="work-history"><summary>Project 继承资源</summary><ul class="event-resource-list">' +
+    inherited.map(entry => resourceRow({ ...entry, row: entry.edge, kind: 'edge', title: entry.item.title || '未命名资源' }, state, true, true)).join('') +
     '</ul></details>' : '';
   const content = { overview, flow: '', resources: groupedResources + fileList + projectLinks, review: '' };
   const archived = sessionsFor(state, 'event', event.id).filter(row => row.workshopArchivedAt);

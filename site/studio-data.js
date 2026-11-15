@@ -218,6 +218,7 @@ export function saveRelation(state, { id, sourceType, sourceId, targetType, targ
   const existing = id && find(state.relations, id);
   if (id && !existing) fail('这条关联已不可用。');
   if (existing?.versionId && relationKey(existing) !== relationKey(candidate)) fail('固定版本的关联须在 Workshop 中重新选择。');
+  if (existing?.usage && relationKey(existing) !== relationKey(candidate)) fail('这条关联已有本场用法，请为新资源另建关联。');
   if (existing?.workshopFlowIds?.length && relationKey(existing) !== relationKey(candidate)) {
     fail('这条关联用于 Event 流程，请先在 Workshop 解除环节关联。');
   }

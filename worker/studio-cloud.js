@@ -3,7 +3,7 @@ import { ensureCaptureTopic } from '../site/capture-topic.js';
 import { emptyStudio } from '../site/studio-data.js';
 import { clearBoardTrash } from '../site/self-board-data.js';
 import { cleanupUploads } from './capture-files.js';
-import { previewMigration, studioExport } from '../site/studio-migration.js';
+import { previewMigration, studioExport, validatePinnedResources } from '../site/studio-migration.js';
 import { applyStudioDelta, deltaFormat } from '../site/studio-delta.js';
 
 const leaseDuration = 120_000;
@@ -67,7 +67,7 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
   const clearTrash = url.searchParams.get('clear-trash') === '1';
   let transfer = clearTrash ? undefined : await body(request, 24 * 1024 * 1024);
   const delta = transfer?.format === deltaFormat;
-  const current = clearTrash || delta ? await readStudio(env, owner) : null;
+  const current = clearTrash || delta || row.revision > 0 ? await readStudio(env, owner) : null;
   if (current && current.row?.revision !== row.revision) return saveConflict(storage, current.row, revision, saveId, json);
   let checked;
   try {
@@ -78,6 +78,7 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
       transfer = applyStudioDelta(current.state, transfer);
     }
     checked = previewMigration(emptyStudio(), transfer).next;
+    if (current) validatePinnedResources(current.state, checked);
   } catch {
     return json({ error: 'invalid_studio' }, 400);
   }

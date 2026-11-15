@@ -5,6 +5,7 @@ import { boardRecords, boardSection, canAddSubfolder, contentTypes, discoverCate
 import { categoryFor, categoryList, explorationTypes, isDefaultCategory, resourceTypes, validEntryTarget } from './board-library-data.js';
 import { cardRoles, eventFormats, publicationProjection, toolTypes, toolVisibility, wikiStatuses } from './workshop-library.js';
 import { areaFor } from './workshop-event-data.js';
+import { reserveCardIdentity, resourceImageIds, resourceValidationContext, validateEventUsage, validateResource } from './workshop-resource-data.js';
 import { safeUrl } from './html.js';
 
 export const transferFormat = 'yistudio-transfer-v1';
@@ -18,6 +19,28 @@ const require = (condition, message) => { if (!condition) throw new Error(messag
 
 export function studioExport(state) {
   return { format: transferFormat, ...Object.fromEntries(collections.map(key => [key, key === 'content' ? state.content.filter(isSelfBoard) : state[key] ?? []])) };
+}
+
+export function validatePinnedResources(before, after) {
+  const pinned = new Map(before.relations.filter(edge => edge.versionId).map(edge => [relationKey(edge), edge.versionId]));
+  if (!pinned.size) return;
+  const oldContent = new Map(before.content.map(row => [row.id, row]));
+  const newContent = new Map(after.content.map(row => [row.id, row]));
+  const oldAssets = new Map(before.assets.map(row => [row.id, row]));
+  const newAssets = new Map(after.assets.map(row => [row.id, row]));
+  for (const edge of after.relations) {
+    if (!edge.versionId || pinned.get(relationKey(edge)) !== edge.versionId) continue;
+    const id = edge.sourceType === 'discover' ? edge.sourceId : edge.targetId;
+    const previous = oldContent.get(id)?.revisions?.find(row => row.id === edge.versionId);
+    const saved = newContent.get(id)?.revisions?.find(row => row.id === edge.versionId);
+    require(previous && saved && canonical(previous) === canonical(saved), '不能改写 Event 已固定的资源版本。');
+    const ids = [...resourceImageIds(previous), previous.coverAssetId, ...(previous.assetIds ?? [])].filter(Boolean);
+    for (const assetId of ids) {
+      const old = oldAssets.get(assetId);
+      const next = newAssets.get(assetId);
+      require(old && next && ['name', 'mime', 'data'].every(field => old[field] === next[field]), '不能覆盖 Event 已固定版本的图片或附件。');
+    }
+  }
 }
 
 function field(value, path) {
@@ -219,11 +242,18 @@ function validateRecords(state) {
   }));
   const tagIds = dictionary('workshopTags');
   const cardSetIds = dictionary('cardSets');
+  const resourceContext = resourceValidationContext(state);
+  const deckProfiles = new Set();
+  const cardNumbers = new Set();
   const sessions = new Map(state.sessions.map(row => [row.id, row]));
   const validOrder = value => value == null || (Number.isSafeInteger(value) && value >= 0);
   const validateUse = (row, eventId, label) => {
     optionalFields(row, ['workshopRole', 'workshopUsage', 'workshopQuantity'], label);
     optionalList(row, 'workshopFlowIds', label);
+    if (row.usage !== undefined) {
+      require(eventId, '资源用法须属于本场 Event：' + label);
+      validateEventUsage(row.usage);
+    }
     const ids = row.workshopFlowIds ?? [];
     require(ids.length === new Set(ids).size && ids.every(id => {
       const session = sessions.get(id);
@@ -252,6 +282,13 @@ function validateRecords(state) {
     for (const row of state[key]) {
       const unified = key === 'content' && Object.hasOwn(contentTypes, row.type);
       const label = row.title || row.id;
+      if (key === 'content') {
+        validateResource(row, row, resourceContext);
+        if (!row.deletedAt) reserveCardIdentity(row, deckProfiles, cardNumbers);
+        if (!unified && Array.isArray(row.revisions)) {
+          for (const version of row.revisions.filter(plain)) validateResource(version, row, resourceContext, { historical: true });
+        }
+      }
       require(nonempty(row.title) || (unified && (nonempty(row.body) || nonempty(row.sourceUrl) || row.assetIds?.length || row.coverAssetId)),
         '记录缺少内容：' + row.id);
       if (unified) {
@@ -276,6 +313,7 @@ function validateRecords(state) {
               typeof version.body === 'string', '内容历史版本无效：' + label);
             optionalFields(version, ['title', 'summary', 'createdAt', 'provenance', 'sourceUrl', 'sourceInfo'], label);
             validateAssets(version, label);
+            validateResource(version, row, resourceContext, { historical: true });
             ids.add(version.id);
           }
         }

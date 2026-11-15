@@ -6,7 +6,7 @@ import { markBoardContent, saveBoardContent, saveBoardFolder, workshopWikiCatego
 import { addAsset, emptyStudio, saveEvent, saveProject, saveRelation, studioStore } from '../site/studio-data.js';
 import { applyStudioDelta, studioDelta } from '../site/studio-delta.js';
 import { previewMigration, studioExport } from '../site/studio-migration.js';
-import { interactiveToolsView, interactiveToolView, linkedWorkshopPanel } from '../site/workshop-library-view.js';
+import { commonResourcesView, interactiveToolsView, interactiveToolView, linkedWorkshopPanel } from '../site/workshop-library-view.js';
 import { linkWiki, publicationProjection, saveCardSet, saveInteractiveTool, saveWiki, saveWorkshopTag,
   searchEvents, setWikiStatus, tagsFor, workshopLinks } from '../site/workshop-library.js';
 import { workshopMigrationReport } from '../site/workshop-migration-report.js';
@@ -157,6 +157,47 @@ test('built-in external tools open stable Render addresses and can be linked wit
       assert.doesNotMatch(interactiveToolView(route), /github\.com/);
     }
     assert.equal(workshopLinks(restored, 'event', event, 'tool').direct[0].item.id, id);
+  } finally {
+    studioStore.receiveCloud(emptyStudio(), 0);
+  }
+});
+
+test('structured Wiki filters, gallery, backlinks and pinned read views survive export and import', () => {
+  const state = emptyStudio();
+  const deck = saveCardSet(state, 'Existing deck');
+  const profile = saveWiki(state, { title: 'Deck profile', wikiStatus: 'active', resourceKind: 'card_set', cardSetId: deck.id });
+  const general = saveWiki(state, { title: 'General source', wikiStatus: 'active', resourceKind: 'general', discoverCategory: 'Resources' });
+  const method = saveWiki(state, { title: 'Method record', wikiStatus: 'active', resourceKind: 'method',
+    resourceData: { steps: 'Searchable procedure' }, resourceLinks: [general.id] });
+  const old = wiki(state, { title: 'Older Wiki' });
+  const addCard = fields => saveWiki(state, { resourceKind: 'card', cardSetId: deck.id, wikiStatus: 'draft', ...fields });
+  const card = addCard({ title: 'Card missing description', resourceData: { number: '02' } });
+  addCard({ title: 'Card with description', resourceData: { number: '10', description: 'Blue stripes' } });
+  assert.throws(() => addCard({ title: 'Card without a number' }), /编号/);
+  assert.throws(() => saveWiki(state, { id: method.id, resourceLinks: [method.id] }), /指向自身/);
+  const event = saveEvent(state, { title: 'Event' });
+  const edge = linkWiki(state, { ownerType: 'event', ownerId: event.id, resourceId: method.id, mode: 'pinned_version' });
+  saveWiki(state, { id: method.id, resourceData: { steps: 'Updated procedure' } });
+
+  const exported = JSON.parse(JSON.stringify(studioExport(state)));
+  const restored = previewMigration(emptyStudio(), exported).next;
+  assert.deepEqual(studioExport(restored), exported);
+  studioStore.receiveCloud(restored, 1);
+  try {
+    const renderList = query => commonResourcesView(readRoute('#/workshop/common-resources?' + query));
+    const detail = id => boardDetail(readRoute(wikiAddress(id)));
+    assert.match(renderList('kind=method&q=updated+procedure'), /Method record/);
+    assert.doesNotMatch(renderList('kind=method&q=searchable+procedure'), /Method record/);
+    assert.match(renderList('kind=card&missing=description'), /Card missing description/);
+    assert.doesNotMatch(renderList('kind=card&missing=description'), /Card with description/);
+    assert.match(renderList('kind=general'), /Older Wiki/);
+    assert.match(detail(profile.id), /单卡画廊[\s\S]*新增单卡[\s\S]*02 · Card missing description[\s\S]*10 · Card with description/);
+    assert.match(detail(card.id), /所属卡组[\s\S]*Deck profile/);
+    assert.match(detail(general.id), /被以下资源关联[\s\S]*Method record/);
+    assert.match(detail(old.id), /First version/);
+    const pinned = boardDetail(readRoute(wikiAddress(method.id) + '?version=' + edge.versionId));
+    assert.match(pinned, /Searchable procedure/);
+    assert.doesNotMatch(pinned, /Updated procedure/);
   } finally {
     studioStore.receiveCloud(emptyStudio(), 0);
   }

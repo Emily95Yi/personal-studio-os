@@ -1124,3 +1124,21 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
   .event-field-pair { grid-template-columns: minmax(0, 1fr); }
   .event-file-control { flex-wrap: wrap; }
 }
+
+.resource-dialog details > summary { cursor: pointer; color: var(--accent); padding-block: 6px; }
+.resource-dialog .resource-link-choices { max-height: 220px; overflow: auto; }
+.resource-dialog .resource-link-choices .work-check { padding-block: 5px; }
+.resource-images { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 16px; margin-block: 16px; max-width: 580px; }
+.resource-images figure { margin: 0; }
+.resource-images img { display: block; width: 100%; height: clamp(150px, 34vw, 300px); object-fit: contain; background: var(--tint); border-radius: 8px; }
+.resource-images figcaption { margin-top: 4px; color: var(--muted); font-size: 13px; }
+.resource-template-fields { margin-block: 10px 16px; }
+.resource-template-fields > div { margin-block: 8px; }
+.resource-template-fields dt { font-weight: 600; font-size: 13px; }
+.resource-template-fields dd { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.resource-card-gallery .gallery-cover img { object-fit: contain; }
+.resource-card-gallery .gallery-cover { aspect-ratio: 4 / 5; }
+.resource-card-gallery .gallery-cover::before { content: none; }
+.event-inline-form .event-usage-fields { display: grid; gap: 8px; }
+.event-usage-fields legend { padding: 0; color: var(--accent); font-size: 14px; font-weight: 650; }
+.event-inline-form .event-usage-fields textarea { min-height: 52px; }

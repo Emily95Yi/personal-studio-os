@@ -1,7 +1,8 @@
 import { externalWorkshopTool } from './workshop-external-tools.js';
 import { safeUrl } from './html.js';
-import { boardContent, boardRecords, discoverCategory, isWorkshopWiki, isWorkshopWikiCategory, saveBoardContent } from './self-board-data.js';
+import { boardContent, boardRecords, initialDiscoverCategories, isWorkshopWiki, resourcesCategory, saveBoardContent } from './self-board-data.js';
 import { objectFor, relatedObjects, saveRecord, saveRelation } from './studio-data.js';
+import { reserveCardIdentity, resourceTemplate, resourceValidationContext, validateEventUsage, validateResource } from './workshop-resource-data.js';
 
 export const wikiStatuses = { draft: '草稿', active: '使用中', archived: '已归档' };
 export const cardRoles = { primary: '主卡', supporting: '副卡' };
@@ -19,6 +20,7 @@ const snapshotFields = [
   'title', 'body', 'bodyFormat', 'mediaSlots', 'summary', 'assetIds', 'coverAssetId', 'coverUrl', 'sourceInfo', 'sourceUrl', 'provenance',
   'captureSourceUrl', 'captureHasAttachment', 'personalNotes', 'originalPath', 'originalBlockRange', 'notionPageId',
   'excerpt', 'aiNotes', 'steps', 'duration', 'materials', 'scenarios', 'facilitation',
+  'resourceKind', 'resourceData', 'resourceLinks', 'cardSetId',
 ];
 function snapshotWiki(item) {
   const snapshot = { body: '', createdAt: item.updatedAt ?? item.createdAt ?? '' };
@@ -30,7 +32,7 @@ function retainWikiVersion(item, original = item) {
   const snapshot = snapshotWiki(boardContent(original));
   const revisions = item.revisions ??= [];
   const existing = revisions.find(version =>
-    Object.keys(snapshot).every(field => JSON.stringify(version[field]) === JSON.stringify(snapshot[field])));
+    ['createdAt', ...snapshotFields].every(field => JSON.stringify(version[field]) === JSON.stringify(snapshot[field])));
   if (existing) return existing.id;
   const id = crypto.randomUUID();
   revisions.push({ ...structuredClone(snapshot), id });
@@ -39,13 +41,41 @@ function retainWikiVersion(item, original = item) {
 
 export function saveWiki(state, input) {
   const previous = input.id && objectFor(state, 'discover', input.id);
+  const prior = previous && boardContent(previous);
+  const candidate = { domains: ['Self-Board'], ...prior, ...input };
+  const template = resourceTemplate(candidate.resourceKind);
+  if (template?.category) candidate.discoverCategory = template.category;
+  else if (candidate.resourceKind === 'general') candidate.discoverCategory ||= resourcesCategory;
+  if (!previous) candidate.type ??= initialDiscoverCategories.find(([key]) => key === candidate.discoverCategory)?.[2];
   if ((input.id && (!isWorkshopWiki(previous) || previous.deletedAt)) ||
-      !isWorkshopWikiCategory(input.discoverCategory) || !Object.hasOwn(wikiStatuses, input.wikiStatus)) {
+      !isWorkshopWiki(candidate) || !Object.hasOwn(wikiStatuses, candidate.wikiStatus)) {
     throw new Error('请选择有效的共通资源分类与状态。');
   }
-  const saved = saveBoardContent(state, input);
-  if (previous && snapshotFields.some(field =>
-    JSON.stringify(boardContent(previous)[field]) !== JSON.stringify(saved[field]))) {
+  if (!previous && !candidate.title?.trim()) throw new Error('请输入标题。');
+  const cardSets = [...state.cardSets];
+  if (previous?.resourceKind === 'card_set' && candidate.cardSetId !== previous.cardSetId) {
+    throw new Error('卡组资源须保留既有卡组 ID。');
+  }
+  if (candidate.resourceKind === 'card_set' && !candidate.cardSetId && candidate.title?.trim()) {
+    candidate.cardSetId = saveCardSet({ cardSets }, candidate.title.trim().slice(0, 80)).id;
+  }
+  if (candidate.resourceData && candidate.resourceKind === 'card' && typeof candidate.resourceData.number === 'string') {
+    candidate.resourceData = { ...candidate.resourceData, number: candidate.resourceData.number.trim() };
+  }
+  if (candidate.resourceKind !== undefined || candidate.resourceData !== undefined ||
+      candidate.resourceLinks !== undefined || candidate.cardSetId !== undefined) {
+    validateResource(candidate, candidate, resourceValidationContext({ ...state, cardSets }));
+    if (['card', 'card_set'].includes(candidate.resourceKind)) {
+      const decks = new Set();
+      const numbers = new Set();
+      for (const row of state.content) if (row.id !== candidate.id && !row.deletedAt) reserveCardIdentity(row, decks, numbers);
+      reserveCardIdentity(candidate, decks, numbers);
+    }
+  }
+  const saved = saveBoardContent(state, candidate);
+  if (cardSets.length !== state.cardSets.length) state.cardSets = cardSets;
+  if (prior && snapshotFields.some(field => JSON.stringify(prior[field]) !== JSON.stringify(saved[field]))) {
+    saved.revisions = [...(saved.revisions ?? [])];
     retainWikiVersion(saved, previous);
   }
   return saved;
@@ -59,7 +89,7 @@ export function setWikiStatus(state, id, status) {
   return item;
 }
 
-export function linkWiki(state, { ownerType, ownerId, resourceId, mode = 'live', id, versionId: requestedVersion = '' }) {
+export function linkWiki(state, { ownerType, ownerId, resourceId, mode = 'live', id, versionId: requestedVersion = '', usage }) {
   const item = objectFor(state, 'discover', resourceId);
   const owner = objectFor(state, ownerType, ownerId);
   const current = owner && relatedObjects(state, ownerType, ownerId).direct
@@ -70,10 +100,16 @@ export function linkWiki(state, { ownerType, ownerId, resourceId, mode = 'live',
   if (!['project', 'event'].includes(ownerType) || !owner || owner.deletedAt || !isWorkshopWiki(item) || item.deletedAt ||
       (id ? existing?.id !== id : Boolean(existing) || wikiStatus(item) === 'archived') ||
       (mode !== 'live' && !canPin) || badVersion) throw new Error('共通资源或引用方式不可用。');
+  if (usage !== undefined) {
+    if (ownerType !== 'event') throw new Error('用法须属于本场 Event。');
+    validateEventUsage(usage);
+  }
   // A recorded adoption stays independent of later live edits.
   const versionId = mode === 'pinned_version' ? requestedVersion || retainWikiVersion(item) : '';
-  return saveRelation(state, { id, sourceType: ownerType, sourceId: ownerId,
+  const edge = saveRelation(state, { id, sourceType: ownerType, sourceId: ownerId,
     targetType: 'discover', targetId: resourceId, relationType: existing?.relationType ?? (ownerType === 'event' ? 'used_in_event' : 'cites'), versionId });
+  if (usage !== undefined) edge.usage = structuredClone(usage);
+  return edge;
 }
 
 export function workshopLinks(state, type, item, kind) {
@@ -119,7 +155,7 @@ export function searchEvents(state, { project = '', tag = '', card = '', role = 
     (!tag || tagsFor(state, event).includes(tag)) &&
     ((!card && !role) || (event.cardUses ?? []).some(use => (!card || use.cardSetId === card) && (!role || use.role === role))) &&
     formats.every(format => formatsFor(event).includes(format)) &&
-    (!wiki || Object.values(workshopLinks(state, 'event', event, 'wiki')).some(rows => rows.some(row => row.item.id === wiki))) &&
+    (!wiki || workshopLinks(state, 'event', event, 'wiki').direct.some(row => row.item.id === wiki)) &&
     (!term || [event.title, event.theme, tagsFor(state, event).join(' ')].join(' ').toLocaleLowerCase().includes(term)));
 }
 
