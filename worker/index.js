@@ -17,6 +17,9 @@ const privateHeaders = {
 };
 
 function json(value, status = 200, headers = {}) {
+  if (value instanceof ReadableStream) {
+    return new Response(value, { status, headers: { ...privateHeaders, 'Content-Type': 'application/json', ...headers } });
+  }
   return Response.json(value, { status, headers: { ...privateHeaders, ...headers } });
 }
 

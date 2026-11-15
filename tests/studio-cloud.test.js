@@ -3,11 +3,26 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { createHandler } from '../worker/index.js';
+import { ensureCaptureTopic } from '../site/capture-topic.js';
 import { beginStudioEdit, startStudioSync } from '../site/studio-cloud.js';
 import { addAsset, createStudioStore, emptyStudio, saveEvent, saveProject, studioStore } from '../site/studio-data.js';
 import { studioDelta } from '../site/studio-delta.js';
 import { saveBoardContent } from '../site/self-board-data.js';
 import { studioExport } from '../site/studio-migration.js';
+
+globalThis.FixedLengthStream ??= class extends TransformStream {
+  constructor(length) {
+    let written = 0;
+    super({
+      transform(chunk, controller) {
+        written += chunk.byteLength;
+        assert.ok(written <= length);
+        controller.enqueue(chunk);
+      },
+      flush() { assert.equal(written, length); },
+    });
+  }
+};
 
 function studioApi(t) {
   const db = new DatabaseSync(':memory:');
@@ -44,10 +59,17 @@ function studioApi(t) {
     DB: binding,
     STUDIO_CONTENT: {
       put: async (key, value, options) => {
-        objects.set(key, value);
+        if (typeof value === 'string' && Buffer.byteLength(value) > 64 * 1024 * 1024) {
+          throw new Error('This snapshot must be streamed');
+        }
+        objects.set(key, typeof value === 'string' ? value : await new Response(value).text());
         metadata.set(key, options.customMetadata);
       },
-      get: async key => objects.has(key) ? { json: async () => JSON.parse(objects.get(key)) } : null,
+      get: async key => objects.has(key) ? {
+        body: new Blob([objects.get(key)]).stream(),
+        customMetadata: metadata.get(key),
+        json: async () => JSON.parse(objects.get(key)),
+      } : null,
       head: async key => objects.has(key) ? { customMetadata: metadata.get(key) } : null,
       delete: async key => { objects.delete(key); metadata.delete(key); },
     },
@@ -100,6 +122,27 @@ test('private Studio sync migrates existing IDs and gives one device at a time p
   assert.equal((await save(desktop, 2, studioExport(local))).status, 200);
   await Promise.all(jobs);
   assert.equal(objects.size, 2);
+});
+
+test('legacy Studio snapshots can grow past 64 MiB and reload after a delta', async t => {
+  const { call, lock, save, db, objects } = studioApi(t);
+  const token = crypto.randomUUID();
+  const initial = emptyStudio();
+  ensureCaptureTopic(initial);
+  for (let i = 0; i < 4; i++) {
+    addAsset(initial, { name: '原始附件 ' + i, mime: 'text/plain', data: 'A'.repeat(15 * 1024 * 1024) });
+  }
+  objects.set('legacy', JSON.stringify(initial));
+  db.prepare('INSERT INTO studio_cloud (owner, revision, object_key) VALUES (?, ?, ?)').run('studio-user', 1, 'legacy');
+  assert.deepEqual(await (await call()).json(), initial);
+
+  const next = { ...initial, assets: [...initial.assets] };
+  addAsset(next, { name: '新增附件', mime: 'text/plain', data: 'A'.repeat(5 * 1024 * 1024) });
+  await lock(token);
+  assert.equal((await save(token, 1, studioDelta(initial, next))).status, 200);
+  const response = await call();
+  assert.equal(response.headers.get('X-Studio-Revision'), '2');
+  assert.deepEqual((await response.json()).assets, next.assets);
 });
 
 test('Event deltas save new posters when the full Studio exceeds the upload limit', async t => {

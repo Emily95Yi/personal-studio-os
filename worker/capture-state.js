@@ -3,6 +3,7 @@ import { emptyStudio } from '../site/studio-data.js';
 import { boardSection, initialDiscoverCategories, isWorkshopWikiCategory, resourceKey } from '../site/self-board-data.js';
 import { categoryList, collectionCategoryLabel, foldersFor, inbox, topicsFor } from '../site/board-library-data.js';
 import { previewMigration, studioExport } from '../site/studio-migration.js';
+import { readStudioSnapshot } from './studio-snapshot.js';
 
 export const sql = (db, query, ...args) => db.prepare(query).bind(...args);
 export const readCloud = (db, owner) => sql(db, 'SELECT * FROM studio_cloud WHERE owner = ?', owner).first();
@@ -20,7 +21,7 @@ export async function readStudio(env, owner, requestedRevision) {
     if (String(row?.revision ?? 0) === requestedRevision) return { row, unchanged: true };
     const object = row?.object_key ? await storage.get(row.object_key) : null;
     if (row?.object_key && !object) continue;
-    const snapshot = object ? await object.json() : null;
+    const snapshot = object ? await readStudioSnapshot(object) : null;
     const state = snapshot ?? emptyStudio();
     ensureCaptureTopic(state);
     for (const projection of projected.results) {

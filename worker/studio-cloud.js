@@ -5,6 +5,7 @@ import { clearBoardTrash } from '../site/self-board-data.js';
 import { cleanupUploads } from './capture-files.js';
 import { previewMigration, studioExport, validatePinnedResources } from '../site/studio-migration.js';
 import { applyStudioDelta, deltaFormat } from '../site/studio-delta.js';
+import { putStudioSnapshot, streamStudioSnapshot } from './studio-snapshot.js';
 
 const leaseDuration = 120_000;
 const validToken = token => typeof token === 'string' && /^[0-9a-f-]{36}$/.test(token);
@@ -52,7 +53,7 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
     const headers = { 'X-Studio-Revision': String(result.row?.revision ?? 0) };
     return result.unchanged
       ? new Response(null, { status: 204, headers: { ...headers, 'Cache-Control': 'private, no-store' } })
-      : json(result.empty ? null : result.state, 200, headers);
+      : json(result.empty ? null : streamStudioSnapshot(result.state), 200, headers);
   }
   if (request.method !== 'PUT') return json({ error: 'method' }, 405);
   const row = await readCloud(db, owner);
@@ -116,10 +117,7 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
       "target = NULL, native_collection = NULL, document = '{}', source_url = '', normalized_url = '', " +
       "metadata = '{}', attachment_id = NULL WHERE " + selected, new Date().toISOString(), ...args));
   }
-  await storage.put(key, JSON.stringify(checked), {
-    httpMetadata: { contentType: 'application/json' },
-    ...(saveId && { customMetadata: { saveId } }),
-  });
+  await putStudioSnapshot(storage, key, checked, saveId);
   // The new R2 snapshot and updated D1 documents become visible at the same revision.
   const publish = sql(db, 'UPDATE studio_cloud SET revision = revision + 1, previous_key = object_key, object_key = ? ' +
     'WHERE owner = ? AND revision = ? AND lease_token = ? AND lease_until > ? RETURNING revision',
