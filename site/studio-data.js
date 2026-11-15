@@ -72,7 +72,11 @@ export function studioTags(text) {
   return [...new Set(text.split(/[,，]/).map(value => value.trim()).filter(Boolean))];
 }
 
-export function validImage({ data, mime }) {
+export const imageDataHeader = Symbol('image data header');
+
+export function validImage(asset) {
+  const { mime } = asset;
+  const data = asset[imageDataHeader] ?? asset.data;
   if (!imageTypes.includes(mime) || typeof data !== 'string' || data.length < 16) return false;
   try {
     const header = atob(data.slice(0, 32));

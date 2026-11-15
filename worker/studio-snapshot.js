@@ -1,7 +1,8 @@
-import { collections } from '../site/studio-data.js';
+import { collections, imageDataHeader } from '../site/studio-data.js';
 
 const layout = 'json-rows-v1';
 const collectionStart = key => ',"' + key + '":[';
+const encodedAsset = Symbol('encoded asset data');
 
 // Keep standard JSON on disk and over HTTP. Separate records with newlines
 // so R2 reads can parse them without buffering the complete Studio.
@@ -12,12 +13,16 @@ function* snapshotParts(state) {
     for (const [index, row] of (state[key] ?? []).entries()) {
       const separator = index ? ',' : '';
       if (key === 'assets') {
-        const { data, ...metadata } = row;
+        const metadata = Object.fromEntries(Object.keys(row).filter(key => key !== 'data').map(key => [key, row[key]]));
         const prefix = JSON.stringify(metadata).replace(/[^\x00-\x7f]/g,
           character => '\\u' + character.charCodeAt(0).toString(16).padStart(4, '0'));
         yield [separator + prefix.slice(0, -1) + ',"data":"'];
         // Asset data is validated base64, so it is ASCII and needs no JSON escaping.
-        yield [data, data.length];
+        if (row[encodedAsset]) {
+          for (const part of row[encodedAsset]) yield [part, part.byteLength];
+        } else {
+          yield [row.data, row.data.length];
+        }
         yield ['"}\n'];
       } else {
         yield [separator + JSON.stringify(row) + '\n'];
@@ -35,7 +40,7 @@ export function streamStudioSnapshot(state) {
     pull(controller) {
       const { value, done } = parts.next();
       if (done) controller.close();
-      else controller.enqueue(encoder.encode(value[0]));
+      else controller.enqueue(typeof value[0] === 'string' ? encoder.encode(value[0]) : value[0]);
     },
   });
 }
@@ -62,22 +67,70 @@ export async function putStudioSnapshot(storage, key, state, saveId) {
 }
 
 async function* linesOf(body) {
-  let fragments = [];
-  for await (const chunk of body.pipeThrough(new TextDecoderStream('utf-8', { fatal: true }))) {
-    const lines = chunk.split('\n');
-    fragments.push(lines[0]);
-    if (lines.length === 1) continue;
-    yield fragments.join('');
-    yield* lines.slice(1, -1);
-    fragments = [lines.at(-1)];
+  let parts = [];
+  for await (const chunk of body) {
+    let start = 0;
+    for (let end = chunk.indexOf(10); end !== -1; end = chunk.indexOf(10, start)) {
+      if (start < end) parts.push(chunk.subarray(start, end));
+      yield parts;
+      parts = [];
+      start = end + 1;
+    }
+    if (start < chunk.length) parts.push(chunk.subarray(start));
   }
-  if (fragments.join('')) throw new Error('Incomplete Studio snapshot line');
+  if (parts.length) throw new Error('Incomplete Studio snapshot line');
+}
+
+function decode(parts, fatal = true) {
+  const decoder = new TextDecoder('utf-8', { fatal });
+  return parts.map((part, index) => decoder.decode(part, { stream: index < parts.length - 1 })).join('');
+}
+
+function byteRange(parts, start, end) {
+  const range = [];
+  for (const part of parts) {
+    if (end <= 0) break;
+    if (start < part.length) range.push(part.subarray(Math.max(start, 0), end));
+    start -= part.length;
+    end -= part.length;
+  }
+  return range;
+}
+
+function snapshotAsset(parts, comma) {
+  const size = parts.reduce((length, part) => length + part.length, 0);
+  const start = comma ? 1 : 0;
+  // Reuse base64 from existing R2 objects without decoding it to a string or
+  // encoding it again. Older rows with other field layouts use the JSON path.
+  if (size > 8192 && decode(byteRange(parts, size - 2, size)) === '"}') {
+    const head = decode(byteRange(parts, start, 8192), false);
+    const marker = ',"data":"';
+    const index = head.indexOf(marker);
+    if (index !== -1) {
+      const prefix = head.slice(0, index);
+      const offset = start + new TextEncoder().encode(prefix).length + marker.length;
+      const data = byteRange(parts, offset, size - 2);
+      if (data.length && data.every(part => !part.includes(34))) {
+        const asset = JSON.parse(prefix + '}');
+        Object.defineProperties(asset, {
+          data: { enumerable: true, get: () => decode(data) },
+          [encodedAsset]: { value: data },
+          [imageDataHeader]: { value: decode(byteRange(data, 0, 32)) },
+        });
+        return asset;
+      }
+    }
+  }
+  return JSON.parse(decode(parts).slice(start));
 }
 
 export async function readStudioSnapshot(object) {
   if (object.customMetadata?.layout !== layout) return object.json();
   const lines = linesOf(object.body);
-  const next = async () => (await lines.next()).value;
+  const next = async () => {
+    const { value, done } = await lines.next();
+    return done ? undefined : decode(value);
+  };
   const expect = (actual, expected) => {
     if (actual !== expected) throw new Error('Invalid Studio snapshot');
   };
@@ -89,9 +142,12 @@ export async function readStudioSnapshot(object) {
     for (const key of collections) {
       expect(await next(), collectionStart(key));
       const rows = state[key] = [];
-      for (let line = await next(); line !== ']'; line = await next()) {
-        if (rows.length) expect(line?.[0], ',');
-        rows.push(JSON.parse(rows.length ? line.slice(1) : line));
+      for (;;) {
+        const { value: parts, done } = await lines.next();
+        expect(done, false);
+        if (parts.length === 1 && parts[0].length === 1 && parts[0][0] === 93) break;
+        if (rows.length) expect(parts[0]?.[0], 44);
+        rows.push(key === 'assets' ? snapshotAsset(parts, rows.length > 0) : JSON.parse(decode(parts).slice(rows.length ? 1 : 0)));
       }
     }
     expect(await next(), '}');
