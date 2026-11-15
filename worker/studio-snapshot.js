@@ -5,27 +5,37 @@ const collectionStart = key => ',"' + key + '":[';
 
 // Keep standard JSON on disk and over HTTP. Separate records with newlines
 // so R2 reads can parse them without buffering the complete Studio.
-function* rowsOf(state) {
-  yield '{';
-  yield '"revision":' + JSON.stringify(state.revision ?? 0);
+function* snapshotParts(state) {
+  yield ['{\n"revision":' + JSON.stringify(state.revision ?? 0) + '\n'];
   for (const key of collections) {
-    yield collectionStart(key);
+    yield [collectionStart(key) + '\n'];
     for (const [index, row] of (state[key] ?? []).entries()) {
-      yield (index ? ',' : '') + JSON.stringify(row);
+      const separator = index ? ',' : '';
+      if (key === 'assets') {
+        const { data, ...metadata } = row;
+        const prefix = JSON.stringify(metadata).replace(/[^\x00-\x7f]/g,
+          character => '\\u' + character.charCodeAt(0).toString(16).padStart(4, '0'));
+        yield [separator + prefix.slice(0, -1) + ',"data":"'];
+        // Asset data is validated base64, so it is ASCII and needs no JSON escaping.
+        yield [data, data.length];
+        yield ['"}\n'];
+      } else {
+        yield [separator + JSON.stringify(row) + '\n'];
+      }
     }
-    yield ']';
+    yield [']\n'];
   }
-  yield '}';
+  yield ['}\n'];
 }
 
 export function streamStudioSnapshot(state) {
   const encoder = new TextEncoder();
-  const rows = rowsOf(state);
+  const parts = snapshotParts(state);
   return new ReadableStream({
     pull(controller) {
-      const { value, done } = rows.next();
+      const { value, done } = parts.next();
       if (done) controller.close();
-      else controller.enqueue(encoder.encode(value + '\n'));
+      else controller.enqueue(encoder.encode(value[0]));
     },
   });
 }
@@ -33,7 +43,9 @@ export function streamStudioSnapshot(state) {
 export async function putStudioSnapshot(storage, key, state, saveId) {
   const encoder = new TextEncoder();
   let byteLength = 0;
-  for (const row of rowsOf(state)) byteLength += encoder.encode(row).byteLength + 1;
+  for (const [text, knownLength] of snapshotParts(state)) {
+    byteLength += knownLength ?? encoder.encode(text).byteLength;
+  }
   const { readable, writable } = new FixedLengthStream(byteLength);
   const controller = new AbortController();
   try {

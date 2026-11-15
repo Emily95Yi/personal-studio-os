@@ -78,7 +78,8 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
     } else if (delta) {
       transfer = applyStudioDelta(current.state, transfer);
     }
-    checked = previewMigration(emptyStudio(), transfer).next;
+    const verifiedAssets = delta ? new Set(current.state.assets) : undefined;
+    checked = previewMigration(emptyStudio(), transfer, [], { verifiedAssets }).next;
     if (current) validatePinnedResources(current.state, checked);
   } catch {
     return json({ error: 'invalid_studio' }, 400);

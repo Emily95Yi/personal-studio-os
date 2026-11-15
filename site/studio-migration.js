@@ -203,7 +203,7 @@ function validateLibrary(state) {
   }
 }
 
-function validateRecords(state) {
+function validateRecords(state, verifiedAssets) {
   const folders = new Map(state.boardFolders.map(folder => [folder.id, folder]));
   const labels = new Map(state.reflectionLabels.map(label => [label.id, label]));
   for (const folder of folders.values()) {
@@ -230,6 +230,8 @@ function validateRecords(state) {
   }
 
   for (const asset of state.assets) {
+    // A cloud delta reuses untouched assets from an already validated snapshot.
+    if (verifiedAssets?.has(asset)) continue;
     const data = asset.data;
     require(nonempty(asset.name) && nonempty(asset.mime) && /^[\w.+-]+\/[\w.+-]+$/.test(asset.mime) &&
       nonempty(data) && data.length <= Math.ceil(maxAssetBytes / 3) * 4 && data.length % 4 === 0 &&
@@ -426,7 +428,7 @@ function validateRecords(state) {
   validateLibrary(state);
 }
 
-export function previewMigration(state, transfer, retained = []) {
+export function previewMigration(state, transfer, retained = [], { verifiedAssets } = {}) {
   require(transfer?.format === transferFormat, '请选择 Studio 迁移包或带映射的 IndexedDB 导出。');
   const next = { revision: state.revision };
   const conflicts = [];
@@ -459,7 +461,7 @@ export function previewMigration(state, transfer, retained = []) {
       }
     }
   }
-  if (!conflicts.length) validateRecords(next);
+  if (!conflicts.length) validateRecords(next, verifiedAssets);
   return { next, counts, additions, conflicts, retained, integrity: {
     images: next.assets.filter(asset => imageTypes.includes(asset.mime)).length,
     covers: [...next.projects, ...next.events, ...next.content, ...next.collectionItems, ...next.explorationTopics]
