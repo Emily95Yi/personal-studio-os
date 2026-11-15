@@ -38,7 +38,8 @@ export function validatePinnedResources(before, after) {
     for (const assetId of ids) {
       const old = oldAssets.get(assetId);
       const next = newAssets.get(assetId);
-      require(old && next && ['name', 'mime', 'data'].every(field => old[field] === next[field]), '不能覆盖 Event 已固定版本的图片或附件。');
+      require(old && next && (old === next || ['name', 'mime', 'data'].every(field => old[field] === next[field])),
+        '不能覆盖 Event 已固定版本的图片或附件。');
     }
   }
 }

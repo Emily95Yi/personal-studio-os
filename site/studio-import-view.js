@@ -2,6 +2,7 @@ import { escapeHtml as esc } from './html.js';
 import { studioStore } from './studio-data.js';
 import { importMigration, mapLegacyArchive, maxTransferBytes, previewMigration, rawFormat, studioExport } from './studio-migration.js';
 import { testArchive, testMapping } from './studio-fixture.js';
+import { cardTextFormat, importCardText, previewCardTextImport } from './workshop-card-import.js';
 
 const labels = { projects: 'Project', events: 'Event', content: 'Self-Board 内容', sessions: '文档', relations: '关联', assets: '附件',
   boardFolders: 'Wiki 文件夹', reflectionLabels: '灵感标签', collectionCategories: '收藏分类', collectionFolders: '收藏文件夹',
@@ -51,6 +52,16 @@ function summary({ counts, additions, conflicts, retained, integrity }) {
     '</div>';
 }
 
+function cardTextSummary({ deckInput, deckChanged, added, updated }) {
+  const list = (rows, label) => rows.length ? '<details><summary>' + label + '（' + rows.length + '）</summary><ul>' +
+    rows.map(row => '<li>' + esc(row.number + ' · ' + row.input.title) + '</li>').join('') + '</ul></details>' : '';
+  const hasChanges = deckChanged || added.length || updated.length;
+  return '<div class="work-import-result"><h3>卡组文字预览</h3><p>' + esc(deckInput.title) + '</p>' +
+    (deckChanged ? '<p>更新卡组说明</p>' : '') + list(added, '新增单卡') + list(updated, '更新单卡文字') +
+    '<p class="work-meta">保留已有图片和个人笔记。</p>' +
+    (hasChanges ? '<button class="action-button" type="button" data-confirm-import>确认导入</button>' : '<p>卡组文字已是最新。</p>') + '</div>';
+}
+
 export function initStudioImport(app) {
   let pending;
   let sequence = 0;
@@ -87,6 +98,13 @@ export function initStudioImport(app) {
     try {
       const data = new FormData(form);
       const archive = await readJson(data.get('archive'));
+      if (archive?.format === cardTextFormat) {
+        if (form !== surface() || ticket !== sequence) return;
+        const plan = previewCardTextImport(studioStore.state, archive);
+        pending = { form, cardText: archive, revision: studioStore.state.revision };
+        output().innerHTML = cardTextSummary(plan);
+        return;
+      }
       const { transfer, retained } = archive.format === rawFormat
         ? mapLegacyArchive(archive, await readJson(data.get('mapping'))) : { transfer: archive, retained: [] };
       preview(transfer, retained, form, ticket);
@@ -104,21 +122,26 @@ export function initStudioImport(app) {
       } catch (error) { showError(error); }
     }
     if (button.hasAttribute('data-export-studio')) downloadJson(studioExport(studioStore.state), 'studio-export.json');
-    if (button.hasAttribute('data-export-retained') && pending?.form === form) {
+    if (button.hasAttribute('data-export-retained') && pending?.form === form && pending.retained) {
       downloadJson(pending.retained, 'studio-retained.json');
     }
     if (!button.hasAttribute('data-confirm-import') || pending?.form !== form) return;
-    const { transfer, revision, retained } = pending;
+    const { transfer, revision, retained, cardText } = pending;
     const ticket = sequence;
     button.disabled = true;
     try {
-      const plan = await studioStore.change(state => importMigration(state, transfer, revision, retained));
+      const plan = await studioStore.change(state => cardText
+        ? importCardText(state, cardText, revision) : importMigration(state, transfer, revision, retained));
       if (surface() === form && ticket === sequence) {
         reset();
-        output().textContent = '已导入 ' + plan.additions.length + ' 条记录。';
+        output().textContent = cardText ? '已新增 ' + plan.added.length + ' 张单卡，更新 ' + plan.updated.length + ' 张的文字。'
+          : '已导入 ' + plan.additions.length + ' 条记录。';
       }
     } catch (error) {
-      if (surface() === form && ticket === sequence) showError(error);
+      if (surface() === form && ticket === sequence) {
+        showError(error);
+        button.disabled = false;
+      }
     }
   });
 }

@@ -82,12 +82,14 @@ export async function fileInput(file, imageOnly = false) {
   if (!file?.name) return null;
   if (!file.size || file.size > maxAssetBytes) throw new Error('每个文件须介于 1 字节和 12 MB 之间。');
   const mime = file.type || 'application/octet-stream';
-  if (imageOnly && !imageTypes.includes(mime)) throw new Error('请选择 PNG、JPEG、GIF、WebP 或 AVIF 图片。');
   const bytes = new Uint8Array(await file.arrayBuffer());
   let binary = '';
   for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
   const asset = { name: file.name, mime, data: btoa(binary) };
-  if (imageOnly && !validImage(asset)) throw new Error('图片文件与所选格式不符。');
+  if (imageOnly && !validImage(asset)) {
+    asset.mime = imageTypes.find(type => validImage({ ...asset, mime: type }));
+    if (!asset.mime) throw new Error('请选择可读取的 PNG、JPEG、GIF、WebP 或 AVIF 图片。');
+  }
   return asset;
 }
 
@@ -341,7 +343,7 @@ export function initWorkshopActions(app, render) {
           textarea('field-' + key, label, item?.resourceData?.[key], 2)).join('') +
         Object.entries(resourceImages).map(([key, label]) => {
           const asset = state.assets.find(row => row.id === item?.resourceData?.[key]);
-          return fileField(label, key, imageTypes.join(',')) +
+          return fileField(label, key, [...imageTypes, '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif'].join(',')) +
             (asset ? checkField('clear-' + key, '1', '移除' + label + ' · ' + asset.name, false) : '');
         }).join('') + '</div></details>';
       if (kind === 'card' && form.elements.cardSetId) form.elements.cardSetId.required = true;
