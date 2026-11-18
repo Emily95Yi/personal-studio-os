@@ -1,12 +1,12 @@
 import { escapeHtml as esc } from './html.js';
-import { href, publicHref } from './pages.js';
+import { publicHref } from './pages.js';
 import { publicRepository } from './repository.js';
 import { exhibitionEvents } from './tokyo-demo.js';
 
 // Editable brand copy. Contact stays an explicit placeholder until a real URL exists.
 export const tokyoCopy = {
   title: '一期一会inTokyo', chinese: '一期一会', english: 'inTokyo',
-  subtitle: '[副标题占位｜Subtitle Placeholder]', contactUrl: '',
+  subtitle: '相遇・链接・流动・回声・探索・多元', contactUrl: '',
 };
 
 const arrow = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
@@ -14,13 +14,11 @@ const mark = '<svg viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M
 const xiaohongshu = '<svg class="tk-xiaohongshu" viewBox="0 0 56 28" aria-hidden="true"><rect x="1" y="1" width="54" height="26" rx="8"/><text x="28" y="18.5" text-anchor="middle">小红书</text></svg>';
 
 export function tokyoNavigation(pageId = 'home') {
-  return '<a class="tk-studio-link" href="' + href() + '" aria-label="返回奕 Studio">' + mark +
-    '<span>奕 Studio <span aria-hidden="true">↗</span></span></a>' +
-    '<nav class="tk-nav" aria-label="一期一会导航" data-tk-nav>' +
+  return '<nav class="tk-nav" aria-label="一期一会导航" data-tk-nav>' +
     '<a aria-label="活动" href="' + publicHref('yiqiyihui', 'activities') + '"' + (pageId === 'home' ? ' data-tk-scroll="events"' : '') +
-    '><span class="tk-nav-mask"><span data-label="活动">活动</span></span><span class="tk-nav-dot" aria-hidden="true"></span></a>' +
+    '><span class="tk-nav-mask"><span data-label="活动">活动</span></span></a>' +
     '<a aria-label="手记" href="' + publicHref('yiqiyihui', 'stories') + '"><span class="tk-nav-mask"><span data-label="手记">手记</span></span></a>' +
-    '<a aria-label="互动" href="' + publicHref('yiqiyihui', 'interactions') + '"><span class="tk-nav-mask"><span data-label="互动">互动</span></span><span aria-hidden="true">↗</span></a>' +
+    '<a aria-label="互动" href="' + publicHref('yiqiyihui', 'interactions') + '"><span class="tk-nav-mask"><span data-label="互动">互动</span></span></a>' +
     '</nav>';
 }
 
@@ -30,9 +28,9 @@ function hero() {
     '<div class="tk-title-wrap"><h1 id="tk-title" aria-label="' + esc(tokyoCopy.title) + '">' +
     '<span class="tk-title-cn" aria-hidden="true">' + [...tokyoCopy.chinese].map(char =>
       '<span>' + esc(char) + '</span>').join('') + '</span>' +
-    '<span class="tk-title-en" aria-hidden="true">' + esc(tokyoCopy.english) + '<span class="tk-title-star">' + mark + '</span></span></h1>' +
+    '<span class="tk-title-en" aria-hidden="true">' + esc(tokyoCopy.english) + '</span></h1>' +
     '<p class="tk-subtitle">' + esc(tokyoCopy.subtitle) + '</p></div>' +
-    '<div class="tk-hero-bottom"><span class="tk-hero-note">此时，此地。<br>每一次相遇，只有一次。</span>' +
+    '<div class="tk-hero-bottom">' +
     '<a class="tk-scroll" href="' + publicHref('yiqiyihui', 'activities') + '" data-tk-scroll="events"><span>SCROLL TO EXPLORE</span>' + arrow +
     '</a><span class="tk-hero-index" aria-hidden="true">01 — ∞</span></div></section>';
 }

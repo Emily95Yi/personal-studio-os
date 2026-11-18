@@ -60,7 +60,7 @@ test('empty homepage has labelled placeholders and no fabricated event, open sta
     studioStore.receiveCloud(emptyStudio(), 0);
     const html = tokyoView({ showDemo: false });
     assert.match(html, /一期一会inTokyo/);
-    assert.match(html, /Subtitle Placeholder/);
+    assert.match(html, /相遇・链接・流动・回声・探索・多元/);
     assert.match(html, /POSTER PLACEHOLDER/);
     assert.doesNotMatch(html, /data-tk-poster=/);
     assert.doesNotMatch(html, /正在募集中/);

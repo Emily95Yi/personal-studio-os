@@ -11,15 +11,16 @@ function emptyState(title, description) {
     (description ? '<p>' + escapeHtml(description) + '</p>' : '') + '</section>';
 }
 
-function entry(address, area) {
-  return '<a class="workspace-entry" href="' + escapeHtml(address) + '"><span class="entry-icon">' +
+function entry(address, area, { newTab = false } = {}) {
+  return '<a class="workspace-entry" href="' + escapeHtml(address) + '"' +
+    (newTab ? ' target="_blank" rel="noopener" title="在新标签页打开"' : '') + '><span class="entry-icon">' +
     icon(area.icon, 26) + '</span><span class="entry-label">' + escapeHtml(area.entryLabel ?? area.label) + '</span></a>';
 }
 
 export function landing() {
   return '<nav class="workspace-entries" aria-label="工作台入口">' +
     Object.entries(workspaces).map(([id, area]) => entry(href(id), area)).join('') +
-    Object.entries(brands).map(([id, area]) => entry(publicHref(id), area)).join('') + '</nav>';
+    Object.entries(brands).map(([id, area]) => entry(publicHref(id), area, { newTab: true })).join('') + '</nav>';
 }
 
 export function workspaceOverview({ workspace, workspaceId }) {
