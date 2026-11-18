@@ -5,6 +5,7 @@
 ## 文件与配置
 
 - `site/tokyo-view.js`：Hero、主推海报、拼贴画廊、聚焦详情、Footer；`tokyoCopy` 集中配置主标题、副标题和联系地址。
+- `site/tokyo-orbit-logo.svg`：从用户提供的旋流图标描摹得到的透明 SVG 路径，保留灰阶旋臂、环轨与圆点；用于公开页左上角的首页入口，不返回 Studio。海报关闭键为透明背景的叉号，页脚只保留小红书图标。
 - `site/tokyo-demo.js`：8 张原创 SVG 演示海报与独立的展示层回退逻辑，包含竖版与横版，不写入任何活动数据。
 - `site/tokyo.css`：独立作用域的响应式视觉。使用本机圆体字体栈，不分发系统字体文件。
 - `site/tokyo-liquid.js`：原生 WebGL 1 / GLSL 单 pass 背景；低饱和、明亮的彩虹色约每三分钟完成一轮，鼠标／触摸位置、速度和平滑衰减影响局部形变。

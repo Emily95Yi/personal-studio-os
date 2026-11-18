@@ -14,7 +14,9 @@ const mark = '<svg viewBox="0 0 40 40" fill="none" aria-hidden="true"><path d="M
 const xiaohongshu = '<svg class="tk-xiaohongshu" viewBox="0 0 56 28" aria-hidden="true"><rect x="1" y="1" width="54" height="26" rx="8"/><text x="28" y="18.5" text-anchor="middle">小红书</text></svg>';
 
 export function tokyoNavigation(pageId = 'home') {
-  return '<nav class="tk-nav" aria-label="一期一会导航" data-tk-nav>' +
+  return '<a class="tk-brand-logo" href="' + publicHref('yiqiyihui') + '" aria-label="一期一会 inTokyo 首页">' +
+    '<img src="./tokyo-orbit-logo.svg" width="48" height="48" alt="" aria-hidden="true"></a>' +
+    '<nav class="tk-nav" aria-label="一期一会导航" data-tk-nav>' +
     '<a aria-label="活动" href="' + publicHref('yiqiyihui', 'activities') + '"' + (pageId === 'home' ? ' data-tk-scroll="events"' : '') +
     '><span class="tk-nav-mask"><span data-label="活动">活动</span></span></a>' +
     '<a aria-label="手记" href="' + publicHref('yiqiyihui', 'stories') + '"><span class="tk-nav-mask"><span data-label="手记">手记</span></span></a>' +
@@ -80,14 +82,14 @@ function exhibition(events) {
 function footer() {
   return '<footer class="tk-footer"><a href="' + publicHref('yiqiyihui') + '" aria-label="一期一会首页"><strong>一期一会<span>inTokyo</span></strong></a>' +
     '<span>此时，此地。<br>一期一会。</span>' + (tokyoCopy.contactUrl ? '<a class="tk-keep-contact" href="' + esc(tokyoCopy.contactUrl) +
-    '" target="_blank" rel="noopener noreferrer">保持联系' + xiaohongshu + ' ↗</a>' :
-    '<button class="tk-keep-contact" type="button" data-tk-contact aria-label="保持联系，小红书">保持联系' + xiaohongshu + '</button>') +
+    '" target="_blank" rel="noopener noreferrer" aria-label="小红书活动账号">' + xiaohongshu + '</a>' :
+    '<button class="tk-keep-contact" type="button" data-tk-contact aria-label="小红书活动账号">' + xiaohongshu + '</button>') +
     '<div class="tk-footer-bottom"><button type="button" data-tk-top>BACK TO TOP ↑</button></div></footer>';
 }
 
 function dialogs() {
   return '<dialog class="tk-focus" aria-labelledby="tk-focus-title" data-tk-focus><button class="tk-focus-close" type="button" data-tk-close aria-label="关闭活动详情">' +
-    '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg><span>关闭</span></button>' +
+    '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>' +
     '<div class="tk-focus-layout"><div class="tk-focus-art" data-tk-focus-art></div><div data-tk-focus-info></div></div>' +
     '<span class="tk-focus-hint">向下轻扫海报 / ESC 关闭</span></dialog>' +
     '<dialog class="tk-contact" aria-labelledby="tk-contact-title" data-tk-contact-dialog><button type="button" data-tk-contact-close aria-label="关闭联系信息">×</button>' +

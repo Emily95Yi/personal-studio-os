@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 
 const base = new URL('../site/', import.meta.url);
-const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript' };
+const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml' };
 const port = Number(process.env.STUDIO_PORT ?? 4181);
 createServer(async (req, res) => {
   const path = req.url?.split('?')[0] === '/' ? '/index.html' : req.url?.split('?')[0] ?? '';
