@@ -28,6 +28,7 @@ import { initLibraryActions } from './board-library-actions.js';
 import { contentTitle, isSelfBoard, studioStore } from './studio-data.js';
 import { beginStudioEdit, closeStudioSync, migrateLocalStudio, onStudioNotice, refreshStudioSync,
   startStudioSync, studioNotice, studioSync } from './studio-cloud.js';
+import { mountTokyo } from './tokyo-interactions.js';
 
 const app = document.querySelector('#app');
 let mountBoardEditor;
@@ -36,6 +37,7 @@ let mountWorkshopEvent;
 let mountLibrary;
 let topicLease;
 let refreshInbox;
+let unmountTokyo;
 
 function syncBanner() {
   return '<div data-studio-sync><p role="status" data-studio-notice' + (studioSync.message ? '' : ' hidden') + '>' +
@@ -178,13 +180,6 @@ function boardTitleMenu(section, title, article) {
       '<a href="' + boardHref(id) + '">' + group.label + '</a>').join('') + '</nav></details>';
 }
 
-function publicNav(route) {
-  if (route.type !== 'public') return '';
-  return '<nav class="public-nav" aria-label="品牌页面">' + Object.entries(route.brand.pages).map(([id, page]) =>
-    '<a href="' + publicHref(route.brandId, id) + '"' + (route.pageId === id ? ' aria-current="page"' : '') + '>' +
-    page.label + '</a>').join('') + '</nav>';
-}
-
 const views = {
   home: landing,
   overview: workspaceOverview,
@@ -211,6 +206,7 @@ const views = {
 
 let renderedDay;
 function render({ focus = false } = {}) {
+  unmountTokyo?.();
   renderedDay = dateKey();
   let route = readRoute(location.hash);
   if (route.redirect) {
@@ -232,9 +228,9 @@ function render({ focus = false } = {}) {
       '<a href="' + address + '">' + escapeHtml(label) + '</a>').join('<span aria-hidden="true">/</span>') + '</nav>' : '';
   const storageWarning = studioSync.localError && studioSync.mode !== 'cloud' && (workshop || route.workspaceId === 'self-board')
     ? '<p class="work-error" role="alert">无法读取此浏览器的 Studio 数据。</p>' : '';
-  app.innerHTML = '<a class="skip" href="#main">跳到内容</a>' + header(route, context) +
+  app.innerHTML = '<a class="skip" href="#main">跳到内容</a>' + (route.type === 'public' ? '' : header(route, context)) +
     '<main id="main" class="page-main" tabindex="-1"' +
-    (route.type === 'home' ? '' : ' aria-label="' + escapeHtml(context.title) + '"') + '>' + publicNav(route) +
+    (route.type === 'home' ? '' : ' aria-label="' + escapeHtml(context.title) + '"') + '>' +
     (isPlannerPage ? '<div data-private-status>' + statusBanner() + '</div>' : '') +
     workshopBreadcrumb + storageWarning + (route.type === 'public' ? '' : syncBanner()) +
     views[route.type](route) + '</main>' +
@@ -251,6 +247,7 @@ function render({ focus = false } = {}) {
   mountWorkshopEditor?.(route);
   mountWorkshopEvent?.(route);
   mountLibrary?.(route);
+  unmountTokyo = mountTokyo(app);
   refreshInbox = mountCaptureBoard(app, route, () => refreshStudioSync({ manual: true }), createFromCapture);
   if (route.entity === 'topic' && route.params.has('entry')) {
     const id = route.params.get('entry');
@@ -699,6 +696,8 @@ document.addEventListener('visibilitychange', pollVisibleFeed);
 document.addEventListener('visibilitychange', pollStudioContent);
 setInterval(pollVisibleFeed, 30_000);
 setInterval(pollStudioContent, 30_000);
+// The public Hero can appear immediately while the existing data reader loads.
+if (readRoute(location.hash).type === 'public') render();
 await startStudioSync();
 await prepareTopicEdit();
 render();

@@ -1,7 +1,7 @@
 import { addDays, dateKey, parseDate, planReminderDates } from './calendar.js';
 import { isDiscover, objectFor, relatedObjects, studioStore } from './studio-data.js';
+import { publicEvents } from './public-event-data.js';
 
-const activities = [];
 const stories = [];
 
 export function selfBoardIncludes(item, view) {
@@ -24,7 +24,7 @@ export const studioRepository = {
 };
 
 export const publicRepository = {
-  activities() { return activities; },
+  activities() { return publicEvents(studioStore.state); },
   stories() { return stories; },
 };
 

@@ -4,6 +4,7 @@ import { selfBoardIncludes, studioRepository } from './repository.js';
 import { autoView } from './auto-view.js';
 import { escapeHtml } from './html.js';
 import { imageUrl } from './workshop-view.js';
+import { tokyoView } from './tokyo-view.js';
 
 function emptyState(title, description) {
   return '<section class="empty-state"><h2>' + escapeHtml(title) + '</h2>' +
@@ -52,9 +53,7 @@ export function collectionView({ workspaceId, collection, collectionId }) {
   return emptyState(collection.empty);
 }
 
-export function publicView({ page }) {
-  return emptyState(page.empty);
-}
+export const publicView = tokyoView;
 
 export function searchView() {
   return '<form class="search-form" role="search"><label for="studio-query">关键词</label>' +
