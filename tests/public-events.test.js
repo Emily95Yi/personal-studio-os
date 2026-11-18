@@ -3,6 +3,10 @@ import test from 'node:test';
 import { eventPoster, isPublicEvent, publicEvents } from '../site/public-event-data.js';
 import { emptyStudio, studioStore } from '../site/studio-data.js';
 import { tokyoView } from '../site/tokyo-view.js';
+import { demoPosters, exhibitionEvents } from '../site/tokyo-demo.js';
+import { publicRepository } from '../site/repository.js';
+import { readRoute } from '../site/pages.js';
+import { SaxesParser } from 'saxes';
 
 const now = new Date('2026-11-18T16:00:00Z'); // Nov 19 in Tokyo
 const event = (id, extra = {}) => ({ id, title: id, date: '2026-12-01', visibility: 'public', status: 'planned', ...extra });
@@ -54,7 +58,7 @@ test('empty homepage has labelled placeholders and no fabricated event, open sta
   const before = studioStore.state;
   try {
     studioStore.receiveCloud(emptyStudio(), 0);
-    const html = tokyoView();
+    const html = tokyoView({ showDemo: false });
     assert.match(html, /一期一会inTokyo/);
     assert.match(html, /Subtitle Placeholder/);
     assert.match(html, /POSTER PLACEHOLDER/);
@@ -75,5 +79,27 @@ test('featured event belongs to the same gallery and occurs once; markup escapes
     assert.doesNotMatch(html, /<script>alert/);
     assert.doesNotMatch(html, /style="/); // Compatible with the existing strict Worker CSP.
     assert.match(html, /&lt;script&gt;/);
+  } finally { studioStore.receiveCloud(before, before.revision); }
+});
+
+test('demo posters are isolated presentation data and real public events take precedence', () => {
+  const before = studioStore.state;
+  try {
+    studioStore.receiveCloud(emptyStudio(), 0);
+    const snapshot = structuredClone(studioStore.state);
+    const html = tokyoView();
+    assert.equal((html.match(/data-tk-poster=/g) ?? []).length, 8);
+    assert.match(html, /DEMO GALLERY/);
+    assert.doesNotMatch(html, /正在募集中|查看活动 \/ 报名/);
+    assert.deepEqual(publicRepository.activities(), []);
+    assert.deepEqual(studioStore.state, snapshot);
+    assert.equal(demoPosters.every(p => p.demo && !p.recruiting && !p.registrationUrl), true);
+    for (const poster of demoPosters) new SaxesParser().write(decodeURIComponent(poster.poster.split(',')[1])).close();
+    const real = [{ id: 'real' }];
+    assert.equal(exhibitionEvents(real), real);
+    assert.deepEqual(exhibitionEvents([], { showDemo: false }), []);
+    for (const page of ['stories', 'interactions']) {
+      assert.equal(readRoute('#/public/yiqiyihui/' + page).type, 'public');
+    }
   } finally { studioStore.receiveCloud(before, before.revision); }
 });

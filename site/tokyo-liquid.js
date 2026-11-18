@@ -15,6 +15,7 @@ float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
 return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+1.),f.x),f.y);}
 float fbm(vec2 p){float a=.5,v=0.;for(int i=0;i<4;i++){v+=a*noise(p);p=mat2(.8,-.6,.6,.8)*p*2.02+1.7;a*=.5;}return v;}
+vec3 pastel(float h,float s,float v){vec3 p=abs(fract(vec3(h)+vec3(0.,.666667,.333333))*6.-3.);return v*mix(vec3(1.),clamp(p-1.,0.,1.),s);}
 void main(){
  vec2 uv=gl_FragCoord.xy/u_resolution;
  float aspect=u_resolution.x/u_resolution.y;
@@ -29,15 +30,17 @@ void main(){
  float f=fbm(p*1.25+r*3.+q*1.2);
  float fold=sin(p.x*2.1-p.y*2.6+r.x*6.5+q.y*4.1+t);
  float silk=smoothstep(-.65,.85,fold);
- vec3 deep=vec3(.078,.149,.298),blue=vec3(.29,.37,.66);
- vec3 violet=vec3(.39,.33,.72),mist=vec3(.67,.75,.89),light=vec3(.88,.86,.97);
+ // One low-saturation rainbow cycle takes three minutes of visible Hero time.
+ float hue=.52+u_time/180.;
+ vec3 deep=pastel(hue+.08,.27,.76),blue=pastel(hue,.2,.9);
+ vec3 violet=pastel(hue+.16,.23,.92),mist=pastel(hue-.08,.13,.98),light=vec3(.99,.98,.96);
  vec3 col=mix(deep,blue,smoothstep(.18,.7,f));
  col=mix(col,violet,smoothstep(.28,.72,r.y)*.7);
  col=mix(col,mist,smoothstep(.2,.98,silk)*smoothstep(.25,.8,q.x)*.85);
  float edge=pow(1.-abs(fold),10.);
  col=mix(col,light,edge*.13);
- col+=vec3(.06,.035,.08)*pow(silk,3.);
- col*=.82+.18*(1.-smoothstep(.1,1.1,length(p*vec2(.65,1.))));
+ col+=vec3(.025)*pow(silk,3.);
+ col*=.96+.04*(1.-smoothstep(.1,1.1,length(p*vec2(.65,1.))));
  float grain=(hash(gl_FragCoord.xy+fract(u_time))-.5)/180.;
  gl_FragColor=vec4(col+grain,1.);
 }`;

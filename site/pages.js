@@ -178,7 +178,8 @@ export const brands = {
     pages: {
       home: { label: 'Home', zh: '首页', empty: '还没有发布内容', description: '这里将展示品牌动态和新发布的内容。' },
       activities: { label: 'Activities', zh: '活动', empty: '还没有活动', description: '这里将展示公开活动。未来可从活动详情进入报名。' },
-      stories: { label: 'Stories', zh: '故事', empty: '还没有故事', description: '这里将存放公开的活动回顾与文章。' },
+      stories: { label: '手记', zh: '手记', empty: '手记，即将展开。', description: '这里将展示主理人发布的文章、活动随记与日常思考。' },
+      interactions: { label: '互动', zh: '互动', empty: '互动，即将发生。', description: '这里将展示卡牌画廊与更多互动体验。' },
       about: { label: 'About', zh: '关于', empty: '介绍尚未发布', description: '这里将介绍一期一会 in Tokyo 的理念与活动方式。' },
     },
   },

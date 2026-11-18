@@ -2,6 +2,7 @@ import { escapeHtml as esc } from './html.js';
 import { publicRepository } from './repository.js';
 import { mountLiquid } from './tokyo-liquid.js';
 import { tokyoEventInfo } from './tokyo-view.js';
+import { exhibitionEvents } from './tokyo-demo.js';
 
 export function mountTokyo(app) {
   const root = app.querySelector('[data-tk-root]');
@@ -98,7 +99,7 @@ export function mountTokyo(app) {
   }
   async function openPoster(button) {
     if (dialog.open || closing) return;
-    const event = publicRepository.activities().find(row => row.id === button.dataset.tkPoster);
+    const event = exhibitionEvents(publicRepository.activities()).find(row => row.id === button.dataset.tkPoster);
     if (!event) return;
     trigger = button;
     sourceImage = button.querySelector('img');
