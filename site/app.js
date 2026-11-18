@@ -39,7 +39,11 @@ let refreshInbox;
 
 function syncBanner() {
   return '<div data-studio-sync><p role="status" data-studio-notice' + (studioSync.message ? '' : ' hidden') + '>' +
-    escapeHtml(studioSync.message) + '</p>' + (studioSync.migration
+    escapeHtml(studioSync.message) + '</p>' +
+    '<a href="/" target="_blank" rel="noopener" data-studio-login' + (studioSync.authRequired ? '' : ' hidden') + '>在新窗口登录</a> ' +
+    '<button type="button" class="text-action" data-studio-reconnect' +
+    (studioSync.mode === 'error' || studioSync.message ? '' : ' hidden') +
+    (studioSync.reconnecting ? ' disabled' : '') + '>重新连接</button>' + (studioSync.migration
     ? '<p>此浏览器有尚未上传的 Studio 内容。上传后，可在其他设备用同一账号打开。</p>' +
       '<button type="button" class="action-button secondary" data-studio-migrate>上传此浏览器的 Studio 内容</button>' : '') + '</div>';
 }
@@ -50,6 +54,13 @@ onStudioNotice(() => {
     status.textContent = studioSync.message;
     status.hidden = !studioSync.message;
   }
+  const retry = app.querySelector('[data-studio-reconnect]');
+  if (retry) {
+    retry.hidden = studioSync.mode !== 'error' && !studioSync.message;
+    retry.disabled = studioSync.reconnecting;
+  }
+  const login = app.querySelector('[data-studio-login]');
+  if (login) login.hidden = !studioSync.authRequired;
 });
 
 async function prepareTopicEdit() {
@@ -240,7 +251,7 @@ function render({ focus = false } = {}) {
   mountWorkshopEditor?.(route);
   mountWorkshopEvent?.(route);
   mountLibrary?.(route);
-  refreshInbox = mountCaptureBoard(app, route, refreshStudioSync, createFromCapture);
+  refreshInbox = mountCaptureBoard(app, route, () => refreshStudioSync({ manual: true }), createFromCapture);
   if (route.entity === 'topic' && route.params.has('entry')) {
     const id = route.params.get('entry');
     const entry = [...app.querySelectorAll('[data-entry]')].find(node => node.dataset.entry === id);
@@ -647,9 +658,16 @@ mountBoardEditor = initBoardActions(app, render);
 mountLibrary = initLibraryActions(app, render);
 initStudioImport(app);
 app.addEventListener('click', async event => {
-  const button = event.target.closest('[data-studio-migrate]');
+  const button = event.target.closest('[data-studio-migrate], [data-studio-reconnect]');
   if (!button) return;
   button.disabled = true;
+  if (button.hasAttribute('data-studio-reconnect')) {
+    const changed = await refreshStudioSync({ manual: true });
+    if (changed && readRoute(location.hash).type !== 'capture' && !app.querySelector('dialog[open]')) render();
+    else void refreshInbox?.();
+    button.disabled = false;
+    return;
+  }
   try {
     await migrateLocalStudio();
     render();
@@ -664,19 +682,21 @@ window.addEventListener('hashchange', async () => {
   render({ focus: true });
   enterPrivateSurface();
 });
-async function pollStudioContent() {
+async function pollStudioContent({ manual = false } = {}) {
   if (document.visibilityState !== 'visible' || app.querySelector('dialog[open]')) return;
   const route = readRoute(location.hash);
   if (renderedDay !== dateKey() && (route.type === 'calendar' || route.collectionId === 'auto' || isBoardOverview(route))) render();
-  const changed = await refreshStudioSync();
-  if (readRoute(location.hash).type === 'capture') return;
+  const changed = await refreshStudioSync({ manual });
+  if (readRoute(location.hash).type === 'capture') { void refreshInbox?.(); return; }
   if (changed && !app.querySelector('dialog[open]')) render();
   else void refreshInbox?.();
 }
 window.addEventListener('focus', pollStudioContent);
+window.addEventListener('online', () => { void pollStudioContent({ manual: true }); });
 window.addEventListener('pagehide', closeStudioSync);
 window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
 document.addEventListener('visibilitychange', pollVisibleFeed);
+document.addEventListener('visibilitychange', pollStudioContent);
 setInterval(pollVisibleFeed, 30_000);
 setInterval(pollStudioContent, 30_000);
 await startStudioSync();

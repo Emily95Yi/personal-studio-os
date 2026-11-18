@@ -10,7 +10,24 @@ const time = value => value && Number.isFinite(+new Date(value)) ? timeFormat.fo
 const bytes = size => size >= 1e9 ? (size / 1e9).toFixed(2) + ' GB' :
   size >= 1e6 ? (size / 1e6).toFixed(2) + ' MB' : (size / 1000).toFixed(1) + ' KB';
 const button = (label, attr = '') => '<button type="button" class="action-button secondary" ' + attr + '>' + label + '</button>';
-const status = (element, error) => { element.textContent = error instanceof Error ? error.message : error; };
+const status = (element, error, retry) => {
+  element.textContent = error instanceof Error ? error.message : error;
+  if (!(error instanceof Error) || !retry) return;
+  if (error.code === 'session_expired') {
+    const login = document.createElement('a');
+    login.href = '/';
+    login.target = '_blank';
+    login.rel = 'noopener';
+    login.textContent = '在新窗口登录';
+    element.append(' ', login);
+  }
+  const action = document.createElement('button');
+  action.type = 'button';
+  action.className = 'text-action';
+  action.textContent = '重试';
+  action.onclick = () => { void retry(); };
+  element.append(' ', action);
+};
 const typeChoices = Object.entries(captureTypes).map(([key, label]) => [key, label.split(' ')[1]]);
 
 export function inboxView() {
@@ -83,7 +100,7 @@ function nativeLink(row) {
   return topic ? explorationAddress(topic) + '?entry=' + encodeURIComponent(row.id) : '';
 }
 
-async function mountDetail(app, route, changed) {
+async function mountDetail(app, route, changed, loaded) {
   const { captureId: id } = route;
   const path = '/items/' + encodeURIComponent(id);
   const panel = app.querySelector('[data-capture-body]');
@@ -93,7 +110,7 @@ async function mountDetail(app, route, changed) {
   const plan = app.querySelector('[data-capture-plan]');
   const inboxToggle = app.querySelector('[data-capture-inbox-toggle]');
   try {
-    const [row, options] = await Promise.all([api(path), api('/options')]);
+    const [row, options] = loaded ?? await Promise.all([api(path), api('/options')]);
     if (!panel.isConnected) return;
     const link = nativeLink(row);
     const editable = !row.nativeCollection;
@@ -109,8 +126,17 @@ async function mountDetail(app, route, changed) {
         row.sourceUrl ? '<p><a target="_blank" rel="noreferrer" href="' + esc(row.sourceUrl) + '">' + esc(row.sourceUrl) + '</a></p>' : '') +
       (row.attachment ? attachmentView(id, row.type === 'image' ? '下载原图' :
         row.attachment.filename + ' · ' + bytes(row.attachment.size), imageTypes.includes(row.attachment.mime)) : '') +
-      (link ? '<p><a href="' + esc(link) + '">在原模块查看和编辑</a></p>' : '') + '</div>';
+      (link ? '<p><a data-capture-native href="' + esc(link) + '">在原模块查看和编辑</a></p>' : '') + '</div>';
     const form = panel.querySelector('form');
+    const native = panel.querySelector('[data-capture-native]');
+    if (native) native.onclick = async event => {
+      const available = () => studioStore.state[row.nativeCollection]?.some(item => item.id === row.id);
+      if (available()) return;
+      event.preventDefault();
+      await changed();
+      if (available()) location.hash = link;
+      else status(notice, new Error('记录已分类保存，目标列表尚未更新。请重试读取。'), () => native.click());
+    };
     installInboxTargets(form.querySelector('[data-capture-target]'), options.modules, row.target);
     status(notice, '');
     plan.dataset.inboxId = id;
@@ -124,13 +150,19 @@ async function mountDetail(app, route, changed) {
       form.inert = true;
       status(notice, method === 'DELETE' ? '正在删除…' : '正在保存…');
       try {
-        await api(path, { method, value });
+        const saved = await api(path, { method, value });
         if (Object.hasOwn(value ?? {}, 'inInbox')) {
           row.inInbox = false;
         } else await changed();
-        if (panel.isConnected) location.hash = route.parent;
+        if (panel.isConnected && value?.target) {
+          // The write receipt confirms classification, even if refreshing the board fails.
+          await mountDetail(app, route, changed, [saved, options]);
+          const destination = options.modules.find(module => module.groups.some(group =>
+            group.options.some(option => option.target === saved.target)))?.label ?? '所选分类';
+          status(notice, '已分类到 ' + destination + '。可通过「在原模块查看和编辑」打开；Inbox 原条目会保留。');
+        } else if (panel.isConnected) location.hash = route.parent;
       } catch (error) {
-        status(notice, error);
+        status(notice, error, () => write(method, value));
       } finally {
         save.disabled = remove.disabled = false;
         form.inert = false;
@@ -163,7 +195,7 @@ async function mountDetail(app, route, changed) {
     };
     inboxToggle.onclick = () => { void write('PATCH', { version: row.version, inInbox: false }); };
   } catch (error) {
-    status(notice, error);
+    status(notice, error, () => mountDetail(app, route, changed));
   }
 }
 
@@ -174,10 +206,12 @@ function mountList(app, route, changed, create) {
     '<div class="capture-page-controls">' + iconControl('上一页', 'back', 'type="button" data-capture-prev disabled') +
     iconControl('下一页', 'arrow', 'type="button" data-capture-next disabled') +
     iconControl('批量分类', 'folderMove', 'type="submit" form="capture-batch" disabled') + '</div></div>' +
-    '<form id="capture-batch" class="capture-form">' + targetFields + '</form><div data-capture-list></div>';
+    '<form id="capture-batch" class="capture-form">' + targetFields +
+    '<p role="status" data-capture-options-status></p></form><div data-capture-list></div>';
   const batch = panel.querySelector('form');
   const submit = panel.querySelector('button[type="submit"]');
   const listPanel = panel.querySelector('[data-capture-list]');
+  const optionNotice = panel.querySelector('[data-capture-options-status]');
   const prev = panel.querySelector('[data-capture-prev]');
   const next = panel.querySelector('[data-capture-next]');
   const limit = 20;
@@ -213,7 +247,7 @@ function mountList(app, route, changed, create) {
       submit.disabled = !items.length || saving;
       status(notice, '');
     } catch (error) {
-      if (current === request) status(notice, error);
+      if (current === request) status(notice, error, load);
     }
   }
   installSegments(panel.querySelector('[data-capture-types]'), typeChoices, type, value => {
@@ -239,8 +273,15 @@ function mountList(app, route, changed, create) {
       status(notice, error);
     }
   };
-  void api('/options').then(result => installInboxTargets(batch.querySelector('[data-capture-target]'), result.modules))
-    .catch(error => status(notice, error));
+  async function loadOptions() {
+    status(optionNotice, '正在读取分类…');
+    try {
+      const result = await api('/options');
+      if (panel.isConnected) installInboxTargets(batch.querySelector('[data-capture-target]'), result.modules);
+      status(optionNotice, '');
+    } catch (error) { status(optionNotice, error, loadOptions); }
+  }
+  void loadOptions();
   void load();
 }
 
@@ -392,7 +433,10 @@ function mountCaptureTrash(app, panel) {
 
 export function mountCaptureBoard(app, route, changed, create) {
   if (route.type === 'capture') {
-    if (route.captureId) void mountDetail(app, route, changed);
+    if (route.captureId) {
+      void mountDetail(app, route, changed);
+      return () => { if (!app.querySelector('#' + detailForm)) return mountDetail(app, route, changed); };
+    }
     else mountList(app, route, changed, create);
     return;
   }
@@ -411,7 +455,7 @@ export function mountCaptureBoard(app, route, changed, create) {
       if (index !== query) return;
       renderList(recent, items, create);
     } catch (error) {
-      if (index === query) status(recent, error);
+      if (index === query) status(recent, error, load);
     }
   }
   details.ontoggle = () => { if (details.open) void load(); };

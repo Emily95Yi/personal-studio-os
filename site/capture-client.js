@@ -4,6 +4,12 @@ export const captureTypes = { url: '🔗 链接', text: '▤ 文字', image: '�
 const errors = {
   unauthorized: '请登录 Studio 或检查设备授权。',
   unavailable: '暂时无法连接 Studio，请稍后重试。',
+  studio_unavailable: 'Studio 云端内容暂时不可读，请稍后重试。',
+  service_busy: 'Studio 服务暂时繁忙，请点击重试。',
+  offline: '网络已断开，恢复连接后可点击重试。',
+  timeout: 'Studio 响应超时，请点击重试。',
+  session_expired: '登录已过期，请在新窗口重新登录后重试。',
+  unconfirmed: '尚未确认保存结果。请保留当前内容，核对记录后再重试。',
   not_found: '这条收藏已不存在。',
   invalid_target: '分类已改变，请刷新后重新选择。',
   invalid_content: '请输入有效的文字或网址。',
@@ -28,19 +34,36 @@ const errors = {
 export const captureMessage = code => errors[code] ?? errors.unavailable;
 
 export async function api(path = '', { method = 'GET', value, data, signal } = {}) {
-  const response = await fetch('/api/' + (path === 'storage' ? path : 'capture' + path), {
-    method, cache: 'no-store', credentials: 'same-origin', redirect: 'error',
-    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000),
-    headers: { 'X-Studio-Request': '1', ...(value === undefined ? {} : { 'Content-Type': 'application/json' }) },
-    body: value === undefined ? data : JSON.stringify(value),
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(captureMessage(result.error));
-    error.status = response.status;
-    throw error;
+  for (let attempt = 0; ; attempt++) {
+    let error;
+    try {
+      const response = await fetch('/api/' + (path === 'storage' ? path : 'capture' + path), {
+        method, cache: 'no-store', credentials: 'same-origin', redirect: 'manual',
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000),
+        headers: { 'X-Studio-Request': '1', ...(value === undefined ? {} : { 'Content-Type': 'application/json' }) },
+        body: value === undefined ? data : JSON.stringify(value),
+      });
+      const login = response.status === 401 || response.type === 'opaqueredirect' ||
+        (response.status >= 300 && response.status < 400) ||
+        (response.ok && !response.headers.get('Content-Type')?.includes('application/json'));
+      if (login) throw Object.assign(new Error(captureMessage('session_expired')), { code: 'session_expired', status: 401 });
+      const result = await response.json().catch(error => { if (response.ok) throw error; return {}; });
+      if (response.ok) return result;
+      const code = result.error || (response.status >= 500 ? 'service_busy' : 'unavailable');
+      error = Object.assign(new Error(captureMessage(code)), { status: response.status, code,
+        retryable: response.status === 408 || response.status === 429 || response.status >= 500 });
+    } catch (cause) {
+      if (signal?.aborted) throw cause;
+      if (cause.status) throw cause;
+      const code = globalThis.navigator?.onLine === false ? 'offline' :
+        cause.name === 'TimeoutError' ? 'timeout' : method === 'GET' ? 'service_busy' : 'unconfirmed';
+      error = Object.assign(new Error(captureMessage(code), { cause }), { code, retryable: true });
+    }
+    // Writes may have committed even when the response was lost. Only repeat reads.
+    if (method !== 'GET' || !error.retryable || attempt === 2) throw error;
+    await new Promise(resolve => setTimeout(resolve, [500, 1500][attempt]));
+    if (signal?.aborted) signal.throwIfAborted();
   }
-  return result;
 }
 
 export function installCaptureSelects(container, modules) {

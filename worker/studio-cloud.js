@@ -5,7 +5,7 @@ import { clearBoardTrash } from '../site/self-board-data.js';
 import { cleanupUploads } from './capture-files.js';
 import { previewMigration, studioExport, validatePinnedResources } from '../site/studio-migration.js';
 import { applyStudioDelta, deltaFormat } from '../site/studio-delta.js';
-import { putStudioSnapshot, streamStudioSnapshot } from './studio-snapshot.js';
+import { deleteStudioSnapshot, ensureStudioCatalog, putStudioSnapshot, streamStudioSnapshot } from './studio-snapshot.js';
 
 const leaseDuration = 120_000;
 const validToken = token => typeof token === 'string' && /^[0-9a-f-]{36}$/.test(token);
@@ -50,6 +50,10 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
   if (url.pathname === '/api/studio/lease') return lease(request, db, owner, body, json);
   if (request.method === 'GET') {
     const result = await readStudio(env, owner, url.searchParams.get('revision'));
+    if (result.snapshot && result.row?.object_key) {
+      // Backfill older snapshots after a successful normal read, outside the response path.
+      ctx.waitUntil(ensureStudioCatalog(storage, result.row.object_key, result.snapshot).catch(() => {}));
+    }
     const headers = { 'X-Studio-Revision': String(result.row?.revision ?? 0) };
     return result.unchanged
       ? new Response(null, { status: 204, headers: { ...headers, 'Cache-Control': 'private, no-store' } })
@@ -129,16 +133,16 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
   } catch (error) {
     // A failed or ambiguous commit must never remove a live snapshot.
     ctx.waitUntil(readCloud(db, owner).then(current => {
-      if (current?.object_key !== key && current?.previous_key !== key) return storage.delete(key);
+      if (current?.object_key !== key && current?.previous_key !== key) return deleteStudioSnapshot(storage, key);
     }).catch(() => {}));
     throw error;
   }
   if (!result.results[0]) {
-    ctx.waitUntil(storage.delete(key).catch(() => {}));
+    ctx.waitUntil(deleteStudioSnapshot(storage, key).catch(() => {}));
     const latest = saveId ? await readCloud(db, owner) : null;
     return saveConflict(storage, latest, revision, saveId, json);
   }
-  if (row.previous_key) ctx.waitUntil(storage.delete(row.previous_key).catch(() => {}));
+  if (row.previous_key) ctx.waitUntil(deleteStudioSnapshot(storage, row.previous_key).catch(() => {}));
   if (purged.length) ctx.waitUntil(cleanupUploads(env).catch(() => {}));
   return json(result.results[0]);
 }

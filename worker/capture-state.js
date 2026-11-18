@@ -3,7 +3,7 @@ import { emptyStudio } from '../site/studio-data.js';
 import { boardSection, initialDiscoverCategories, isWorkshopWikiCategory, resourceKey } from '../site/self-board-data.js';
 import { categoryList, collectionCategoryLabel, foldersFor, inbox, topicsFor } from '../site/board-library-data.js';
 import { previewMigration, studioExport } from '../site/studio-migration.js';
-import { readStudioSnapshot } from './studio-snapshot.js';
+import { readStudioCatalog, readStudioSnapshot } from './studio-snapshot.js';
 
 export const sql = (db, query, ...args) => db.prepare(query).bind(...args);
 export const readCloud = (db, owner) => sql(db, 'SELECT * FROM studio_cloud WHERE owner = ?', owner).first();
@@ -11,7 +11,7 @@ export const readProjections = (db, owner) => sql(db,
   "SELECT id, document, native_collection, status FROM capture_items WHERE owner = ? AND status = 'organized'", owner);
 export const captureError = (code, status = 400) => Object.assign(new Error(code), { captureCode: code, status });
 
-export async function readStudio(env, owner, requestedRevision) {
+export async function readStudio(env, owner, requestedRevision, { metadataOnly = false } = {}) {
   const { DB: db, STUDIO_CONTENT: storage } = env;
   for (let attempt = 0; attempt < 3; attempt++) {
     const [cloud, projected] = await db.batch([
@@ -19,15 +19,19 @@ export async function readStudio(env, owner, requestedRevision) {
     ]);
     const row = cloud.results[0];
     if (String(row?.revision ?? 0) === requestedRevision) return { row, unchanged: true };
-    const object = row?.object_key ? await storage.get(row.object_key) : null;
-    if (row?.object_key && !object) continue;
-    const snapshot = object ? await readStudioSnapshot(object) : null;
-    const state = snapshot ?? emptyStudio();
+    let snapshot = metadataOnly && row?.object_key ? await readStudioCatalog(storage, row.object_key) : null;
+    if (!snapshot) {
+      const object = row?.object_key ? await storage.get(row.object_key) : null;
+      if (row?.object_key && !object) continue;
+      snapshot = object ? await readStudioSnapshot(object, { metadataOnly }) : null;
+    }
+    const state = { ...(snapshot ?? emptyStudio()) };
     ensureCaptureTopic(state);
     for (const projection of projected.results) {
-      if (projection.status === 'organized') state[projection.native_collection].push(JSON.parse(projection.document));
+      if (projection.status === 'organized') state[projection.native_collection] =
+        [...state[projection.native_collection], JSON.parse(projection.document)];
     }
-    return { row, state, projections: projected.results, empty: !snapshot && !row?.revision };
+    return { row, state, snapshot, projections: projected.results, empty: !snapshot && !row?.revision };
   }
   throw captureError('studio_unavailable', 503);
 }
@@ -176,7 +180,8 @@ export function checkPortable(row) {
 
 export function verifyCaptureState(state) {
   try {
-    previewMigration(emptyStudio(), studioExport(state));
+    // Capture changes records only. Stored assets were validated when published.
+    previewMigration(emptyStudio(), studioExport(state), [], { verifiedAssets: new Set(state.assets) });
   } catch {
     throw captureError('native_conflict', 409);
   }

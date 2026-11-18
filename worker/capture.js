@@ -132,7 +132,7 @@ async function items(db, owner, params) {
 async function mutate(env, owner, rows, change) {
   const { DB: db } = env;
   const affectsStudio = Boolean(change.target) || rows.some(row => row.status === 'organized');
-  const stateRead = affectsStudio ? await readStudio(env, owner) : null;
+  const stateRead = affectsStudio ? await readStudio(env, owner, undefined, { metadataOnly: true }) : null;
   if (affectsStudio && stateRead.row?.lease_until > Date.now()) throw captureError('studio_editing', 423);
   const now = stamp();
   const transaction = crypto.randomUUID();
@@ -281,7 +281,9 @@ export async function captureApi(request, env, ctx, owner, url, { body, json }, 
   const path = url.pathname.slice((device ? '/api/capture/mobile' : '/api/capture').length);
   const method = request.method;
   const actor = device?.id ?? 'web';
-  if (path === '/options' && method === 'GET') return json({ modules: captureOptions((await readStudio(env, owner)).state) });
+  if (path === '/options' && method === 'GET') {
+    return json({ modules: captureOptions((await readStudio(env, owner, undefined, { metadataOnly: true })).state) });
+  }
   if (path.startsWith('/uploads')) return filesApi(request, env, owner, actor, path, body, json);
   if (path === '' && method === 'POST') {
     const result = await create(env, owner, actor, device, await body(request, maxJSON));

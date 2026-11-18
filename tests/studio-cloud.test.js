@@ -4,8 +4,9 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { createHandler } from '../worker/index.js';
 import { ensureCaptureTopic } from '../site/capture-topic.js';
+import { verifyCaptureState } from '../worker/capture-state.js';
 import { beginStudioEdit, startStudioSync } from '../site/studio-cloud.js';
-import { addAsset, createStudioStore, emptyStudio, saveEvent, saveProject, studioStore } from '../site/studio-data.js';
+import { addAsset, createStudioStore, emptyStudio, imageDataHeader, saveEvent, saveProject, studioStore } from '../site/studio-data.js';
 import { studioDelta } from '../site/studio-delta.js';
 import { saveBoardContent } from '../site/self-board-data.js';
 import { studioExport } from '../site/studio-migration.js';
@@ -27,7 +28,7 @@ globalThis.FixedLengthStream ??= class extends TransformStream {
 function studioApi(t) {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
-  for (const filename of ['0004_studio_cloud.sql', '0005_mobile_capture.sql']) {
+  for (const filename of ['0001_private_calendar.sql', '0004_studio_cloud.sql', '0005_mobile_capture.sql', '0006_capture_inbox_visibility.sql']) {
     db.exec(readFileSync(new URL('../migrations/' + filename, import.meta.url), 'utf8'));
   }
   const binding = {
@@ -74,17 +75,19 @@ function studioApi(t) {
       delete: async key => { objects.delete(key); metadata.delete(key); },
     },
   };
-  const call = (path = '', { method = 'GET', owner = 'studio-user', value, headers } = {}) => handler(
-    new Request(origin + '/api/studio' + path, {
+  const send = (path, { method = 'GET', owner = 'studio-user', value, headers } = {}) => handler(
+    new Request(origin + path, {
       method, headers: { Origin: origin, 'Content-Type': 'application/json', 'X-Studio-Request': '1',
         ...(owner ? { 'X-Test-Owner': owner } : {}), ...headers },
       body: value === undefined ? undefined : JSON.stringify(value),
     }), env, { waitUntil: promise => jobs.push(promise) });
+  const call = (path = '', options) => send('/api/studio' + path, options);
+  const capture = (path = '', options) => send('/api/capture' + path, options);
   const lock = (token, method = 'POST') => call('/lease', { method, value: { token } });
   const save = (token, revision, transfer) => call('', {
     method: 'PUT', value: transfer, headers: { 'X-Studio-Lease': token, 'X-Studio-Revision': revision },
   });
-  return { call, lock, save, db, objects, jobs };
+  return { call, capture, lock, save, db, objects, jobs, env };
 }
 
 test('private Studio sync migrates existing IDs and gives one device at a time permission to edit', async t => {
@@ -121,7 +124,7 @@ test('private Studio sync migrates existing IDs and gives one device at a time p
   assert.equal((await save(phone, 2, studioExport(local))).status, 423);
   assert.equal((await save(desktop, 2, studioExport(local))).status, 200);
   await Promise.all(jobs);
-  assert.equal(objects.size, 2);
+  assert.equal(objects.size, 4); // Two retained snapshots, each with its small catalog.
 });
 
 test('legacy Studio snapshots can grow past 64 MiB and reload after a delta', async t => {
@@ -208,6 +211,96 @@ test('Studio deltas preserve and update Capture records stored outside the snaps
   assert.equal(JSON.parse(stored.document).body, 'Edited on desktop');
   assert.equal(stored.version, 1);
   assert.ok([...objects.values()].every(snapshot => !JSON.parse(snapshot).content.length));
+});
+
+test('Inbox classification uses the small catalog and preserves Reflections, sources and original attachments', async t => {
+  const { call, capture, lock, save, objects, env } = studioApi(t);
+  const state = emptyStudio();
+  state.reflectionLabels.push({ id: 'inspiration', name: '灵感', color: 'mint' });
+  const png = Buffer.alloc(1024 * 1024);
+  Buffer.from('89504e470d0a1a0a', 'hex').copy(png);
+  const assetId = addAsset(state, { name: '保留原图.png', mime: 'image/png', data: png.toString('base64') });
+  saveProject(state, { title: '已有图片的 Project', coverAssetId: assetId });
+  const token = crypto.randomUUID();
+  await lock(token);
+  assert.equal((await save(token, 0, studioExport(state))).status, 200);
+  await lock(token, 'DELETE');
+  const catalogKey = [...objects.keys()].find(key => key.endsWith('.catalog.json'));
+  assert.ok(Buffer.byteLength(objects.get(catalogKey)) < 5000);
+  const get = env.STUDIO_CONTENT.get;
+  const smallReads = t.mock.method(env.STUDIO_CONTENT, 'get', async key => {
+    assert.ok(key.endsWith('.catalog.json'), 'classification must not read the full image snapshot');
+    return get(key);
+  });
+  const { modules } = await (await capture('/options')).json();
+  const target = modules[0].groups[0].options.find(row => row.label === '灵感').target;
+  const created = await (await capture('', { method: 'POST', value: { type: 'text', requestKey: crypto.randomUUID(),
+    title: '摘录', originalText: '第一段\n第二段', userNote: '我的思考', sourceUrl: 'https://example.org/source#原文' } })).json();
+  const classified = await capture('/items/' + created.id, { method: 'PATCH', value: { version: 0, target } });
+  assert.equal(classified.status, 200);
+  const receipt = await classified.json();
+  assert.equal(receipt.status, 'organized');
+  assert.equal(receipt.nativeCollection, 'content');
+  assert.equal(receipt.inInbox, true);
+  assert.equal(receipt.originalText, '第一段\n第二段');
+  assert.equal(receipt.userNote, '我的思考');
+  assert.equal(receipt.sourceUrl, 'https://example.org/source#原文');
+  assert.equal((await capture('/items/' + created.id, { method: 'PATCH', value: { version: 0, target } })).status, 409);
+  const second = await (await capture('', { method: 'POST', value: { type: 'url', sourceUrl: 'https://example.org/link',
+    requestKey: crypto.randomUUID() } })).json();
+  const pending = modules[0].groups[0].options[0].target;
+  assert.equal((await capture('/items/batch', { method: 'PATCH', value: { ids: [second.id], target: pending } })).status, 200);
+  smallReads.mock.restore();
+  const loaded = await (await call()).json();
+  const thought = loaded.content.find(row => row.id === created.id);
+  assert.equal(thought.type, 'thought');
+  assert.equal(thought.reflectionLabelId, 'inspiration');
+  assert.equal(thought.personalNotes, '我的思考');
+  assert.equal(loaded.content.find(row => row.id === second.id).sourceUrl, 'https://example.org/link');
+  assert.deepEqual(loaded.assets, state.assets);
+  // Native editing must still save the full original image and the Capture projection.
+  await lock(token);
+  const edited = structuredClone(loaded);
+  edited.content.find(row => row.id === created.id).body = '继续编辑灵感';
+  assert.equal((await save(token, 3, studioDelta(loaded, edited))).status, 200);
+  await lock(token, 'DELETE');
+  assert.equal((await (await capture('/items/' + created.id)).json()).originalText, '继续编辑灵感');
+  assert.deepEqual((await (await call()).json()).assets, state.assets);
+});
+
+test('older snapshots can classify without a catalog and normal reads backfill one without duplicating projections', async t => {
+  const { call, capture, lock, save, objects, jobs } = studioApi(t);
+  const state = emptyStudio();
+  addAsset(state, { name: '旧附件', mime: 'text/plain', data: 'A'.repeat(128 * 1024) });
+  const token = crypto.randomUUID();
+  await lock(token);
+  await save(token, 0, studioExport(state));
+  await lock(token, 'DELETE');
+  const key = [...objects.keys()].find(key => !key.endsWith('.catalog.json'));
+  objects.delete(key + '.catalog.json');
+  const created = await (await capture('', { method: 'POST', value: { type: 'text', originalText: '旧快照也能分类',
+    requestKey: crypto.randomUUID(), target: JSON.stringify(['reflections', 'tag', '']) } })).json();
+  assert.equal(created.status, 'organized');
+  const loaded = await (await call()).json();
+  await Promise.all(jobs);
+  assert.equal(loaded.content.filter(row => row.id === created.id).length, 1);
+  assert.ok(objects.has(key + '.catalog.json'));
+  assert.equal(JSON.parse(objects.get(key + '.catalog.json')).content.length, 0);
+  const { modules } = await (await capture('/options')).json();
+  assert.equal(modules[0].label, 'Reflections');
+  assert.equal((await (await call()).json()).content.filter(row => row.id === created.id).length, 1);
+});
+
+test('Capture validates references without decoding unchanged image bytes', () => {
+  const state = emptyStudio();
+  const asset = { id: 'trusted', name: 'image.png', mime: 'image/png' };
+  Object.defineProperty(asset, imageDataHeader, { value: 'iVBORw0KGgoAAAANSUhEUgAA' });
+  Object.defineProperty(asset, 'data', { enumerable: true, get() { throw new Error('Full image decoded'); } });
+  state.assets.push(asset);
+  saveProject(state, { title: '封面', coverAssetId: asset.id });
+  assert.doesNotThrow(() => verifyCaptureState(state));
+  state.assets = [];
+  assert.throws(() => verifyCaptureState(state), { captureCode: 'native_conflict' });
 });
 
 test('Studio save retries a temporary service error and recovers a lost save receipt without duplicating an Event', async t => {

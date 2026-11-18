@@ -3,7 +3,7 @@ import { collections, emptyStudio, studioStore } from './studio-data.js';
 import { studioExport } from './studio-migration.js';
 import { studioDelta } from './studio-delta.js';
 
-export const studioSync = { mode: 'loading', migration: false, localError: false, message: '' };
+export const studioSync = { mode: 'loading', migration: false, localError: false, reconnecting: false, authRequired: false, message: '' };
 let revision = -1;
 let currentLease;
 let acquiring;
@@ -11,6 +11,9 @@ let releasing;
 let refreshing;
 let localTransfer;
 let localReady;
+let nextRetry = 0;
+let failures = 0;
+let connectionNotice = '';
 const changes = new EventTarget();
 
 export function onStudioNotice(handler) { changes.addEventListener('notice', handler); }
@@ -20,8 +23,9 @@ export function studioNotice(message) {
 }
 
 async function responseError(response) {
-  if (response.status === 401 || response.type === 'opaqueredirect') {
-    return new Error('Studio 需要重新登录。请先复制当前草稿，再刷新页面登录。');
+  if (response.status === 401 || response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) {
+    return Object.assign(new Error('Studio 登录已过期。请在新窗口重新登录，再点击重新连接；当前草稿会保留。'),
+      { status: 401, code: 'session_expired' });
   }
   const failure = await response.json().catch(() => ({}));
   const messages = {
@@ -63,11 +67,15 @@ async function request(path = '', { method = 'GET', value, headers = {}, keepali
 }
 
 async function fetchSnapshot({ inspectLocal = false } = {}) {
-  const response = await request('?revision=' + revision, { retry: true });
-  if (response.status === 204) return false;
-  const next = Number(response.headers.get('X-Studio-Revision'));
-  const snapshot = await response.json();
-  if (!Number.isSafeInteger(next) || next < 0 || (next > 0 && !snapshot)) throw new Error('云端内容读取失败。');
+  const loaded = await request('?revision=' + revision, { retry: true, async read(response) {
+    if (response.status === 204) return null;
+    const next = Number(response.headers.get('X-Studio-Revision'));
+    const snapshot = await response.json();
+    if (!Number.isSafeInteger(next) || next < 0 || (next > 0 && !snapshot)) throw new Error('云端内容读取失败。');
+    return { next, snapshot };
+  } });
+  if (!loaded) return false;
+  const { next, snapshot } = loaded;
   if (next === 0 && inspectLocal) await localReady;
   revision = next;
   studioSync.migration = next === 0 && Boolean(localTransfer);
@@ -89,15 +97,43 @@ export async function startStudioSync() {
     studioSync.mode = 'cloud';
   } catch (error) {
     studioSync.mode = error.status === 404 ? 'local' : 'error';
-    if (studioSync.mode === 'error') studioNotice('云端连接失败。刷新页面后可以重试。');
+    if (studioSync.mode === 'error') failedConnection(error);
   }
   if (studioSync.mode !== 'cloud') await localReady;
   if (studioSync.mode !== 'local') studioStore.useCloud(saveCloud);
 }
 
-export function refreshStudioSync() {
-  if (studioSync.mode !== 'cloud' || currentLease || acquiring) return Promise.resolve(false);
-  refreshing ??= fetchSnapshot().catch(() => false).finally(() => { refreshing = undefined; });
+function failedConnection(error) {
+  studioSync.authRequired = error.status === 401;
+  nextRetry = Date.now() + Math.min(60_000, 5000 * 2 ** Math.min(failures++, 4));
+  connectionNotice = studioSync.authRequired ? error.message :
+    'Studio 连接中断，正在自动重试。当前内容已保留，也可以点击重新连接。';
+  studioNotice(connectionNotice);
+}
+
+export function refreshStudioSync({ manual = false } = {}) {
+  if (!['cloud', 'error'].includes(studioSync.mode) || currentLease || acquiring) return Promise.resolve(false);
+  if (!manual && (studioSync.authRequired || Date.now() < nextRetry)) return Promise.resolve(false);
+  refreshing ??= (async () => {
+    studioSync.reconnecting = true;
+    studioNotice(studioSync.message);
+    try {
+      const changed = await fetchSnapshot({ inspectLocal: studioSync.mode === 'error' });
+      studioSync.mode = 'cloud';
+      studioSync.authRequired = false;
+      failures = nextRetry = 0;
+      if (studioSync.message === connectionNotice) studioNotice('');
+      connectionNotice = '';
+      return changed;
+    } catch (error) {
+      failedConnection(error);
+      return false;
+    } finally {
+      studioSync.reconnecting = false;
+      studioNotice(studioSync.message);
+      refreshing = undefined;
+    }
+  })();
   return refreshing;
 }
 

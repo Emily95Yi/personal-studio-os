@@ -3,6 +3,35 @@ import { collections, imageDataHeader } from '../site/studio-data.js';
 const layout = 'json-rows-v1';
 const collectionStart = key => ',"' + key + '":[';
 const encodedAsset = Symbol('encoded asset data');
+const catalogKey = key => key + '.catalog.json';
+
+// Capture needs record references and image signatures, never attachment bytes.
+function studioCatalog(state) {
+  return { ...state, assets: state.assets.map(asset => ({
+    ...Object.fromEntries(Object.keys(asset).filter(key => key !== 'data').map(key => [key, asset[key]])),
+    data: asset[imageDataHeader] ?? asset.data.slice(0, 32),
+  })) };
+}
+
+export async function readStudioCatalog(storage, key) {
+  const object = await storage.get(catalogKey(key));
+  return object ? object.json() : null;
+}
+
+export async function ensureStudioCatalog(storage, key, state) {
+  if (await storage.head(catalogKey(key))) return;
+  await putStudioCatalog(storage, key, state);
+}
+
+function putStudioCatalog(storage, key, state) {
+  return storage.put(catalogKey(key), JSON.stringify(studioCatalog(state)), {
+    httpMetadata: { contentType: 'application/json' }, customMetadata: { layout: 'studio-catalog-v1' },
+  });
+}
+
+export function deleteStudioSnapshot(storage, key) {
+  return Promise.all([storage.delete(key), storage.delete(catalogKey(key))]);
+}
 
 // Keep standard JSON on disk and over HTTP. Separate records with newlines
 // so R2 reads can parse them without buffering the complete Studio.
@@ -60,6 +89,7 @@ export async function putStudioSnapshot(storage, key, state, saveId) {
         httpMetadata: { contentType: 'application/json' },
         customMetadata: { layout, ...(saveId && { saveId }) },
       }),
+      putStudioCatalog(storage, key, state),
     ]);
   } finally {
     controller.abort();
@@ -97,7 +127,7 @@ function byteRange(parts, start, end) {
   return range;
 }
 
-function snapshotAsset(parts, comma) {
+function snapshotAsset(parts, comma, metadataOnly) {
   const size = parts.reduce((length, part) => length + part.length, 0);
   const start = comma ? 1 : 0;
   // Reuse base64 from existing R2 objects without decoding it to a string or
@@ -112,6 +142,7 @@ function snapshotAsset(parts, comma) {
       const data = byteRange(parts, offset, size - 2);
       if (data.length && data.every(part => !part.includes(34))) {
         const asset = JSON.parse(prefix + '}');
+        if (metadataOnly) return { ...asset, data: decode(byteRange(data, 0, 32)) };
         Object.defineProperties(asset, {
           data: { enumerable: true, get: () => decode(data) },
           [encodedAsset]: { value: data },
@@ -121,11 +152,15 @@ function snapshotAsset(parts, comma) {
       }
     }
   }
-  return JSON.parse(decode(parts).slice(start));
+  const asset = JSON.parse(decode(parts).slice(start));
+  return metadataOnly ? { ...asset, data: asset.data.slice(0, 32) } : asset;
 }
 
-export async function readStudioSnapshot(object) {
-  if (object.customMetadata?.layout !== layout) return object.json();
+export async function readStudioSnapshot(object, { metadataOnly = false } = {}) {
+  if (object.customMetadata?.layout !== layout) {
+    const state = await object.json();
+    return metadataOnly ? studioCatalog(state) : state;
+  }
   const lines = linesOf(object.body);
   const next = async () => {
     const { value, done } = await lines.next();
@@ -147,7 +182,7 @@ export async function readStudioSnapshot(object) {
         expect(done, false);
         if (parts.length === 1 && parts[0].length === 1 && parts[0][0] === 93) break;
         if (rows.length) expect(parts[0]?.[0], 44);
-        rows.push(key === 'assets' ? snapshotAsset(parts, rows.length > 0) : JSON.parse(decode(parts).slice(rows.length ? 1 : 0)));
+        rows.push(key === 'assets' ? snapshotAsset(parts, rows.length > 0, metadataOnly) : JSON.parse(decode(parts).slice(rows.length ? 1 : 0)));
       }
     }
     expect(await next(), '}');
