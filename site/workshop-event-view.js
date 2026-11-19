@@ -70,7 +70,7 @@ export function metadataFields(state, event) {
     select('status', '状态', [['', '未设置'], ...Object.entries(statuses)], event.status || '') + '</div>' +
     '<div class="event-field-pair">' + Object.entries(eventFields).map(([key, label]) =>
       field(key, label, event[key], key === 'date' && (!event.date || /^\d{4}-\d{2}-\d{2}$/.test(event.date)) ? 'type="date"' : '')).join('') +
-    '</div><fieldset class="event-checks"><legend>一期一会公开海报</legend><p class="work-meta">上传海报且活动状态为「募集中」或「已结束」时自动展示。仅公开海报，不公开主持稿、流程或记录。</p>' +
+    '</div><fieldset class="event-checks"><legend>一期一会公开海报</legend><p class="work-meta">上传海报后，「募集中」展示在募集区，「已结束」或「已取消」展示在往期活动。仅公开海报，不公开主持稿、流程或记录。</p>' +
     check('hideTokyoPoster', '隐藏此海报（不在公开页展示）', event.tokyoPosterHidden === true) +
     '</fieldset><details><summary>海报与活动形式</summary><div class="event-field-pair">' +
     field('posterUrl', '海报链接', event.posterUrl, 'placeholder="https://"') +

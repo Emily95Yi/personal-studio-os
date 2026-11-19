@@ -8,7 +8,7 @@ const text = value => typeof value === 'string' ? value.trim() : '';
 // no longer required; an explicit hide flag remains an opt-out for a poster.
 export function publicPosterState(event) {
   if (event.tokyoPosterHidden === true) return '';
-  if (['completed', 'ended', 'finished', '已结束', '已完成'].includes(event.status)) return 'ended';
+  if (['completed', 'ended', 'finished', '已结束', '已完成', 'cancelled', 'canceled', '已取消'].includes(event.status)) return 'ended';
   if (['recruiting', 'open', 'registration_open', '募集中', '正在募集中'].includes(event.status)) return 'recruiting';
   return '';
 }
@@ -40,7 +40,7 @@ export function publicEvents(state, { brandId = 'yiqiyihui', now = new Date() } 
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo',
     year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
   return (state.events ?? []).filter(event => isPublicEvent(event, brandId)).map(event => {
-    const cancelled = event.status === 'cancelled';
+    const cancelled = ['cancelled', 'canceled', '已取消'].includes(event.status);
     const closedAt = Date.parse(event.registrationClosesAt ?? '');
     const ended = /^\d{4}-\d{2}-\d{2}$/.test(event.date) && event.date < today;
     const posterState = publicPosterState(event);

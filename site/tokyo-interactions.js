@@ -38,7 +38,7 @@ export function mountTokyo(app) {
       entry.target.classList.add('is-visible');
       observer.unobserve(entry.target);
     }
-  }), { threshold: .08 });
+  }), { threshold: .01, rootMargin: '0px 0px -6% 0px' });
   root.querySelectorAll('.tk-reveal').forEach(node => observer.observe(node));
   root.classList.add('tk-motion-ready');
 

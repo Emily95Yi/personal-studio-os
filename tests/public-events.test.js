@@ -9,6 +9,7 @@ import { tokyoView } from '../site/tokyo-view.js';
 import { demoPosters, exhibitionEvents } from '../site/tokyo-demo.js';
 import { publicRepository } from '../site/repository.js';
 import { readRoute } from '../site/pages.js';
+import { archivePosters, shufflePosters } from '../site/tokyo-gallery.js';
 import { SaxesParser } from 'saxes';
 
 const now = new Date('2026-11-18T16:00:00Z'); // Nov 19 in Tokyo
@@ -70,6 +71,54 @@ test('saving the Event status cannot be overridden by a stale publication radio 
   assert.equal(saved.status, 'completed');
   assert.equal(publicEvents(state)[0].ended, true);
   assert.equal(publicEvents(state)[0].recruiting, false);
+});
+
+test('cancelled posters join the archive without exposing private Event content or registration', () => {
+  const state = { events: [
+    event('cancelled', { status: 'cancelled', description: 'PRIVATE', body: 'PRIVATE', registrationUrl: 'https://example.com/signup' }),
+    event('hidden', { status: 'cancelled', tokyoPosterHidden: true }),
+    event('deleted', { status: 'cancelled', deletedAt: '2026-11-01' }),
+  ] };
+  const [row] = publicEvents(state, { now });
+  assert.equal(publicEvents(state, { now }).length, 1);
+  assert.equal(row.cancelled, true);
+  assert.equal(row.ended, true);
+  assert.equal(row.posterOnly, true);
+  assert.equal(row.recruiting, false);
+  assert.equal(row.description, '');
+  assert.equal(row.registrationUrl, '');
+  assert.equal('body' in row, false);
+});
+
+test('archive randomization preserves every poster, keeps source order untouched and stays stable during a visit', () => {
+  const rows = ['a', 'b', 'c', 'd'].map(id => ({ id }));
+  assert.deepEqual(shufflePosters(rows, () => 0).map(row => row.id), ['b', 'c', 'd', 'a']);
+  assert.deepEqual(rows.map(row => row.id), ['a', 'b', 'c', 'd']);
+  const order = archivePosters(rows).map(row => row.id);
+  assert.deepEqual(archivePosters([...rows].reverse()).map(row => row.id), order);
+  assert.equal(new Set(order).size, rows.length);
+});
+
+test('no open recruitment gets a centered notice and every ended or cancelled poster stays in the past gallery', () => {
+  const before = studioStore.state;
+  try {
+    studioStore.receiveCloud({ ...emptyStudio(), events: [
+      event('ended', { status: 'completed' }), event('cancelled', { status: 'cancelled' }),
+    ] }, 0);
+    const html = tokyoView();
+    assert.match(html, /tk-empty-recruitment/);
+    assert.match(html, /暂无募集中活动，敬请期待后续活动/);
+    assert.match(html, /<h2 id="tk-archive-title">往期活动<\/h2>/);
+    assert.doesNotMatch(html, /class="tk-featured|<h2[^>]*>已结束/);
+    const archive = html.slice(html.indexOf('class="tk-archive"'));
+    for (const id of ['ended', 'cancelled']) assert.equal((archive.match(new RegExp('data-tk-poster="' + id + '"', 'g')) ?? []).length, 1);
+    const state = studioStore.state;
+    state.events.push(event('open', { status: 'recruiting' }));
+    const withOpen = tokyoView();
+    assert.doesNotMatch(withOpen, /暂无募集中活动/);
+    assert.match(withOpen, /tk-featured-poster[^>]*data-tk-poster="open"/);
+    assert.equal((withOpen.match(/data-tk-poster="open"/g) ?? []).length, 1);
+  } finally { studioStore.receiveCloud(before, before.revision); }
 });
 
 test('public projection excludes drafts, private previews, withdrawn and other brands', () => {
