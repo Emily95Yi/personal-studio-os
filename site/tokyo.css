@@ -46,7 +46,7 @@
   touch-action: pan-y; overflow: hidden;
 }
 .tk-liquid, .tk-hero-grain { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.tk-liquid { opacity: 0; transition: opacity 1.5s ease; }
+.tk-liquid { opacity: 0; filter: blur(3px); transform: scale(1.012); transition: opacity 1.5s ease; }
 .tk-liquid.is-ready { opacity: 1; }
 .tk-hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(transparent 5%, #e7e9f2); opacity: var(--tk-exit, 0); pointer-events: none; }
 .tk-hero-grain { opacity: .035; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23fff' filter='url(%23n)' opacity='.7' d='M0 0h160v160H0z'/%3E%3C/svg%3E"); }
@@ -137,17 +137,17 @@
 .tk-tool-slot:nth-of-type(4) { --tk-card-index: 3; }
 .tk-tool-card { position: relative; display: flex; align-items: center; min-height: 440px; height: min(570px, calc(100svh - 180px)); border: 1px solid #4d506b0d; border-radius: 22px; overflow: clip; background: var(--tk-tool-color); transform: translate3d(0, var(--tk-card-y, 0px), 0) scale(var(--tk-card-scale, 1)); transform-origin: center top; box-shadow: 0 -8px 32px rgb(38 44 67 / var(--tk-card-shadow, .025)); }
 .tk-tool-panel-right { justify-content: flex-end; }
-.tk-tool-blue { --tk-tool-color: #e0e4f3; --tk-tool-accent: #6975aa; --tk-tool-wash: #cdd5ec; }
-.tk-tool-pink { --tk-tool-color: #ede1ed; --tk-tool-accent: #996b91; --tk-tool-wash: #e2cfe2; }
+.tk-tool-blue { --tk-tool-color: #e0ebf5; --tk-tool-accent: #6c83a5; --tk-tool-wash: #ccdeee; }
+.tk-tool-purple { --tk-tool-color: #e8e1f2; --tk-tool-accent: #8b76ab; --tk-tool-wash: #dbd1e7; }
 .tk-tool-sage { --tk-tool-color: #e0e8df; --tk-tool-accent: #6b8471; --tk-tool-wash: #cddbcf; }
 .tk-tool-apricot { --tk-tool-color: #f0e6da; --tk-tool-accent: #9d7d60; --tk-tool-wash: #e7d6c2; }
-.tk-tool-copy { position: relative; z-index: 1; display: block; width: min(44%, 460px); min-width: 0; margin: clamp(24px, 2.5vw, 36px); padding: clamp(24px, 2.5vw, 32px); border: 1px solid #69708635; border-radius: 16px; background: var(--tk-tool-color); }
+.tk-tool-copy { position: relative; z-index: 1; display: block; width: min(44%, 460px); min-width: 0; margin: clamp(24px, 2.5vw, 36px); padding: clamp(24px, 2.5vw, 32px); border: 1px solid #69708626; border-radius: 16px; background: var(--tk-tool-color); background: color-mix(in srgb, var(--tk-tool-color) 70%, transparent); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 .tk-tool-heading { display: flex; flex-direction: column-reverse; align-items: flex-start; gap: 16px; }
 .tk-tool-icon { display: block; width: 84px; height: 62px; flex: none; color: var(--tk-tool-accent); }
 .tk-tool-icon > svg { display: block; width: 100%; height: 100%; stroke-width: 3; }
 .tk-tool-copy h3 { font-family: var(--tk-round); font-size: clamp(24px, 2.5vw, 36px); font-weight: 600; letter-spacing: -.05em; line-height: 1.4; margin: 0; }
-.tk-tool-names { font-size: .875rem; margin-top: 12px; color: #51576f; line-height: 1.7; }
-.tk-tool-description { font-size: max(16px, 1rem); color: #51576b; line-height: 1.95; margin-top: 20px; max-width: 27em; }
+.tk-tool-names { font-size: .875rem; margin-top: 12px; color: #30364b; line-height: 1.7; }
+.tk-tool-description { font-size: max(16px, 1rem); color: #30364b; line-height: 1.95; margin-top: 20px; max-width: 27em; }
 .tk-tool-media { position: absolute; inset: 0; min-width: 0; background: var(--tk-tool-wash); overflow: clip; }
 .tk-tool-media > img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .tk-tool-media-contain > img { object-fit: contain; }
@@ -312,7 +312,7 @@
   .tk-tool-card { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; min-height: 0; height: auto; border-radius: 18px; }
   .tk-tool-media { position: relative; inset: auto; order: -1; width: calc(100% - 20px); aspect-ratio: 16 / 9; height: auto; flex: none; margin: 10px 10px 0; border-radius: 10px; }
   .tk-tool-media > img { position: absolute; inset: 0; }
-  .tk-tool-copy { width: auto; margin: 0; padding: 22px 24px 28px; border: 0; border-radius: 0; background: transparent; }
+  .tk-tool-copy { width: auto; margin: 0; padding: 22px 24px 28px; border: 0; border-radius: 0; background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
   .tk-tool-heading { flex-direction: row; justify-content: space-between; align-items: center; gap: 12px; }
   .tk-tool-heading h3 { min-width: 0; }
   .tk-tool-icon { width: 56px; height: 42px; }

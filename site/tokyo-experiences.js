@@ -5,21 +5,21 @@ import { escapeHtml as esc, safeUrl } from './html.js';
 // Keep private Workshop resources out of this public configuration.
 export const tokyoExperiences = [
   {
-    id: 'projection', title: '心理投射图卡', tools: 'OH卡 · 观系游戏', tone: 'blue',
+    id: 'projection', title: '心理投射图卡', tools: 'OH卡 · 观系游戏', tone: 'sage',
     description: '从一张图像开始，观察自己的联想、感受与不同视角。借助图卡展开分享与交流，没有固定答案，也不急于得出结论。',
     panelSide: 'left',
     image: { src: './tokyo-tool-projection.jpg', alt: '桌面上散放的图卡水彩插画', width: 1448, height: 1086, fit: 'cover' },
     photoLabel: 'OH卡 / 观系图卡',
   },
   {
-    id: 'transformation', title: '自我觉察桌游', tools: '蜕变游戏', tone: 'pink',
+    id: 'transformation', title: '自我觉察桌游', tools: '蜕变游戏', tone: 'blue',
     description: '借助游戏中的选择、提问与不同卡牌，探索当下的状态、困惑和可能性，在互动中发现新的思路。',
     panelSide: 'right',
     image: { src: './tokyo-tool-transformation.jpg', alt: '蜕变游戏桌游布局与卡牌插画', width: 1448, height: 1086, fit: 'cover' },
     photoLabel: '蜕变游戏 / 桌游布局',
   },
   {
-    id: 'creation', title: '正念与创作体验', tools: '直觉涂鸦 · 情绪编织等', tone: 'sage',
+    id: 'creation', title: '正念与创作体验', tools: '直觉涂鸦 · 情绪编织等', tone: 'purple',
     description: '通过颜色、线条、触感与创作，让注意力回到当下。无需绘画基础，也不以作品好坏作为衡量标准。',
     panelSide: 'left',
     image: { src: './tokyo-tool-creation.jpg', alt: '彩色粉笔与自由涂鸦的创作插画', width: 1448, height: 1086, fit: 'cover' },
