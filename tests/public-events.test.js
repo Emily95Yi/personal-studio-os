@@ -9,7 +9,7 @@ import { tokyoView } from '../site/tokyo-view.js';
 import { demoPosters, exhibitionEvents } from '../site/tokyo-demo.js';
 import { publicRepository } from '../site/repository.js';
 import { readRoute } from '../site/pages.js';
-import { archivePosters, galleryOffsets, stackDepth } from '../site/tokyo-gallery.js';
+import { archivePosters, galleryLayout, galleryMotion, stackDepth } from '../site/tokyo-gallery.js';
 import { SaxesParser } from 'saxes';
 
 const now = new Date('2026-11-18T16:00:00Z'); // Nov 19 in Tokyo
@@ -249,15 +249,39 @@ test('public missing-poster events retain placeholders and poster-only copy neve
   } finally { studioStore.receiveCloud(before, before.revision); }
 });
 
-test('scroll motion is bounded, column-specific and deterministic when reversing', () => {
-  const start = galleryOffsets(0), end = galleryOffsets(1);
-  assert.equal(start.length, 3);
-  assert.equal(galleryOffsets(.5, true).length, 2);
-  assert.ok(end[0] < 0 && end[1] > 0 && end[2] < 0);
-  assert.equal(new Set(end).size, 3);
-  assert.deepEqual(galleryOffsets(-10), start);
-  assert.deepEqual(galleryOffsets(10), end);
-  assert.deepEqual(galleryOffsets(0), start);
+test('autonomous gallery fits desktop 3×2 and mobile 2×3 portrait posters into one viewport', () => {
+  for (const [width, height, mobile, gap, rowGap] of [[1240, 900, false, 14, 14], [330, 844, true, 14 / 3, 6], [317, 667, true, 14 / 3, 6]]) {
+    const layout = galleryLayout(width, height, mobile, gap, rowGap);
+    assert.equal(layout.columns * layout.rows, 6);
+    assert.ok(layout.width <= width);
+    assert.ok(layout.height <= height - 160 + .01);
+    const cardWidth = (layout.width - gap * (layout.columns - 1)) / layout.columns;
+    const cardHeight = (layout.height - rowGap * (layout.rows - 1)) / layout.rows;
+    assert.ok(Math.abs(cardWidth / cardHeight - .75) < .001);
+  }
+});
+
+test('twelve public posters render once each with one gallery pause control', () => {
+  const before = studioStore.state;
+  try {
+    const events = Array.from({ length: 12 }, (_, index) => event('archive-' + index, {
+      date: '2026-10-' + String(index + 1).padStart(2, '0'), status: 'completed',
+    }));
+    studioStore.receiveCloud({ ...emptyStudio(), events }, 0);
+    const html = tokyoView();
+    assert.equal((html.match(/data-tk-poster=/g) ?? []).length, 12);
+    for (const row of events) assert.equal((html.match(new RegExp('data-tk-poster="' + row.id + '"', 'g')) ?? []).length, 1);
+    assert.equal((html.match(/data-tk-gallery-toggle/g) ?? []).length, 1);
+  } finally { studioStore.receiveCloud(before, before.revision); }
+});
+
+test('automatic columns alternate direction at a moderate pace and card stacking stays bounded', () => {
+  const up = galleryMotion(600, 300, 0), down = galleryMotion(600, 300, 1);
+  assert.equal(up.direction, 'alternate');
+  assert.equal(down.direction, 'alternate-reverse');
+  assert.equal(up.duration, 24_000);
+  assert.ok(down.duration > up.duration);
+  assert.equal(galleryMotion(-10, 300, 0).travel, 0);
   assert.equal(stackDepth(1000, 500).scale, .955);
   assert.equal(stackDepth(-100, 500).scale, 1);
 });

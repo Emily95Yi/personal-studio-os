@@ -8,11 +8,23 @@ export function archivePosters(events, { now = new Date() } = {}) {
     .sort((a, b) => (b.date || '').localeCompare(a.date || '') || String(a.id).localeCompare(String(b.id)));
 }
 
-// Bounded, reversible scroll motion. The centre column travels in the opposite
-// direction; no timers, looping posters or scroll-velocity accumulation.
-export function galleryOffsets(progress, mobile = false) {
-  const p = Math.max(0, Math.min(1, progress));
-  return (mobile ? [-132, 96] : [-220, 156, -110]).map(distance => distance * (p - .5));
+// Fit the requested rows into one screen, including the section heading/nav.
+export function galleryLayout(availableWidth, viewportHeight, mobile, gap, rowGap) {
+  const columns = mobile ? 2 : 3, rows = mobile ? 3 : 2;
+  const budget = Math.max(120, Math.min(720, viewportHeight - 160));
+  const posterHeight = (budget - rowGap * (rows - 1)) / rows;
+  const width = Math.min(availableWidth, posterHeight * .75 * columns + gap * (columns - 1));
+  const cardWidth = Math.max(1, (width - gap * (columns - 1)) / columns);
+  const cardHeight = cardWidth * 4 / 3;
+  return { columns, rows, width, height: cardHeight * rows + rowGap * (rows - 1), stride: cardHeight + rowGap };
+}
+
+// About one poster every 12 seconds. Alternate over the finite original track,
+// rather than cloning posters or duplicating public Event records for a loop.
+export function galleryMotion(travel, stride, column) {
+  const speed = Math.max(1, stride / 12) * [1, .92, 1.06][column % 3];
+  return { travel: Math.max(0, travel), duration: Math.max(1000, Math.max(0, travel) / speed * 1000),
+    direction: column % 2 ? 'alternate-reverse' : 'alternate' };
 }
 
 export function stackDepth(distance, travel) {

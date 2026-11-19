@@ -105,17 +105,24 @@
 .tk-mosaic { columns: 3; column-gap: 0; }
 .tk-mosaic-item { min-width: 0; break-inside: avoid; padding: 0; margin: 0; }
 .tk-mosaic .tk-poster img { max-height: none; box-shadow: none; }
-/* An open, finite gallery: stagger belongs to the column, hover to the button. */
+/* Finite original poster tracks pan automatically, in alternating directions. */
 .tk-archive { max-width: 1240px; margin-inline: auto; }
-.tk-gallery { --tk-gallery-gap: clamp(6px, .933333vw, 14px); --tk-gallery-row-gap: var(--tk-gallery-gap); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--tk-gallery-gap); align-items: start; padding-block: 48px 72px; }
-.tk-gallery-column { display: flex; flex-direction: column; gap: var(--tk-gallery-row-gap); min-width: 0; transform: translate3d(0, var(--tk-column-y, 0px), 0); }
-.tk-gallery-column:nth-child(2) { padding-top: clamp(32px, 7vw, 98px); }
-.tk-gallery-column:nth-child(3) { padding-top: clamp(16px, 2.5vw, 36px); }
+[data-tk-auto-archive] .tk-gallery-heading { justify-content: flex-start; gap: 20px; margin-bottom: 28px; }
+.tk-gallery-actions { display: flex; align-items: center; gap: 12px; }
+.tk-gallery-toggle { display: grid; place-items: center; width: 44px; height: 44px; flex: none; padding: 10px; border: 1px solid #69708630; border-radius: 50% !important; background: transparent; color: var(--tk-muted); }
+.tk-gallery-toggle[hidden] { display: none; }
+.tk-gallery-toggle svg { width: 20px; height: 20px; stroke-width: 1.7; }
+.tk-gallery-play-icon, .tk-gallery-toggle[aria-pressed="true"] .tk-gallery-pause-icon { display: none; }
+.tk-gallery-toggle[aria-pressed="true"] .tk-gallery-play-icon { display: block; }
+.tk-gallery { --tk-gallery-gap: clamp(6px, .933333vw, 14px); --tk-gallery-row-gap: var(--tk-gallery-gap); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); gap: var(--tk-gallery-gap); align-items: start; width: var(--tk-gallery-width, 100%); height: var(--tk-gallery-height, calc(100svh - 160px)); margin-inline: auto; }
+.tk-gallery-column { min-width: 0; min-height: 0; height: 100%; overflow: clip; }
+.tk-gallery-track { position: relative; display: flex; flex-direction: column; gap: var(--tk-gallery-row-gap); will-change: transform; }
 .tk-gallery-item { position: relative; min-width: 0; }
 .tk-gallery-item:focus-within { z-index: 3; }
-.tk-gallery .tk-poster img { max-height: none; border-radius: 4px; box-shadow: 0 12px 28px -24px #262c4340; }
-.tk-gallery .tk-poster { transform-origin: center; }
-.tk-gallery .tk-poster-pending { min-height: 0; border-radius: 4px; }
+.tk-gallery .tk-poster { aspect-ratio: 3 / 4; overflow: clip; border-radius: 4px; transform-origin: center; }
+.tk-gallery .tk-poster img { width: 100%; height: 100%; max-height: none; aspect-ratio: 3 / 4; object-fit: cover; object-position: center; box-shadow: none; }
+.tk-gallery .tk-poster-pending { width: 100%; height: 100%; min-height: 0; border-radius: 4px; }
+.tk-gallery .tk-image-failed { min-height: 0; }
 
 /* Sticky slots share a single containing block, so the final card releases
    naturally into the footer. No ancestor uses overflow: auto/hidden. */
@@ -291,9 +298,9 @@
   .tk-inner-page .tk-exhibition { padding-top: 125px; }
   .tk-about { padding: 145px 7% 80px; }
   .tk-gallery-heading { margin-bottom: 16px; }
-  .tk-gallery { --tk-gallery-gap: calc(16px / 3); padding-block: 30px 42px; }
-  .tk-gallery-column:nth-child(2) { padding-top: 44px; }
-  .tk-gallery-column:nth-child(3) { padding-top: 20px; }
+  [data-tk-auto-archive] .tk-gallery-heading { gap: 12px; margin-bottom: 20px; }
+  [data-tk-auto-archive] .tk-gallery-actions .tk-gallery-count { display: none; }
+  .tk-gallery { --tk-gallery-gap: calc(16px / 3); }
   .tk-experiences { padding: 0 6% 48px; }
   .tk-experience-heading { margin-bottom: 38px; padding-top: 4px; }
   .tk-experience-heading .tk-eyebrow { font-size: .6875rem; margin-bottom: 12px; }
@@ -338,7 +345,10 @@
 @media (prefers-reduced-motion: reduce) {
   .tk-shell *, .tk-shell *::before, .tk-shell *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .tk-is-focused .tk-scene { transform: none; }
-  .tk-gallery-column { transform: none; }
+  .tk-gallery { width: 100%; height: auto; grid-template-rows: auto; }
+  .tk-gallery-column { height: auto; overflow: visible; }
+  .tk-gallery-track { transform: none !important; will-change: auto; }
+  .tk-gallery-toggle { display: none; }
   .tk-tool-slot { position: relative; top: auto; margin-bottom: 28px; }
   .tk-tool-card { transform: none; }
   .tk-tool-stack { padding-bottom: 0; }
