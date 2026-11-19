@@ -9,8 +9,8 @@ export function mountPosterGallery(gallery, { signal, reduced, isLocked }) {
   const canPlay = () => visible && !disposed && !reduced.matches && !isLocked() && document.visibilityState === 'visible';
 
   function sync() {
-    const playing = canPlay() && states.some(state => state.max > 1 && !state.pointerDown &&
-      (state.velocity || (!state.manual && !state.focused)));
+    const playing = canPlay() && states.some(state => state.max > 1 &&
+      (state.pendingDrag || (!state.pointerDown && (state.velocity || (!state.manual && !state.focused)))));
     if (playing && !frame) frame = requestAnimationFrame(tick);
     if (!playing) { cancelAnimationFrame(frame); frame = 0; lastTick = 0; }
   }
@@ -29,26 +29,34 @@ export function mountPosterGallery(gallery, { signal, reduced, isLocked }) {
   }
   function move(state, delta) {
     const step = galleryLoopStep(state.position, delta, state.max, state.stride);
-    const active = document.activeElement;
-    let movedFocus = false;
+    // Rotate a small array, never live image nodes. Moving decoded images in
+    // the DOM during an iOS drag can force layout and rasterize them again.
     for (let index = 0; index < Math.abs(step.rotate); index++) {
-      const item = step.rotate > 0 ? state.track.firstElementChild : state.track.lastElementChild;
-      movedFocus ||= item.contains(active);
-      if (step.rotate > 0) state.track.append(item);
-      else state.track.prepend(item);
+      if (step.rotate > 0) state.items.push(state.items.shift());
+      else state.items.unshift(state.items.pop());
     }
+    if (step.rotate) positionItems(state);
     state.position = step.position;
     // Never write native scrollTop during a touch gesture. iOS momentum and
     // rubber-banding otherwise compete with the loop's offset compensation.
     state.track.style.transform = 'translate3d(0,' + -state.position + 'px,0)';
-    if (movedFocus) active.focus({ preventScroll: true });
+  }
+  function positionItems(state) {
+    state.items.forEach((item, index) => {
+      item.style.transform = 'translate3d(0,' + (index - state.origins.get(item)) * state.stride + 'px,0)';
+    });
   }
   function tick(now) {
     frame = 0;
     if (!canPlay()) { lastTick = 0; return; }
     const seconds = lastTick ? Math.min((now - lastTick) / 1000, .05) : 0;
     lastTick = now;
-    for (const state of states) if (state.max > 1 && !state.pointerDown) {
+    for (const state of states) if (state.max > 1) {
+      if (state.pendingDrag) {
+        move(state, state.pendingDrag);
+        state.pendingDrag = 0;
+      }
+      if (state.pointerDown) continue;
       if (state.velocity) {
         const glide = galleryGlide(state.velocity, seconds);
         state.velocity = glide.velocity;
@@ -61,6 +69,7 @@ export function mountPosterGallery(gallery, { signal, reduced, isLocked }) {
   }
   function finishPointer(event) {
     for (const state of states) if (state.pointerId === event.pointerId) {
+      if (state.pendingDrag) { move(state, state.pendingDrag); state.pendingDrag = 0; }
       if (event.type !== 'pointerup' || state.pointerType === 'mouse' || !state.suppressClick ||
         event.timeStamp - state.lastTime > 80) state.velocity = 0;
       state.pointerDown = false;
@@ -75,6 +84,7 @@ export function mountPosterGallery(gallery, { signal, reduced, isLocked }) {
     column.addEventListener('pointerdown', event => {
       if (event.button !== 0 || !event.isPrimary || state.pointerDown || reduced.matches || state.max < 1) return;
       state.velocity = 0;
+      state.pendingDrag = 0;
       state.pointerDown = true;
       state.focused = false;
       state.pointerId = event.pointerId;
@@ -87,20 +97,26 @@ export function mountPosterGallery(gallery, { signal, reduced, isLocked }) {
     column.addEventListener('pointermove', event => {
       if (!state.pointerDown || event.pointerId !== state.pointerId) return;
       if (!state.suppressClick && Math.abs(event.clientY - state.startY) < 6) return;
-      state.suppressClick = true;
-      column.setPointerCapture(event.pointerId);
-      column.classList.add('is-dragging');
+      if (!state.suppressClick) {
+        state.suppressClick = true;
+        column.setPointerCapture(event.pointerId);
+        column.classList.add('is-dragging');
+      }
       event.preventDefault();
       const delta = state.lastY - event.clientY;
       const elapsed = Math.max(1, event.timeStamp - state.lastTime);
       state.velocity = state.pointerType === 'mouse' ? 0 :
         state.velocity * .35 + Math.max(-900, Math.min(900, delta * 1000 / elapsed)) * .65;
-      move(state, delta);
+      state.pendingDrag += delta;
       state.lastY = event.clientY;
       state.lastTime = event.timeStamp;
-      pause(state);
+      sync();
     }, { passive: false, signal });
-    column.addEventListener('lostpointercapture', finishPointer, { signal });
+    column.addEventListener('lostpointercapture', event => {
+      // Touch starts with implicit capture on the poster button. Transferring
+      // it to the column emits a bubbling loss from that button, not a cancel.
+      if (event.target === column && !column.hasPointerCapture(event.pointerId)) finishPointer(event);
+    }, { signal });
     column.addEventListener('wheel', event => {
       if (reduced.matches || state.max < 1 || event.ctrlKey || !event.deltaY) return;
       event.preventDefault();
@@ -142,7 +158,7 @@ export function mountPosterGallery(gallery, { signal, reduced, isLocked }) {
         pause(state);
         const item = event.target.closest('.tk-gallery-item');
         if (item && !reduced.matches) {
-          const top = item.offsetTop - state.position;
+          const top = item.getBoundingClientRect().top - column.getBoundingClientRect().top;
           if (top < 0) move(state, top);
           else if (top + item.offsetHeight > column.clientHeight) move(state, top + item.offsetHeight - column.clientHeight);
           column.scrollTop = 0;
@@ -172,12 +188,17 @@ export function mountPosterGallery(gallery, { signal, reduced, isLocked }) {
       column.tabIndex = reduced.matches ? -1 : 0;
       track.className = 'tk-gallery-track'; track.setAttribute('role', 'presentation');
       column.append(track);
-      const state = { column, track, index, max: 0, stride: 0, position: 0, velocity: 0, manual: false, focused: false, pointerDown: false, resumeTimer: 0 };
+      const state = { column, track, index, items: [], origins: new Map(), pendingDrag: 0, max: 0, stride: 0, position: 0, velocity: 0, manual: false, focused: false, pointerDown: false, resumeTimer: 0 };
       bindColumn(state);
       return state;
     });
-    originals.forEach((item, index) => states[index % states.length].track.append(item));
+    originals.forEach((item, index) => {
+      item.style.transform = '';
+      states[index % states.length].track.append(item);
+    });
     states.forEach(state => {
+      state.items = [...state.track.children];
+      state.origins = new Map(state.items.map((item, index) => [item, index]));
       if (!state.track.children.length) { state.column.tabIndex = -1; state.column.setAttribute('aria-hidden', 'true'); }
     });
     gallery.replaceChildren(...states.map(state => state.column));
@@ -206,10 +227,11 @@ export function mountPosterGallery(gallery, { signal, reduced, isLocked }) {
           const oldStride = state.stride;
           const oldPosition = state.position;
           state.stride = state.track.firstElementChild ? state.track.firstElementChild.getBoundingClientRect().height + rowGap : layout.stride;
-          state.max = Math.max(0, state.track.scrollHeight - state.column.clientHeight);
+          state.max = Math.max(0, state.items.length * state.stride - rowGap - state.column.getBoundingClientRect().height);
           state.motion = galleryMotion(state.stride, state.index);
           state.column.classList.toggle('is-still', state.max < 1);
-          if (!oldStride && state.max > 1) state.track.prepend(state.track.lastElementChild);
+          if (!oldStride && state.max > 1) state.items.unshift(state.items.pop());
+          positionItems(state);
           state.position = state.max > 1 ? Math.min(state.max, oldStride ? oldPosition / oldStride * state.stride : state.stride) : 0;
           state.velocity = 0;
           move(state, 0);

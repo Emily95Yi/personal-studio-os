@@ -30,9 +30,9 @@ export function galleryMotion(stride, column) {
 // rate does not change the travel distance; a fast flick cannot accelerate it.
 export function galleryGlide(velocity, seconds) {
   const speed = Math.max(-900, Math.min(900, velocity));
-  const decay = Math.exp(-Math.max(0, seconds) / .12);
+  const decay = Math.exp(-Math.max(0, seconds) / .22);
   const next = speed * decay;
-  return { delta: speed * .12 * (1 - decay), velocity: Math.abs(next) < 8 ? 0 : next };
+  return { delta: speed * .22 * (1 - decay), velocity: Math.abs(next) < 8 ? 0 : next };
 }
 
 // Recycle only fully hidden original items. Reordering and compensating the

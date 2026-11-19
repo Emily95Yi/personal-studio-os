@@ -311,7 +311,7 @@ test('touch glide only slows down, stays bounded after a fast flick and is consi
   };
   for (const initial of [-5000, -300, 300, 5000]) {
     const at60 = distance(initial, 60), at120 = distance(initial, 120);
-    assert.ok(Math.abs(at60) < 108); // Even an extreme flick glides less than one small poster.
+    assert.ok(Math.abs(at60) < 198); // A fast flick still has a bounded, decelerating glide.
     assert.ok(Math.abs(at60 - at120) < .2);
   }
 });
