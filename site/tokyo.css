@@ -109,12 +109,11 @@
 .tk-archive { max-width: 1240px; margin-inline: auto; }
 [data-tk-auto-archive] .tk-gallery-heading { justify-content: flex-start; gap: 20px; margin-bottom: 28px; }
 .tk-gallery { --tk-gallery-gap: clamp(6px, .933333vw, 14px); --tk-gallery-row-gap: var(--tk-gallery-gap); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); gap: var(--tk-gallery-gap); align-items: start; width: var(--tk-gallery-width, 100%); height: var(--tk-gallery-height, calc(100svh - 160px)); margin-inline: auto; }
-.tk-gallery-column { min-width: 0; min-height: 0; height: 100%; overflow-x: hidden; overflow-y: auto; overflow-anchor: none; scrollbar-width: none; scroll-behavior: auto; touch-action: pan-y; cursor: grab; -webkit-overflow-scrolling: touch; }
-.tk-gallery-column::-webkit-scrollbar { display: none; }
-.tk-gallery-column.is-manual { overscroll-behavior-y: contain; }
+.tk-gallery-column { min-width: 0; min-height: 0; height: 100%; overflow: hidden; overflow-anchor: none; touch-action: pan-x pinch-zoom; cursor: grab; }
+.tk-gallery-column.is-still { touch-action: auto; cursor: auto; }
 .tk-gallery-column:focus-visible { outline: 2px solid #8271e2; outline-offset: 4px; }
 .tk-gallery-column.is-dragging, .tk-gallery-column.is-dragging .tk-poster { cursor: grabbing; }
-.tk-gallery-track { position: relative; display: flex; flex-direction: column; gap: var(--tk-gallery-row-gap); overflow-anchor: none; }
+.tk-gallery-track { position: relative; display: flex; flex-direction: column; gap: var(--tk-gallery-row-gap); overflow-anchor: none; will-change: transform; }
 .tk-gallery-item { position: relative; min-width: 0; }
 .tk-gallery-item:focus-within { z-index: 3; }
 .tk-gallery .tk-poster { aspect-ratio: 3 / 4; overflow: clip; border-radius: 4px; transform-origin: center; user-select: none; }
@@ -349,7 +348,7 @@
   .tk-shell *, .tk-shell *::before, .tk-shell *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .tk-is-focused .tk-scene { transform: none; }
   .tk-gallery { width: 100%; height: auto; grid-template-rows: auto; }
-  .tk-gallery-column { height: auto; overflow: visible; }
+  .tk-gallery-column { height: auto; overflow: visible; touch-action: auto; }
   .tk-gallery-track { transform: none !important; will-change: auto; }
   .tk-tool-slot { position: relative; top: auto; margin-bottom: 28px; }
   .tk-tool-card { transform: none; }

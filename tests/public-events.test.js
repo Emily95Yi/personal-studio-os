@@ -9,7 +9,7 @@ import { tokyoView } from '../site/tokyo-view.js';
 import { demoPosters, exhibitionEvents } from '../site/tokyo-demo.js';
 import { publicRepository } from '../site/repository.js';
 import { readRoute } from '../site/pages.js';
-import { archivePosters, galleryLayout, galleryLoopStep, galleryMotion, stackDepth } from '../site/tokyo-gallery.js';
+import { archivePosters, galleryGlide, galleryLayout, galleryLoopStep, galleryMotion, stackDepth } from '../site/tokyo-gallery.js';
 import { tokyoExperiences } from '../site/tokyo-experiences.js';
 import { SaxesParser } from 'saxes';
 
@@ -294,6 +294,40 @@ test('loop recycling compensates offsets without a reversal or visible jump', ()
     if (delta > 0) assert.ok(result.rotate >= 0);
     else assert.ok(result.rotate <= 0);
   }
+});
+
+test('touch glide only slows down, stays bounded after a fast flick and is consistent across frame rates', () => {
+  const distance = (initial, hz) => {
+    let velocity = initial, travel = 0;
+    for (let frame = 0; velocity && frame < hz * 2; frame++) {
+      const next = galleryGlide(velocity, 1 / hz);
+      assert.ok(Math.abs(next.velocity) <= Math.min(900, Math.abs(velocity)));
+      assert.equal(Math.sign(next.delta), Math.sign(initial));
+      travel += next.delta;
+      velocity = next.velocity;
+    }
+    assert.equal(velocity, 0);
+    return travel;
+  };
+  for (const initial of [-5000, -300, 300, 5000]) {
+    const at60 = distance(initial, 60), at120 = distance(initial, 120);
+    assert.ok(Math.abs(at60) < 108); // Even an extreme flick glides less than one small poster.
+    assert.ok(Math.abs(at60 - at120) < .2);
+  }
+});
+
+test('repeated bidirectional drags retain visual coordinates through fractional loop boundaries', () => {
+  const stride = 171.125, max = stride * 3;
+  let position = stride;
+  for (const delta of [...Array(180).fill(18.35), ...Array(180).fill(-21.75)]) {
+    const step = galleryLoopStep(position, delta, max, stride);
+    assert.ok(step.position >= 0 && step.position <= max);
+    assert.ok(Math.abs(step.position + step.rotate * stride - position - delta) < 1e-8);
+    position = step.position;
+  }
+  // Too few posters to hide a whole item: stay finite rather than rotating a visible poster.
+  assert.deepEqual(galleryLoopStep(25, 100, 50, 170), { position: 50, rotate: 0 });
+  assert.deepEqual(galleryLoopStep(25, -100, 50, 170), { position: 0, rotate: 0 });
 });
 
 test('the first three tool cards use supplied images and retain title-associated icons', () => {
