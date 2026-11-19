@@ -1,6 +1,8 @@
 import { collections, imageDataHeader } from '../site/studio-data.js';
+import { applyStudioDelta } from '../site/studio-delta.js';
 
 const layout = 'json-rows-v1';
+const layeredLayout = 'studio-layers-v1';
 const collectionStart = key => ',"' + key + '":[';
 const encodedAsset = Symbol('encoded asset data');
 const catalogKey = key => key + '.catalog.json';
@@ -29,8 +31,37 @@ function putStudioCatalog(storage, key, state) {
   });
 }
 
-export function deleteStudioSnapshot(storage, key) {
-  return Promise.all([storage.delete(key), storage.delete(catalogKey(key))]);
+async function snapshotReferences(storage, key) {
+  if (!key) return [];
+  const references = [key, catalogKey(key)];
+  if ((await storage.head(key))?.customMetadata?.layout === layeredLayout) {
+    const manifest = await (await storage.get(key)).json();
+    references.push(manifest.baseKey, catalogKey(manifest.baseKey), ...manifest.deltaKeys);
+  }
+  return references;
+}
+
+export async function deleteStudioSnapshot(storage, key, retainedKeys = []) {
+  const retained = new Set((await Promise.all(retainedKeys.filter(Boolean).map(key => snapshotReferences(storage, key)))).flat());
+  const references = await snapshotReferences(storage, key);
+  return Promise.all(references.filter(key => !retained.has(key)).map(key => storage.delete(key)));
+}
+
+// Metadata edits append a small immutable delta. Existing image bytes stay in
+// their original snapshot instead of being parsed and rewritten on each save.
+export async function putStudioDelta(storage, key, currentKey, delta, state, saveId) {
+  let manifest = { baseKey: currentKey, deltaKeys: [] };
+  if ((await storage.head(currentKey))?.customMetadata?.layout === layeredLayout) {
+    manifest = await (await storage.get(currentKey)).json();
+  }
+  const deltaKey = key + '.delta.json';
+  await storage.put(deltaKey, JSON.stringify(delta), { httpMetadata: { contentType: 'application/json' } });
+  await Promise.all([
+    storage.put(key, JSON.stringify({ baseKey: manifest.baseKey, deltaKeys: [...manifest.deltaKeys, deltaKey] }), {
+      httpMetadata: { contentType: 'application/json' }, customMetadata: { layout: layeredLayout, ...(saveId && { saveId }) },
+    }),
+    putStudioCatalog(storage, key, state),
+  ]);
 }
 
 // Keep standard JSON on disk and over HTTP. Separate records with newlines
@@ -156,7 +187,20 @@ function snapshotAsset(parts, comma, metadataOnly) {
   return metadataOnly ? { ...asset, data: asset.data.slice(0, 32) } : asset;
 }
 
-export async function readStudioSnapshot(object, { metadataOnly = false } = {}) {
+export async function readStudioSnapshot(object, { metadataOnly = false, storage } = {}) {
+  if (object.customMetadata?.layout === layeredLayout) {
+    const manifest = await object.json();
+    const base = await storage.get(manifest.baseKey);
+    if (!base) throw new Error('Missing Studio base snapshot');
+    let state = await readStudioSnapshot(base, { metadataOnly, storage });
+    for (const key of manifest.deltaKeys) {
+      const object = await storage.get(key);
+      if (!object) throw new Error('Missing Studio delta');
+      const { format, ...next } = applyStudioDelta(state, await object.json());
+      state = { ...next, revision: state.revision };
+    }
+    return metadataOnly ? studioCatalog(state) : state;
+  }
   if (object.customMetadata?.layout !== layout) {
     const state = await object.json();
     return metadataOnly ? studioCatalog(state) : state;

@@ -23,7 +23,7 @@ export async function readStudio(env, owner, requestedRevision, { metadataOnly =
     if (!snapshot) {
       const object = row?.object_key ? await storage.get(row.object_key) : null;
       if (row?.object_key && !object) continue;
-      snapshot = object ? await readStudioSnapshot(object, { metadataOnly }) : null;
+      snapshot = object ? await readStudioSnapshot(object, { metadataOnly, storage }) : null;
     }
     const state = { ...(snapshot ?? emptyStudio()) };
     ensureCaptureTopic(state);

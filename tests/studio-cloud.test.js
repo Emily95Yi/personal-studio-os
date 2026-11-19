@@ -241,7 +241,54 @@ test('Studio deltas preserve and update Capture records stored outside the snaps
   const stored = db.prepare('SELECT document, version FROM capture_items').get();
   assert.equal(JSON.parse(stored.document).body, 'Edited on desktop');
   assert.equal(stored.version, 1);
-  assert.ok([...objects.values()].every(snapshot => !JSON.parse(snapshot).content.length));
+  assert.ok([...objects.values()].every(snapshot => {
+    const stored = JSON.parse(snapshot);
+    return !(stored.content?.length || stored.changes?.content?.upsert?.length);
+  }));
+});
+
+test('metadata delta saves never read or rewrite existing image bytes and retain every layer through cleanup', async t => {
+  const { call, lock, save, db, objects, env, jobs } = studioApi(t);
+  const token = crypto.randomUUID();
+  const initial = emptyStudio();
+  const png = Buffer.alloc(2 * 1024 * 1024);
+  Buffer.from('89504e470d0a1a0a', 'hex').copy(png);
+  const bytes = png.toString('base64');
+  const image = addAsset(initial, { name: 'original.png', mime: 'image/png', data: bytes });
+  const event = saveEvent(initial, { title: '已有海报', status: 'planned', coverAssetId: image });
+  await lock(token);
+  assert.equal((await save(token, 0, studioExport(initial))).status, 200);
+  const baseKey = db.prepare('SELECT object_key FROM studio_cloud').get().object_key;
+  const get = env.STUDIO_CONTENT.get;
+  env.STUDIO_CONTENT.get = async key => {
+    assert.notEqual(key, baseKey, 'a metadata save must not read the original multi-megabyte snapshot');
+    return get(key);
+  };
+  let previous = initial;
+  for (const [index, status] of ['completed', 'recruiting', 'completed'].entries()) {
+    const next = structuredClone(previous);
+    saveEvent(next, { id: event.id, title: event.title, status });
+    assert.equal((await save(token, index + 1, studioDelta(previous, next))).status, 200);
+    previous = next;
+    await Promise.all(jobs);
+  }
+  env.STUDIO_CONTENT.get = get;
+  assert.ok(objects.has(baseKey));
+  const layered = await (await call()).json();
+  assert.equal(layered.events[0].status, 'completed');
+  assert.equal(layered.assets[0].data, bytes);
+  assert.ok([...objects.entries()].filter(([key]) => key !== baseKey).every(([, value]) => value.length < 10_000));
+  // A normal full save compacts the layers. The next save can safely collect
+  // the former base, while its replacement still retains the original image.
+  assert.equal((await save(token, 4, studioExport(previous))).status, 200);
+  const next = structuredClone(previous);
+  saveEvent(next, { id: event.id, title: event.title, status: 'recruiting' });
+  assert.equal((await save(token, 5, studioDelta(previous, next))).status, 200);
+  await Promise.all(jobs);
+  assert.equal(objects.has(baseKey), false);
+  const reloaded = await (await call()).json();
+  assert.equal(reloaded.events[0].status, 'recruiting');
+  assert.equal(reloaded.assets[0].data, bytes);
 });
 
 test('Inbox classification uses the small catalog and preserves Reflections, sources and original attachments', async t => {

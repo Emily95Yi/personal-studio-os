@@ -1057,7 +1057,7 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .event-inline-form h2, .event-preview-section h2 { font-size: 18px; }
 .event-inline-form .section-heading { margin: 0; }
 .event-inline-form label { display: grid; gap: 4px; min-width: 0; color: var(--muted); font-size: 13px; }
-.event-inline-form :is(input:not([type=checkbox], [type=file]), select, textarea) {
+.event-inline-form :is(input:not([type=checkbox], [type=radio], [type=file]), select, textarea) {
   min-width: 0; width: 100%; max-width: 100%; padding: 8px 10px; min-height: 40px; border: 1px solid var(--line);
   background: var(--paper); border-radius: 7px; font: inherit; font-size: 14px; color: var(--ink);
 }
@@ -1075,6 +1075,10 @@ button:focus-visible, progress:focus-visible { outline: 2px solid var(--ring); o
 .event-checks { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 14px; }
 .event-checks legend { color: var(--muted); font-size: 13px; }
 .event-inline-form .work-check { display: inline-flex; align-items: center; min-height: 34px; overflow-wrap: anywhere; }
+.event-inline-form .work-check :is(input[type=checkbox], input[type=radio]) {
+  flex: 0 0 15px; width: 15px; height: 15px; min-height: 0; margin: 0 3px 0 0; padding: 0;
+  accent-color: var(--accent);
+}
 .event-inline-form .event-file-control { display: inline-flex; align-items: center; align-self: end; gap: 6px; width: fit-content; min-height: 38px; color: var(--accent); cursor: pointer; }
 .event-file-control input { max-width: min(175px, 100%); font: inherit; }
 .event-save-status { color: var(--muted); font-size: 13px; }

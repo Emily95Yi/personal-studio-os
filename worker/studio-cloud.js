@@ -4,8 +4,8 @@ import { emptyStudio } from '../site/studio-data.js';
 import { clearBoardTrash } from '../site/self-board-data.js';
 import { cleanupUploads } from './capture-files.js';
 import { previewMigration, studioExport, validatePinnedResources } from '../site/studio-migration.js';
-import { applyStudioDelta, deltaFormat } from '../site/studio-delta.js';
-import { deleteStudioSnapshot, ensureStudioCatalog, putStudioSnapshot, streamStudioSnapshot } from './studio-snapshot.js';
+import { applyStudioDelta, deltaFormat, studioDelta } from '../site/studio-delta.js';
+import { deleteStudioSnapshot, ensureStudioCatalog, putStudioDelta, putStudioSnapshot, streamStudioSnapshot } from './studio-snapshot.js';
 
 const leaseDuration = 120_000;
 const validToken = token => typeof token === 'string' && /^[0-9a-f-]{36}$/.test(token);
@@ -72,7 +72,7 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
   const clearTrash = url.searchParams.get('clear-trash') === '1';
   let transfer = clearTrash ? undefined : await body(request, 24 * 1024 * 1024);
   const delta = transfer?.format === deltaFormat;
-  const current = clearTrash || delta || row.revision > 0 ? await readStudio(env, owner) : null;
+  const current = clearTrash || delta || row.revision > 0 ? await readStudio(env, owner, undefined, { metadataOnly: delta }) : null;
   if (current && current.row?.revision !== row.revision) return saveConflict(storage, current.row, revision, saveId, json);
   let checked;
   try {
@@ -122,7 +122,9 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
       "target = NULL, native_collection = NULL, document = '{}', source_url = '', normalized_url = '', " +
       "metadata = '{}', attachment_id = NULL WHERE " + selected, new Date().toISOString(), ...args));
   }
-  await putStudioSnapshot(storage, key, checked, saveId);
+  if (delta && row.object_key) {
+    await putStudioDelta(storage, key, row.object_key, studioDelta(current.snapshot, checked), checked, saveId);
+  } else await putStudioSnapshot(storage, key, checked, saveId);
   // The new R2 snapshot and updated D1 documents become visible at the same revision.
   const publish = sql(db, 'UPDATE studio_cloud SET revision = revision + 1, previous_key = object_key, object_key = ? ' +
     'WHERE owner = ? AND revision = ? AND lease_token = ? AND lease_until > ? RETURNING revision',
@@ -133,16 +135,19 @@ export async function studioCloudApi(request, env, ctx, owner, url, { body, json
   } catch (error) {
     // A failed or ambiguous commit must never remove a live snapshot.
     ctx.waitUntil(readCloud(db, owner).then(current => {
-      if (current?.object_key !== key && current?.previous_key !== key) return deleteStudioSnapshot(storage, key);
+      if (current?.object_key !== key && current?.previous_key !== key) {
+        return deleteStudioSnapshot(storage, key, [current?.object_key, current?.previous_key]);
+      }
     }).catch(() => {}));
     throw error;
   }
   if (!result.results[0]) {
-    ctx.waitUntil(deleteStudioSnapshot(storage, key).catch(() => {}));
+    ctx.waitUntil(readCloud(db, owner).then(current =>
+      deleteStudioSnapshot(storage, key, [current?.object_key, current?.previous_key])).catch(() => {}));
     const latest = saveId ? await readCloud(db, owner) : null;
     return saveConflict(storage, latest, revision, saveId, json);
   }
-  if (row.previous_key) ctx.waitUntil(deleteStudioSnapshot(storage, row.previous_key).catch(() => {}));
+  if (row.previous_key) ctx.waitUntil(deleteStudioSnapshot(storage, row.previous_key, [key, row.object_key]).catch(() => {}));
   if (purged.length) ctx.waitUntil(cleanupUploads(env).catch(() => {}));
   return json(result.results[0]);
 }
