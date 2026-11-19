@@ -42,5 +42,14 @@ test('Workshop gallery, groups and search use date order while explicit manual m
     assert.ok(search.indexOf('SORT_LATE') < search.indexOf('SORT_EARLY'));
     const manual = workshopGallery({params:new URLSearchParams('order=manual')});
     assert.ok(manual.indexOf('SORT_EARLY') < manual.indexOf('SORT_LATE'));
+    // Legacy records can share a timestamp or have none. A saved manual order
+    // must not replace the original insertion-order tie-break in normal mode.
+    state.events.forEach((event, index) => { event.date = ''; event.createdAt = ''; event.workshopOrder = 2 - index; event.workshopGroupOrder = 2 - index; });
+    studioStore.receiveCloud(state, state.revision);
+    for (const params of [new URLSearchParams(), new URLSearchParams('view=grouped')]) {
+      const html = workshopGallery({params});
+      assert.ok(html.indexOf('SORT_UNDATED') < html.indexOf('SORT_LATE'));
+      assert.ok(html.indexOf('SORT_LATE') < html.indexOf('SORT_EARLY'));
+    }
   } finally { studioStore.receiveCloud(before, before.revision); }
 });

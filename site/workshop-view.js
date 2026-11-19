@@ -170,7 +170,7 @@ function workshopEntries() {
 }
 
 function eventCards(events, kind, projectId = '', { sort = false, projects = [], query = '' } = {}) {
-  const matches = (sort ? events : chronologicalEvents(events)).filter(event => [event.title, event.theme, ...tagsFor(studioStore.state, event)]
+  const matches = (sort ? events : chronologicalEvents(events, studioStore.state.events)).filter(event => [event.title, event.theme, ...tagsFor(studioStore.state, event)]
     .join(' ').toLocaleLowerCase().includes(query));
   const grid = '<div class="gallery-grid poster-grid" data-event-group="' + esc(projectId) + '">';
   return grid + matches.map((event, i) => {
