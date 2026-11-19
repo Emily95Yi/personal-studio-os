@@ -682,6 +682,12 @@ window.addEventListener('hashchange', async () => {
 async function pollStudioContent({ manual = false } = {}) {
   if (document.visibilityState !== 'visible' || app.querySelector('dialog[open]')) return;
   const route = readRoute(location.hash);
+  if (route.type === 'public' && studioSync.mode === 'local') {
+    const before = studioStore.state.revision;
+    await studioStore.load({ refresh: true }).catch(() => {});
+    if (studioStore.state.revision !== before) render();
+    return;
+  }
   if (renderedDay !== dateKey() && (route.type === 'calendar' || route.collectionId === 'auto' || isBoardOverview(route))) render();
   const changed = await refreshStudioSync({ manual });
   if (readRoute(location.hash).type === 'capture') { void refreshInbox?.(); return; }

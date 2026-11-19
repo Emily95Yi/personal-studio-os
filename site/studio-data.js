@@ -314,7 +314,8 @@ export function createStudioStore(open = database) {
       receivedCloud = true;
       state = { ...normalizeStudio(snapshot), revision };
     },
-    load() {
+    load({ refresh = false } = {}) {
+      if (refresh && !receivedCloud) pending = undefined;
       pending ??= (async () => {
         db ??= await open();
         const snapshot = await new Promise((resolve, reject) => {

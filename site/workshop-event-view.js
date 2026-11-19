@@ -9,7 +9,7 @@ import { usageFields as eventUsageLabels, usageStatuses, usageTextLimit } from '
 
 export const areaLabels = { overview: 'Overview', flow: 'Flow', resources: 'Resources', review: 'Records & Review' };
 export const initialSections = { overview: 'overview', flow: 'flow', resources: 'artifact', review: 'review' };
-export const eventStatuses = { draft: '草稿', planned: '计划中', completed: '已完成', cancelled: '已取消' };
+export const eventStatuses = { draft: '草稿', planned: '计划中', recruiting: '募集中', completed: '已结束', cancelled: '已取消' };
 export const eventStatus = event => Object.hasOwn(eventStatuses, event.status) ? eventStatuses[event.status] : event.status || '';
 
 export const option = (value, label, selected = false) =>
@@ -70,7 +70,11 @@ export function metadataFields(state, event) {
     select('status', '状态', [['', '未设置'], ...Object.entries(statuses)], event.status || '') + '</div>' +
     '<div class="event-field-pair">' + Object.entries(eventFields).map(([key, label]) =>
       field(key, label, event[key], key === 'date' && (!event.date || /^\d{4}-\d{2}-\d{2}$/.test(event.date)) ? 'type="date"' : '')).join('') +
-    '</div><details><summary>海报与活动形式</summary><div class="event-field-pair">' +
+    '</div><fieldset class="event-checks"><legend>一期一会公开海报</legend><p class="work-meta">仅展示本场海报；不公开主持稿、流程或记录。保存后同步到公开页。</p>' +
+    [['', '不展示'], ['recruiting', '募集中'], ['ended', '已结束']].map(([value, label]) =>
+      '<label class="work-check"><input type="radio" name="tokyoPosterStatus" value="' + value + '"' +
+      ((event.tokyoPosterStatus || '') === value ? ' checked' : '') + '>' + label + '</label>').join('') +
+    '</fieldset><details><summary>海报与活动形式</summary><div class="event-field-pair">' +
     field('posterUrl', '海报链接', event.posterUrl, 'placeholder="https://"') +
     fileControl('cover', '上传海报', 'accept="' + imageTypes.join(',') + '"') + '</div>' +
     (event.coverAssetId || event.coverUrl ? check('clearCover', '移除原封面', false) : '') +
@@ -291,7 +295,7 @@ export function eventDetail({ event, params }) {
       '</div></div>' + (content[area] || '') + documents + history + '</section>';
   }).join('');
   return '<article class="event-workspace event-detail" data-event-detail="' + esc(event.id) + '">' + header +
-    '<div data-event-copy-slot></div><form class="event-inline-form event-editor" data-event-editor>' +
+    '<div data-event-copy-slot></div><form class="event-inline-form event-editor" data-event-editor hidden>' +
     '<div class="section-heading"><h2>编辑器</h2><span data-event-edit-label></span></div>' +
     select('area', '目标区域', Object.entries(areaLabels), Object.hasOwn(areaLabels, requested) ? requested : 'overview') +
     '<div data-event-fields></div><div class="event-form-actions"><button type="submit" class="action-button">' +

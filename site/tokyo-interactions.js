@@ -99,7 +99,7 @@ export function mountTokyo(app) {
   }
   async function openPoster(button) {
     if (dialog.open || closing) return;
-    const event = exhibitionEvents(publicRepository.activities()).find(row => row.id === button.dataset.tkPoster);
+    const event = exhibitionEvents(publicRepository.activities(), { showDemo: false }).find(row => row.id === button.dataset.tkPoster);
     if (!event) return;
     trigger = button;
     sourceImage = button.querySelector('img');

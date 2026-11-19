@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { eventPoster, isPublicEvent, publicEvents } from '../site/public-event-data.js';
-import { emptyStudio, studioStore } from '../site/studio-data.js';
+import { emptyStudio, studioStore, saveEvent } from '../site/studio-data.js';
+import { saveMetadata } from '../site/workshop-event-actions.js';
+import { eventDetail } from '../site/workshop-event-view.js';
+import { studioExport } from '../site/studio-migration.js';
 import { tokyoView } from '../site/tokyo-view.js';
 import { demoPosters, exhibitionEvents } from '../site/tokyo-demo.js';
 import { publicRepository } from '../site/repository.js';
@@ -10,6 +13,41 @@ import { SaxesParser } from 'saxes';
 
 const now = new Date('2026-11-18T16:00:00Z'); // Nov 19 in Tokyo
 const event = (id, extra = {}) => ({ id, title: id, date: '2026-12-01', visibility: 'public', status: 'planned', ...extra });
+
+test('Workshop metadata publishes a poster to its selected section, persists, and can withdraw it', () => {
+  const state = emptyStudio();
+  const original = saveEvent(state, { title: '测试海报', description: '私有说明', body: '主持稿' });
+  const form = new FormData();
+  form.set('title', original.title); form.set('posterUrl', 'https://example.com/poster.png');
+  form.set('status', 'draft'); form.set('tokyoPosterStatus', 'recruiting');
+  const open = saveMetadata(state, original, form);
+  assert.equal(open.status, 'recruiting');
+  const [publicPoster] = publicEvents(state);
+  assert.equal(publicPoster.recruiting, true);
+  assert.equal(publicPoster.posterOnly, true);
+  assert.equal(publicPoster.description, '');
+  assert.equal(studioExport(state).events[0].tokyoPosterStatus, 'recruiting');
+  form.set('tokyoPosterStatus', 'ended');
+  form.set('status', open.status);
+  const ended = saveMetadata(state, open, form);
+  assert.equal(publicEvents(state)[0].ended, true);
+  assert.equal(publicEvents(state)[0].recruiting, false);
+  form.set('tokyoPosterStatus', '');
+  form.set('status', ended.status);
+  saveMetadata(state, ended, form);
+  assert.deepEqual(publicEvents(state), []);
+});
+
+test('linked posters require an uploaded image or poster URL; Event editor starts hidden', () => {
+  const state = emptyStudio();
+  const row = saveEvent(state, { title: '无海报', status: 'completed', tokyoPosterStatus: 'ended' });
+  assert.deepEqual(publicEvents(state), []);
+  const before = studioStore.state;
+  try {
+    studioStore.receiveCloud(state, 0);
+    assert.match(eventDetail({ event: row, params: new URLSearchParams() }), /data-event-editor hidden/);
+  } finally { studioStore.receiveCloud(before, before.revision); }
+});
 
 test('public projection excludes drafts, private previews, withdrawn and other brands', () => {
   for (const row of [event('draft', { status: 'draft' }), event('private', { visibility: 'private' }),
@@ -61,7 +99,7 @@ test('empty homepage has labelled placeholders and no fabricated event, open sta
     const html = tokyoView({ showDemo: false });
     assert.match(html, /一期一会inTokyo/);
     assert.match(html, /相遇・链接・流动・回声・探索・多元/);
-    assert.match(html, /POSTER PLACEHOLDER/);
+    assert.match(html, /暂无公开海报/);
     assert.doesNotMatch(html, /data-tk-poster=/);
     assert.doesNotMatch(html, /正在募集中/);
     assert.doesNotMatch(html, /查看活动 \/ 报名/);
@@ -87,7 +125,7 @@ test('demo posters are isolated presentation data and real public events take pr
   try {
     studioStore.receiveCloud(emptyStudio(), 0);
     const snapshot = structuredClone(studioStore.state);
-    const html = tokyoView();
+    const html = tokyoView({ showDemo: true });
     assert.equal((html.match(/data-tk-poster=/g) ?? []).length, 8);
     assert.match(html, /DEMO GALLERY/);
     assert.doesNotMatch(html, /正在募集中|查看活动 \/ 报名/);

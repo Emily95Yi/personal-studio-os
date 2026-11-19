@@ -38,6 +38,7 @@ function hero() {
 }
 
 export function tokyoEventInfo(event, { focus = false } = {}) {
+  if (event.posterOnly) return '<h2 class="tk-poster-title"' + (focus ? ' id="tk-focus-title"' : '') + '>' + esc(event.title) + '</h2>';
   return '<div class="tk-event-info' + (focus ? ' tk-focus-info' : ' tk-reveal') + '">' +
     '<p class="tk-eyebrow tk-event-state' + (event.recruiting ? ' is-open' : '') + '"><span></span>' +
     (event.demo ? 'DEMO / 演示海报' : event.recruiting ? '正在募集中 · JOIN US' : event.cancelled ? '活动已取消' : '一期一会 · ENCOUNTER') + '</p>' +
@@ -60,23 +61,19 @@ function poster(event, featured = false) {
 }
 
 function exhibition(events) {
-  const [featured, ...remaining] = events;
-  return '<section class="tk-exhibition" id="tk-events" aria-label="活动海报"><div class="tk-section-caption tk-reveal">' +
-    '<span>相遇，在这里发生。</span><span>' + (featured?.demo ? 'DEMO GALLERY / 演示海报' : 'ENCOUNTERS, IN TOKYO') + '</span></div>' +
-    (featured ? '<div class="tk-featured"><div class="tk-featured-art tk-reveal">' + poster(featured, true) +
-      '<span class="tk-art-caption">01 / ' + String(events.length).padStart(2, '0') + '</span></div>' + tokyoEventInfo(featured) + '</div>' :
-      '<div class="tk-featured tk-empty-featured"><div class="tk-placeholder-art tk-reveal" role="img" aria-label="活动海报占位，暂无已公开活动">' +
-      '<span class="tk-placeholder-label">POSTER PLACEHOLDER / 海报占位</span><div class="tk-placeholder-orbit" aria-hidden="true"></div>' +
-      '<strong>下一次<br><span>相 遇</span></strong><span class="tk-placeholder-foot">一期一会 inTokyo <span>TO BE CONTINUED ↗</span></span></div>' +
-      '<div class="tk-event-info tk-reveal"><h2>下一次相遇，<br>正在酝酿。</h2>' +
-      '<p class="tk-event-description">还没有已公开的活动。<br>等下一张海报，带来新的相遇。</p><p class="tk-empty-note">活动公开后，将自动出现在这里。</p></div></div>') +
-    '<div class="tk-gallery-heading tk-reveal"><h2>相遇的切片<span>THE POSTER ARCHIVE</span></h2><span class="tk-gallery-count">' +
-      String(events.length).padStart(2, '0') + (featured?.demo ? ' DEMO POSTERS' : ' ENCOUNTERS') + '</span></div>' +
-    (remaining.length ? '<div class="tk-mosaic" aria-label="更多公开活动海报">' + remaining.map((event, i) =>
-      '<div class="tk-mosaic-item tk-reveal tk-mosaic-' + i % 7 + '">' + poster(event) + '</div>').join('') + '</div>' :
-      '<div class="tk-empty-archive tk-reveal"><span class="tk-archive-star" aria-hidden="true">' + mark + '</span><p>' +
-      (featured ? '下一张海报，下一段故事。' : '画廊留白，等待相遇。') + '</p><span>' +
-      (featured ? '更多公开海报将在这里继续。' : '暂无已公开的活动海报') + '</span></div>') + '</section>';
+  const [featured] = events;
+  const group = (rows, label) => rows.length ? '<div class="tk-gallery-heading tk-reveal"><h2>' + label + '</h2></div>' +
+    '<div class="tk-mosaic" aria-label="' + label + '海报">' + rows.map((event, i) =>
+      '<div class="tk-mosaic-item tk-reveal tk-mosaic-' + i % 7 + '">' + poster(event) + '</div>').join('') + '</div>' : '';
+  const remaining = events.slice(1);
+  return '<section class="tk-exhibition" id="tk-events" aria-label="活动海报">' +
+    (featured ? '<div class="tk-section-caption tk-reveal"><span>' + (featured.recruiting ? '募集中' : featured.ended ? '已结束' : '活动海报') +
+      '</span><span>' + (featured.demo ? 'DEMO GALLERY / 演示海报' : '') + '</span></div>' +
+      '<div class="tk-featured' + (featured.posterOnly ? ' tk-poster-only' : '') + '"><div class="tk-featured-art tk-reveal">' +
+      poster(featured, true) + '</div>' + (featured.posterOnly ? '' : tokyoEventInfo(featured)) + '</div>' +
+      group(remaining.filter(e => e.recruiting), '募集中') + group(remaining.filter(e => !e.recruiting && (e.ended || e.demo)), '已结束') +
+      group(remaining.filter(e => !e.recruiting && !e.ended && !e.demo), '活动海报') :
+      '<div class="tk-empty-archive"><p>暂无公开海报</p><span>Workshop 中上传海报并选择「募集中」或「已结束」后，将自动显示在这里。</span></div>') + '</section>';
 }
 
 function footer() {
@@ -96,7 +93,7 @@ function dialogs() {
     xiaohongshu + '<h2 id="tk-contact-title">在小红书，再相遇。</h2><p>活动账号链接将在这里补充。</p></dialog>';
 }
 
-export function tokyoView({ pageId = 'home', page, showDemo = true } = {}) {
+export function tokyoView({ pageId = 'home', page, showDemo = false } = {}) {
   const events = exhibitionEvents(publicRepository.activities(), { showDemo });
   const exhibitionPage = ['home', 'activities'].includes(pageId);
   return '<div class="tk-shell' + (pageId !== 'home' ? ' tk-inner-page' : '') + '" data-tk-root>' +

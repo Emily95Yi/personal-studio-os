@@ -9,6 +9,7 @@ const text = value => typeof value === 'string' ? value.trim() : '';
 export function isPublicEvent(event, brandId = 'yiqiyihui') {
   if (!event || event.deletedAt || event.archivedAt || unpublishedStates.has(event.status) || event.status === 'archived') return false;
   if (event.brandId && ![brandId, 'tokyo'].includes(event.brandId)) return false;
+  if (Object.hasOwn(event, 'tokyoPosterStatus')) return ['recruiting', 'ended'].includes(event.tokyoPosterStatus) && event.status !== 'cancelled';
   if (event.visibility && event.visibility !== 'public') return false;
   const publication = event.publication ?? event.workshopPublication;
   if (publication?.status && unpublishedStates.has(publication.status)) return false;
@@ -31,14 +32,15 @@ export function publicEvents(state, { brandId = 'yiqiyihui', now = new Date() } 
     const cancelled = event.status === 'cancelled';
     const closedAt = Date.parse(event.registrationClosesAt ?? '');
     const ended = /^\d{4}-\d{2}-\d{2}$/.test(event.date) && event.date < today;
-    const recruiting = !cancelled && !ended && !(Number.isFinite(closedAt) && closedAt <= now.getTime()) &&
+    const posterOnly = ['recruiting', 'ended'].includes(event.tokyoPosterStatus);
+    const recruiting = posterOnly ? event.tokyoPosterStatus === 'recruiting' : !cancelled && !ended && !(Number.isFinite(closedAt) && closedAt <= now.getTime()) &&
       recruitingStates.has(event.recruitmentStatus ?? event.status);
     return {
-      id: event.id, title: text(event.title) || '未命名活动', date: text(event.date), time: text(event.time),
-      location: text(event.location), description: text(event.publicDescription ?? event.description ?? event.theme),
-      poster: eventPoster(event, state.assets), recruiting, cancelled,
-      registrationUrl: cancelled ? '' : safeUrl(event.registrationUrl ?? event.signupUrl),
+      id: event.id, title: text(event.title) || '未命名活动', date: text(event.date), time: posterOnly ? '' : text(event.time),
+      location: posterOnly ? '' : text(event.location), description: posterOnly ? '' : text(event.publicDescription ?? event.description ?? event.theme),
+      poster: eventPoster(event, state.assets), recruiting, cancelled, posterOnly, ended: event.tokyoPosterStatus === 'ended' || event.status === 'completed',
+      registrationUrl: cancelled || posterOnly ? '' : safeUrl(event.registrationUrl ?? event.signupUrl),
     };
-  }).sort((a, b) => Number(b.recruiting) - Number(a.recruiting) ||
+  }).filter(event => !event.posterOnly || event.poster).sort((a, b) => Number(b.recruiting) - Number(a.recruiting) ||
     (b.date || '').localeCompare(a.date || '') || String(a.id).localeCompare(String(b.id)));
 }
