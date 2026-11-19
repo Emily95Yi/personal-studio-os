@@ -18,13 +18,13 @@
 
 ## 数据与当前占位
 
-活动继续来自 `startStudioSync()` / `refreshStudioSync()` 使用的现有云端 Studio snapshot；静态本地预览继续使用 IndexedDB。新联动优先使用明确勾选的 `tokyoPosterStatus: recruiting / ended` 作为仅海报的公开授权；兼容原有 `visibility: public`，或明确的 `publication.status: published` / `workshopPublication.status: published`。显式私有、unlisted、草稿、撤回、删除、归档及其他品牌均排除。现有 `workshopPublication.preview` 只是私有预览，绝不据此公开活动。
+活动继续来自 `startStudioSync()` / `refreshStudioSync()` 使用的现有云端 Studio snapshot；静态本地预览继续使用 IndexedDB。新联动使用 Event 的募集中／已结束状态与海报作为仅海报的公开条件，`tokyoPosterHidden` 可明确关闭；兼容原有 `visibility: public`，或明确的 `publication.status: published` / `workshopPublication.status: published`。显式私有、unlisted、草稿、撤回、删除、归档及其他品牌均排除。现有 `workshopPublication.preview` 只是私有预览，绝不据此公开活动。
 
 旧发布投影字段仅限活动 ID、标题、日期／时间、地点、公开简介（`publicDescription`，其次 `description` / `theme`）、海报和真实报名 URL。不会读取 Project 文档、主持稿、参与者、现场记录等私有信息。海报复用 `coverAssetId` 指向的已有图片，或 `posterUrl` / `coverUrl`。
 
 明确的 `open` / `recruiting` / `registration_open` 优先，其他活动按日期倒序。活动日期已过、报名截止时间已过或活动取消时，不显示“正在募集中”；`planned` 不自动等同于募集中。日期按东京时区判断。主推海报作为展览第一张，其余海报继续拼贴，第一张不重复。
 
-Workshop Event 的「编辑 Event 基础信息」内提供「一期一会公开海报」单选：不展示／募集中／已结束。上传海报并保存后，`tokyoPosterStatus` 随既有 Studio snapshot 一起保存，不新增数据库或存储。募集中及已结束分别展示，未上传图片、未勾选、草稿、删除或归档的内容不进入公开海报区。取消勾选（不展示）立即撤回此海报。公开海报授权仅作用于海报，不公开活动简介、主持稿、流程、资源与记录；活动标题保留用于无障碍标签和聚焦标题，其余文字之后确定。人工勾选的海报状态优先，不按旧日期自动改组。
+Workshop Event 的「状态」是公开海报分区的唯一依据：有海报且状态为「募集中」或「已结束」时自动进入对应区域，不再要求勾选第二套公开状态。兼容旧记录中缺少或为空的 `tokyoPosterStatus`，也不会让旧公开选项覆盖正在保存的 Event 状态。「隐藏此海报（不在公开页展示）」是独立退出开关（`tokyoPosterHidden: true`）。没有海报、草稿、删除和归档内容仍不展示。新逻辑直接读取既有数据，不迁移或批量改写生产记录。公开投影仍仅展示海报，活动标题只用于无障碍标签和聚焦标题，主持稿、流程、资源、记录及说明不随状态公开。
 
 默认关闭 Demo 回退；无已勾选的海报时显示真实空状态。`showDemo: true` 仍可在独立验收中使用演示素材。Event 默认阅读模式隐藏编辑器；点击基础信息编辑、内容编辑或添加动作才显示输入框，保存或取消后收起，未提交草稿保留现有保护。
 
@@ -44,7 +44,7 @@ Shader 只在 Hero 可见且文档前台时运行；小屏 DPR 上限 1，大屏
 
 ## 验收
 
-运行 `npm test`（74 项通过）。本轮浏览器检查覆盖 375、390、430、600、768、1280、1440、1920px；使用八张横／竖 Demo 海报检查不重复的主推、拼贴、详情、FLIP 中间帧、关闭／Escape、下滑退出、焦点和滚动位置恢复。另检查纯文字悬浮导航、手记／互动路由、小红书占位及既有 Worker CSP 下的 SVG 加载和聚焦。前一轮已覆盖 WebGL 禁用、减少动态效果、鼠标扰动、离屏暂停、长简介独立滚动、图片失效和私有入口。
+运行 `npm test`（76 项通过）。本轮浏览器检查覆盖 375、390、430、600、768、1280、1440、1920px；使用八张横／竖 Demo 海报检查不重复的主推、拼贴、详情、FLIP 中间帧、关闭／Escape、下滑退出、焦点和滚动位置恢复。另检查纯文字悬浮导航、手记／互动路由、小红书占位及既有 Worker CSP 下的 SVG 加载和聚焦。前一轮已覆盖 WebGL 禁用、减少动态效果、鼠标扰动、离屏暂停、长简介独立滚动、图片失效和私有入口。
 
 没有执行生产部署，也没有写入生产活动。
 

@@ -12,14 +12,14 @@ import { readRoute } from '../site/pages.js';
 import { SaxesParser } from 'saxes';
 
 const now = new Date('2026-11-18T16:00:00Z'); // Nov 19 in Tokyo
-const event = (id, extra = {}) => ({ id, title: id, date: '2026-12-01', visibility: 'public', status: 'planned', ...extra });
+const event = (id, extra = {}) => ({ id, title: id, date: '2026-12-01', visibility: 'public', status: 'planned', posterUrl: 'https://example.com/poster.png', ...extra });
 
 test('Workshop metadata publishes a poster to its selected section, persists, and can withdraw it', () => {
   const state = emptyStudio();
   const original = saveEvent(state, { title: '测试海报', description: '私有说明', body: '主持稿' });
   const form = new FormData();
   form.set('title', original.title); form.set('posterUrl', 'https://example.com/poster.png');
-  form.set('status', 'draft'); form.set('tokyoPosterStatus', 'recruiting');
+  form.set('status', 'recruiting');
   const open = saveMetadata(state, original, form);
   assert.equal(open.status, 'recruiting');
   const [publicPoster] = publicEvents(state);
@@ -27,12 +27,11 @@ test('Workshop metadata publishes a poster to its selected section, persists, an
   assert.equal(publicPoster.posterOnly, true);
   assert.equal(publicPoster.description, '');
   assert.equal(studioExport(state).events[0].tokyoPosterStatus, 'recruiting');
-  form.set('tokyoPosterStatus', 'ended');
-  form.set('status', open.status);
+  form.set('status', 'completed');
   const ended = saveMetadata(state, open, form);
   assert.equal(publicEvents(state)[0].ended, true);
   assert.equal(publicEvents(state)[0].recruiting, false);
-  form.set('tokyoPosterStatus', '');
+  form.set('hideTokyoPoster', '1');
   form.set('status', ended.status);
   saveMetadata(state, ended, form);
   assert.deepEqual(publicEvents(state), []);
@@ -47,6 +46,30 @@ test('linked posters require an uploaded image or poster URL; Event editor start
     studioStore.receiveCloud(state, 0);
     assert.match(eventDetail({ event: row, params: new URLSearchParams() }), /data-event-editor hidden/);
   } finally { studioStore.receiveCloud(before, before.revision); }
+});
+
+test('completed Workshop events with posters appear without a second publication selection, including old empty flags', () => {
+  const state = emptyStudio();
+  state.events = [
+    { id: 'old', title: '旧活动', status: 'completed', posterUrl: 'https://example.com/old.png', tokyoPosterStatus: '' },
+    { id: 'new', title: '新活动', status: 'completed', posterUrl: 'https://example.com/new.png' },
+    { id: 'hidden', title: '隐藏', status: 'completed', posterUrl: 'https://example.com/hidden.png', tokyoPosterHidden: true },
+  ];
+  const rows = publicEvents(state);
+  assert.deepEqual(rows.map(row => row.id), ['new', 'old']);
+  assert.equal(rows.every(row => row.ended && row.posterOnly && !row.recruiting && !row.description), true);
+});
+
+test('saving the Event status cannot be overridden by a stale publication radio value', () => {
+  const state = emptyStudio();
+  const row = saveEvent(state, { title: '状态切换', status: 'recruiting', tokyoPosterStatus: 'recruiting', posterUrl: 'https://example.com/poster.png' });
+  const form = new FormData();
+  form.set('title', row.title); form.set('status', 'completed');
+  form.set('posterUrl', row.posterUrl); form.set('tokyoPosterStatus', 'recruiting');
+  const saved = saveMetadata(state, row, form);
+  assert.equal(saved.status, 'completed');
+  assert.equal(publicEvents(state)[0].ended, true);
+  assert.equal(publicEvents(state)[0].recruiting, false);
 });
 
 test('public projection excludes drafts, private previews, withdrawn and other brands', () => {
@@ -65,7 +88,7 @@ test('public projection excludes drafts, private previews, withdrawn and other b
 test('only actually open recruitment sorts first; dates use Tokyo and expired states do not recruit', () => {
   const rows = publicEvents({ events: [
     event('planned', { date: '2027-01-01' }), event('open', { status: 'recruiting' }),
-    event('expired', { status: 'recruiting', date: '2026-11-18' }),
+    event('expired', { recruitmentStatus: 'open', date: '2026-11-18' }),
     event('closed', { recruitmentStatus: 'open', registrationClosesAt: '2026-11-18T15:00:00Z' }),
     event('cancelled', { status: 'cancelled', recruitmentStatus: 'open', registrationUrl: 'https://example.com' }),
     event('today', { date: '2026-11-19', recruitmentStatus: 'open' }),

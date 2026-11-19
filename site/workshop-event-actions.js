@@ -1,4 +1,5 @@
 import { safeUrl } from './html.js';
+import { publicPosterState } from './public-event-data.js';
 import { readRoute } from './pages.js';
 import { beginStudioEdit, refreshStudioSync, studioSync } from './studio-cloud.js';
 import { addAsset, contentTitle, currentVersion, eventSections, objectFor, relationCandidates, saveEvent, studioStore, studioTags } from './studio-data.js';
@@ -61,17 +62,16 @@ function readEventUsage(data) {
 
 export function saveMetadata(state, event, data, cover) {
   const requestedStatus = value(data, 'status');
-  const tokyoPosterStatus = requestedStatus === 'cancelled' || (requestedStatus === 'draft' && event.status !== 'draft')
-    ? '' : value(data, 'tokyoPosterStatus');
-  if (!['', 'recruiting', 'ended'].includes(tokyoPosterStatus)) throw new Error('请选择公开海报状态。');
+  const tokyoPosterHidden = data.has('hideTokyoPoster');
+  const tokyoPosterStatus = publicPosterState({ status: requestedStatus, tokyoPosterHidden });
   const posterUrl = value(data, 'posterUrl');
   if (posterUrl && !safeUrl(posterUrl)) throw new Error('海报链接须使用 HTTPS 或站内路径。');
   const fields = Object.fromEntries(Object.keys(eventFields).map(key => [key, value(data, key)]));
   const title = value(data, 'title');
   const publicationChanged = title !== event.title || fields.date !== (event.date || '') || fields.theme !== (event.theme || '');
   return saveEvent(state, { ...fields, id: event.id, title, posterUrl, tagIds: tags(state, data),
-    projectId: value(data, 'projectId'), tokyoPosterStatus,
-    status: tokyoPosterStatus === 'recruiting' ? 'recruiting' : tokyoPosterStatus === 'ended' ? 'completed' : value(data, 'status'), formats: data.getAll('format'),
+    projectId: value(data, 'projectId'), tokyoPosterStatus, tokyoPosterHidden,
+    status: requestedStatus, formats: data.getAll('format'),
     coverAssetId: cover ? addAsset(state, cover) : data.has('clearCover') ? '' : event.coverAssetId,
     ...(data.has('clearCover') && { coverUrl: '' }),
     ...(publicationChanged && { workshopPublication: undefined }),

@@ -4,12 +4,23 @@ const recruitingStates = new Set(['open', 'recruiting', 'registration_open']);
 const unpublishedStates = new Set(['draft', 'private', 'unpublished', 'withdrawn']);
 const text = value => typeof value === 'string' ? value.trim() : '';
 
+// Event lifecycle is authoritative. The old, duplicated publication radio is
+// no longer required; an explicit hide flag remains an opt-out for a poster.
+export function publicPosterState(event) {
+  if (event.tokyoPosterHidden === true) return '';
+  if (['completed', 'ended', 'finished', '已结束', '已完成'].includes(event.status)) return 'ended';
+  if (['recruiting', 'open', 'registration_open', '募集中', '正在募集中'].includes(event.status)) return 'recruiting';
+  return '';
+}
+
 // A private publication preview is never a publication. No Project, document,
 // attendee, facilitator note or other private Workshop field crosses this boundary.
 export function isPublicEvent(event, brandId = 'yiqiyihui') {
   if (!event || event.deletedAt || event.archivedAt || unpublishedStates.has(event.status) || event.status === 'archived') return false;
   if (event.brandId && ![brandId, 'tokyo'].includes(event.brandId)) return false;
-  if (Object.hasOwn(event, 'tokyoPosterStatus')) return ['recruiting', 'ended'].includes(event.tokyoPosterStatus) && event.status !== 'cancelled';
+  if (event.tokyoPosterHidden === true) return false;
+  if (publicPosterState(event)) return Boolean(event.coverAssetId || eventPoster(event));
+  if (Object.hasOwn(event, 'tokyoPosterStatus')) return false;
   if (event.visibility && event.visibility !== 'public') return false;
   const publication = event.publication ?? event.workshopPublication;
   if (publication?.status && unpublishedStates.has(publication.status)) return false;
@@ -32,13 +43,14 @@ export function publicEvents(state, { brandId = 'yiqiyihui', now = new Date() } 
     const cancelled = event.status === 'cancelled';
     const closedAt = Date.parse(event.registrationClosesAt ?? '');
     const ended = /^\d{4}-\d{2}-\d{2}$/.test(event.date) && event.date < today;
-    const posterOnly = ['recruiting', 'ended'].includes(event.tokyoPosterStatus);
-    const recruiting = posterOnly ? event.tokyoPosterStatus === 'recruiting' : !cancelled && !ended && !(Number.isFinite(closedAt) && closedAt <= now.getTime()) &&
+    const posterState = publicPosterState(event);
+    const posterOnly = Boolean(posterState);
+    const recruiting = posterOnly ? posterState === 'recruiting' : !cancelled && !ended && !(Number.isFinite(closedAt) && closedAt <= now.getTime()) &&
       recruitingStates.has(event.recruitmentStatus ?? event.status);
     return {
       id: event.id, title: text(event.title) || '未命名活动', date: text(event.date), time: posterOnly ? '' : text(event.time),
       location: posterOnly ? '' : text(event.location), description: posterOnly ? '' : text(event.publicDescription ?? event.description ?? event.theme),
-      poster: eventPoster(event, state.assets), recruiting, cancelled, posterOnly, ended: event.tokyoPosterStatus === 'ended' || event.status === 'completed',
+      poster: eventPoster(event, state.assets), recruiting, cancelled, posterOnly, ended: posterState === 'ended',
       registrationUrl: cancelled || posterOnly ? '' : safeUrl(event.registrationUrl ?? event.signupUrl),
     };
   }).filter(event => !event.posterOnly || event.poster).sort((a, b) => Number(b.recruiting) - Number(a.recruiting) ||
