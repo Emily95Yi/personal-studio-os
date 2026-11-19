@@ -4,6 +4,7 @@ export function chronologicalEvents(events, source = events) {
   const created = event => Date.parse(event.createdAt) || 0;
   const insertion = new Map(source.map((event, index) => [event.id, index]));
   return events.map((event, index) => ({ event, index: insertion.get(event.id) ?? index })).sort((a, b) =>
+    Number(Boolean(date(a.event))) - Number(Boolean(date(b.event))) ||
     date(b.event).localeCompare(date(a.event)) || created(b.event) - created(a.event) || b.index - a.index
   ).map(row => row.event);
 }

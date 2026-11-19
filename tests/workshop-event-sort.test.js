@@ -5,7 +5,7 @@ import { emptyStudio, studioStore } from '../site/studio-data.js';
 import { workshopGallery } from '../site/workshop-view.js';
 import { activitiesView } from '../site/workshop-library-view.js';
 
-test('default Event order uses descending activity dates then newest additions, without changing saved order', () => {
+test('default Event order puts newest undated additions first, then descending activity dates, without changing saved order', () => {
   const rows = [
     { id: 'old-undated', createdAt: '2026-11-01T00:00:00Z' },
     { id: 'latest-date', date: '2026-12-01', createdAt: '2026-01-01T00:00:00Z', workshopOrder: 99 },
@@ -15,7 +15,7 @@ test('default Event order uses descending activity dates then newest additions, 
   ];
   const before = structuredClone(rows);
   assert.deepEqual(chronologicalEvents(rows).map(row => row.id),
-    ['latest-date', 'earlier-date', 'same-stamp-later', 'new-undated', 'old-undated']);
+    ['same-stamp-later', 'new-undated', 'old-undated', 'latest-date', 'earlier-date']);
   assert.deepEqual(rows, before);
 });
 
@@ -36,9 +36,10 @@ test('Workshop gallery, groups and search use date order while explicit manual m
     for (const params of [new URLSearchParams(), new URLSearchParams('view=grouped')]) {
       const html = workshopGallery({params});
       assert.ok(html.indexOf('SORT_LATE') < html.indexOf('SORT_EARLY'));
-      assert.ok(html.indexOf('SORT_EARLY') < html.indexOf('SORT_UNDATED'));
+      assert.ok(html.indexOf('SORT_UNDATED') < html.indexOf('SORT_LATE'));
     }
     const search = activitiesView({params:new URLSearchParams('q=SORT_')});
+    assert.ok(search.indexOf('SORT_UNDATED') < search.indexOf('SORT_LATE'));
     assert.ok(search.indexOf('SORT_LATE') < search.indexOf('SORT_EARLY'));
     const manual = workshopGallery({params:new URLSearchParams('order=manual')});
     assert.ok(manual.indexOf('SORT_EARLY') < manual.indexOf('SORT_LATE'));
