@@ -40,7 +40,6 @@ const motifs = {
 function media(card) {
   const src = safeUrl(card.image.src);
   const placeholder = '<div class="tk-tool-placeholder"' + (src ? ' hidden' : '') + '>' +
-    '<svg viewBox="0 0 300 220" fill="none" aria-hidden="true">' + motifs[card.id] + '</svg>' +
     '<span>' + esc(card.photoLabel) + '</span><small>真实工具照片待补</small></div>';
   return '<div class="tk-tool-media' + (card.image.fit === 'contain' ? ' tk-tool-media-contain' : '') + '">' +
     (src ? '<img src="' + esc(src) + '" alt="' + esc(card.image.alt) + '" width="' + card.image.width +
@@ -51,8 +50,9 @@ export function tokyoExperienceView() {
   return '<section class="tk-experiences" aria-labelledby="tk-experiences-title">' +
     '<div class="tk-experience-heading tk-reveal"><p class="tk-eyebrow">EXPERIENCES & TOOLS</p>' +
     '<h2 id="tk-experiences-title">活动体验与工具</h2></div><div class="tk-tool-stack" data-tk-stack>' +
-    tokyoExperiences.map((card, index) => '<article class="tk-tool-slot" data-tk-slot><div class="tk-tool-card tk-tool-' + card.tone + '">' +
-      '<div class="tk-tool-copy"><span class="tk-tool-number">' + String(index + 1).padStart(2, '0') + ' / 04</span>' +
+    tokyoExperiences.map(card => '<article class="tk-tool-slot" data-tk-slot><div class="tk-tool-card tk-tool-' + card.tone + '">' +
+      '<div class="tk-tool-copy"><span class="tk-tool-icon" aria-hidden="true"><svg viewBox="0 0 300 220" fill="none">' +
+      motifs[card.id] + '</svg></span>' +
       '<div><h3>' + esc(card.title) + '</h3><p class="tk-tool-names">' + esc(card.tools) + '</p>' +
       '<p class="tk-tool-description">' + esc(card.description) + '</p></div></div>' + media(card) + '</div></article>')
       .join('<div class="tk-tool-gap" aria-hidden="true"></div>') +

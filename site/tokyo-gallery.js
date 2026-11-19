@@ -12,7 +12,7 @@ export function archivePosters(events, { now = new Date() } = {}) {
 // direction; no timers, looping posters or scroll-velocity accumulation.
 export function galleryOffsets(progress, mobile = false) {
   const p = Math.max(0, Math.min(1, progress));
-  return (mobile ? [-48, 34] : [-88, 62, -42]).map(distance => distance * (p - .5));
+  return (mobile ? [-132, 96] : [-220, 156, -110]).map(distance => distance * (p - .5));
 }
 
 export function stackDepth(distance, travel) {

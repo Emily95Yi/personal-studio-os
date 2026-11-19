@@ -107,8 +107,8 @@
 .tk-mosaic .tk-poster img { max-height: none; box-shadow: none; }
 /* An open, finite gallery: stagger belongs to the column, hover to the button. */
 .tk-archive { max-width: 1240px; margin-inline: auto; }
-.tk-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(18px, 2.8vw, 42px); align-items: start; padding-block: 48px 72px; }
-.tk-gallery-column { display: flex; flex-direction: column; gap: clamp(18px, 2.8vw, 42px); min-width: 0; transform: translate3d(0, var(--tk-column-y, 0px), 0); }
+.tk-gallery { --tk-gallery-gap: clamp(6px, .933333vw, 14px); --tk-gallery-row-gap: var(--tk-gallery-gap); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--tk-gallery-gap); align-items: start; padding-block: 48px 72px; }
+.tk-gallery-column { display: flex; flex-direction: column; gap: var(--tk-gallery-row-gap); min-width: 0; transform: translate3d(0, var(--tk-column-y, 0px), 0); }
 .tk-gallery-column:nth-child(2) { padding-top: clamp(32px, 7vw, 98px); }
 .tk-gallery-column:nth-child(3) { padding-top: clamp(16px, 2.5vw, 36px); }
 .tk-gallery-item { position: relative; min-width: 0; }
@@ -130,13 +130,14 @@
 .tk-tool-slot:nth-of-type(2) { --tk-card-index: 1; }
 .tk-tool-slot:nth-of-type(3) { --tk-card-index: 2; }
 .tk-tool-slot:nth-of-type(4) { --tk-card-index: 3; }
-.tk-tool-card { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); min-height: 440px; height: min(570px, calc(100svh - 180px)); border: 1px solid #4d506b0d; border-radius: 22px; overflow: clip; background: var(--tk-tool-color); transform: translate3d(0, var(--tk-card-y, 0px), 0) scale(var(--tk-card-scale, 1)); transform-origin: center top; box-shadow: 0 -8px 32px rgb(38 44 67 / var(--tk-card-shadow, .025)); }
+.tk-tool-card { position: relative; display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); min-height: 440px; height: min(570px, calc(100svh - 180px)); border: 1px solid #4d506b0d; border-radius: 22px; overflow: clip; background: var(--tk-tool-color); transform: translate3d(0, var(--tk-card-y, 0px), 0) scale(var(--tk-card-scale, 1)); transform-origin: center top; box-shadow: 0 -8px 32px rgb(38 44 67 / var(--tk-card-shadow, .025)); }
 .tk-tool-blue { --tk-tool-color: #e0e4f3; --tk-tool-accent: #6975aa; --tk-tool-wash: #cdd5ec; }
 .tk-tool-pink { --tk-tool-color: #ede1ed; --tk-tool-accent: #996b91; --tk-tool-wash: #e2cfe2; }
 .tk-tool-sage { --tk-tool-color: #e0e8df; --tk-tool-accent: #6b8471; --tk-tool-wash: #cddbcf; }
 .tk-tool-apricot { --tk-tool-color: #f0e6da; --tk-tool-accent: #9d7d60; --tk-tool-wash: #e7d6c2; }
 .tk-tool-copy { display: flex; flex-direction: column; justify-content: space-between; padding: clamp(28px, 3.5vw, 54px); gap: 38px; min-width: 0; }
-.tk-tool-number { font-size: .875rem; font-variant-numeric: tabular-nums; letter-spacing: .1em; color: #51576f; }
+.tk-tool-icon { display: block; width: 96px; height: 70px; flex: none; color: var(--tk-tool-accent); }
+.tk-tool-icon > svg { display: block; width: 100%; height: 100%; stroke-width: 3; }
 .tk-tool-copy h3 { font-family: var(--tk-round); font-size: clamp(24px, 2.5vw, 36px); font-weight: 600; letter-spacing: -.05em; line-height: 1.4; margin: 0; }
 .tk-tool-names { font-size: .875rem; margin-top: 14px; color: #51576f; line-height: 1.7; }
 .tk-tool-description { font-size: max(16px, 1rem); color: #51576b; line-height: 1.95; margin-top: 28px; max-width: 27em; }
@@ -144,11 +145,10 @@
 .tk-tool-media > img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .tk-tool-media-contain > img { object-fit: contain; }
 .tk-tool-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 180px; padding: 24px; color: var(--tk-tool-accent); background: radial-gradient(ellipse at 35% 30%, #ffffff60, transparent 75%); }
-.tk-tool-placeholder > svg { width: min(72%, 300px); stroke-width: 1.1; margin-bottom: 26px; }
 .tk-tool-placeholder > span { font-size: .875rem; letter-spacing: .05em; text-align: center; }
 .tk-tool-placeholder > small { margin-top: 10px; font-size: .75rem; letter-spacing: .06em; color: #606779; }
 .tk-tool-placeholder[hidden], .tk-tool-media > img[hidden] { display: none; }
-.tk-empty-recruitment { min-height: clamp(260px, 42svh, 460px); display: grid; place-items: center; padding: 48px 20px; text-align: center; }
+.tk-empty-recruitment { min-height: clamp(140px, 22svh, 240px); display: grid; place-items: center; padding: 28px 20px; text-align: center; }
 .tk-empty-recruitment > p { font-family: var(--tk-round); font-size: clamp(16px, 1.6vw, 22px); font-weight: 400; line-height: 1.9; color: var(--tk-muted); }
 .tk-empty-archive { display: grid; justify-items: center; padding: 62px 20px 85px; border-top: 1px solid #444b6625; text-align: center; }
 .tk-archive-star { color: #8b87b4; margin-bottom: 22px; }
@@ -291,8 +291,7 @@
   .tk-inner-page .tk-exhibition { padding-top: 125px; }
   .tk-about { padding: 145px 7% 80px; }
   .tk-gallery-heading { margin-bottom: 16px; }
-  .tk-gallery { gap: 16px; padding-block: 30px 42px; }
-  .tk-gallery-column { gap: 16px; }
+  .tk-gallery { --tk-gallery-gap: calc(16px / 3); padding-block: 30px 42px; }
   .tk-gallery-column:nth-child(2) { padding-top: 44px; }
   .tk-gallery-column:nth-child(3) { padding-top: 20px; }
   .tk-experiences { padding: 0 6% 48px; }
@@ -305,18 +304,16 @@
   .tk-tool-card { display: flex; flex-direction: column; min-height: 0; height: auto; border-radius: 18px; }
   .tk-tool-media { order: -1; height: clamp(180px, 29svh, 280px); flex: none; margin: 10px 10px 0; border-radius: 10px; }
   .tk-tool-copy { padding: 22px 24px 28px; gap: 20px; }
-  .tk-tool-number { font-size: .75rem; }
+  .tk-tool-icon { position: absolute; top: 20px; left: 20px; z-index: 1; width: 72px; height: 53px; border-radius: 10px; background: var(--tk-tool-color); }
   .tk-tool-copy h3 { font-size: clamp(23px, 5.7vw, 30px); }
   .tk-tool-names { margin-top: 8px; }
   .tk-tool-description { margin-top: 16px; line-height: 1.8; }
   .tk-tool-placeholder { padding: 14px; min-height: 0; }
-  .tk-tool-placeholder > svg { height: 100px; width: auto; margin-bottom: 6px; }
   .tk-tool-placeholder > small { margin-top: 6px; }
   .tk-poster-info .tk-event-meta { font-size: .875rem; margin-top: 14px; }
 }
 @media (max-width: 639px) {
-  .tk-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-  .tk-gallery-column { gap: 18px; }
+  .tk-gallery { --tk-gallery-gap: calc(14px / 3); --tk-gallery-row-gap: 6px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tk-gallery .tk-poster-open { display: none; }
 }
 /* At short heights or large font settings each card remains readable in the
