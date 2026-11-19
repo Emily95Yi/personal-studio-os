@@ -105,6 +105,49 @@
 .tk-mosaic { columns: 3; column-gap: 0; }
 .tk-mosaic-item { min-width: 0; break-inside: avoid; padding: 0; margin: 0; }
 .tk-mosaic .tk-poster img { max-height: none; box-shadow: none; }
+/* An open, finite gallery: stagger belongs to the column, hover to the button. */
+.tk-archive { max-width: 1240px; margin-inline: auto; }
+.tk-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(18px, 2.8vw, 42px); align-items: start; padding-block: 48px 72px; }
+.tk-gallery-column { display: flex; flex-direction: column; gap: clamp(18px, 2.8vw, 42px); min-width: 0; transform: translate3d(0, var(--tk-column-y, 0px), 0); }
+.tk-gallery-column:nth-child(2) { padding-top: clamp(32px, 7vw, 98px); }
+.tk-gallery-column:nth-child(3) { padding-top: clamp(16px, 2.5vw, 36px); }
+.tk-gallery-item { position: relative; min-width: 0; }
+.tk-gallery-item:focus-within { z-index: 3; }
+.tk-gallery .tk-poster img { max-height: none; border-radius: 4px; box-shadow: 0 12px 28px -24px #262c4340; }
+.tk-gallery .tk-poster { transform-origin: center; }
+.tk-gallery .tk-poster-pending { min-height: 0; border-radius: 4px; }
+
+/* Sticky slots share a single containing block, so the final card releases
+   naturally into the footer. No ancestor uses overflow: auto/hidden. */
+.tk-experiences { padding: 0 7% 100px; background: var(--tk-paper); }
+.tk-experience-heading { max-width: 1240px; margin: 0 auto 64px; padding-top: 20px; }
+.tk-experience-heading .tk-eyebrow { color: var(--tk-purple); font-size: .75rem; letter-spacing: .13em; margin-bottom: 16px; }
+.tk-experience-heading h2 { font-family: var(--tk-round); font-size: clamp(27px, 3vw, 42px); font-weight: 600; letter-spacing: -.05em; line-height: 1.4; }
+.tk-tool-stack { --tk-stack-top: max(80px, calc(env(safe-area-inset-top) + 60px)); max-width: 1240px; margin: auto; }
+.tk-tool-stack::after { content: ''; display: block; height: 14svh; }
+.tk-tool-gap { height: clamp(84px, 22svh, 180px); }
+.tk-tool-slot { --tk-card-index: 0; position: sticky; top: calc(var(--tk-stack-top) + var(--tk-card-index) * 16px); }
+.tk-tool-slot:nth-of-type(2) { --tk-card-index: 1; }
+.tk-tool-slot:nth-of-type(3) { --tk-card-index: 2; }
+.tk-tool-slot:nth-of-type(4) { --tk-card-index: 3; }
+.tk-tool-card { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); min-height: 440px; height: min(570px, calc(100svh - 180px)); border: 1px solid #4d506b0d; border-radius: 22px; overflow: clip; background: var(--tk-tool-color); transform: translate3d(0, var(--tk-card-y, 0px), 0) scale(var(--tk-card-scale, 1)); transform-origin: center top; box-shadow: 0 -8px 32px rgb(38 44 67 / var(--tk-card-shadow, .025)); }
+.tk-tool-blue { --tk-tool-color: #e0e4f3; --tk-tool-accent: #6975aa; --tk-tool-wash: #cdd5ec; }
+.tk-tool-pink { --tk-tool-color: #ede1ed; --tk-tool-accent: #996b91; --tk-tool-wash: #e2cfe2; }
+.tk-tool-sage { --tk-tool-color: #e0e8df; --tk-tool-accent: #6b8471; --tk-tool-wash: #cddbcf; }
+.tk-tool-apricot { --tk-tool-color: #f0e6da; --tk-tool-accent: #9d7d60; --tk-tool-wash: #e7d6c2; }
+.tk-tool-copy { display: flex; flex-direction: column; justify-content: space-between; padding: clamp(28px, 3.5vw, 54px); gap: 38px; min-width: 0; }
+.tk-tool-number { font-size: .875rem; font-variant-numeric: tabular-nums; letter-spacing: .1em; color: #51576f; }
+.tk-tool-copy h3 { font-family: var(--tk-round); font-size: clamp(24px, 2.5vw, 36px); font-weight: 600; letter-spacing: -.05em; line-height: 1.4; margin: 0; }
+.tk-tool-names { font-size: .875rem; margin-top: 14px; color: #51576f; line-height: 1.7; }
+.tk-tool-description { font-size: max(16px, 1rem); color: #51576b; line-height: 1.95; margin-top: 28px; max-width: 27em; }
+.tk-tool-media { position: relative; min-width: 0; background: var(--tk-tool-wash); margin: 16px 16px 16px 0; border-radius: 12px; overflow: clip; }
+.tk-tool-media > img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.tk-tool-media-contain > img { object-fit: contain; }
+.tk-tool-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 180px; padding: 24px; color: var(--tk-tool-accent); background: radial-gradient(ellipse at 35% 30%, #ffffff60, transparent 75%); }
+.tk-tool-placeholder > svg { width: min(72%, 300px); stroke-width: 1.1; margin-bottom: 26px; }
+.tk-tool-placeholder > span { font-size: .875rem; letter-spacing: .05em; text-align: center; }
+.tk-tool-placeholder > small { margin-top: 10px; font-size: .75rem; letter-spacing: .06em; color: #606779; }
+.tk-tool-placeholder[hidden], .tk-tool-media > img[hidden] { display: none; }
 .tk-empty-recruitment { min-height: clamp(260px, 42svh, 460px); display: grid; place-items: center; padding: 48px 20px; text-align: center; }
 .tk-empty-recruitment > p { font-family: var(--tk-round); font-size: clamp(16px, 1.6vw, 22px); font-weight: 400; line-height: 1.9; color: var(--tk-muted); }
 .tk-empty-archive { display: grid; justify-items: center; padding: 62px 20px 85px; border-top: 1px solid #444b6625; text-align: center; }
@@ -174,6 +217,8 @@
   .tk-poster:hover { transform: perspective(1000px) rotateY(-2deg) rotateX(1deg) scale(1.025); z-index: 2; filter: brightness(1.035); }
   .tk-poster:hover .tk-poster-open { opacity: 1; transform: rotate(-35deg); }
   .tk-text-link:hover svg { transform: translateX(5px); }
+  .tk-gallery-item:hover { z-index: 3; }
+  .tk-gallery .tk-poster:hover { transform: translate3d(0, -3px, 0) scale(1.025); }
 }
 @media (min-width: 1800px) {
   .tk-exhibition { padding-inline: max(7%, calc((100vw - 1650px) / 2)); }
@@ -245,7 +290,49 @@
   .tk-focus-hint { bottom: max(9px, env(safe-area-inset-bottom)); font-size: 7px; }
   .tk-inner-page .tk-exhibition { padding-top: 125px; }
   .tk-about { padding: 145px 7% 80px; }
+  .tk-gallery-heading { margin-bottom: 16px; }
+  .tk-gallery { gap: 16px; padding-block: 30px 42px; }
+  .tk-gallery-column { gap: 16px; }
+  .tk-gallery-column:nth-child(2) { padding-top: 44px; }
+  .tk-gallery-column:nth-child(3) { padding-top: 20px; }
+  .tk-experiences { padding: 0 6% 48px; }
+  .tk-experience-heading { margin-bottom: 38px; padding-top: 4px; }
+  .tk-experience-heading .tk-eyebrow { font-size: .6875rem; margin-bottom: 12px; }
+  .tk-tool-stack { --tk-stack-top: max(70px, calc(env(safe-area-inset-top) + 50px)); }
+  .tk-tool-stack::after { height: 10svh; }
+  .tk-tool-gap { height: 18svh; }
+  .tk-tool-slot { top: calc(var(--tk-stack-top) + var(--tk-card-index) * 12px); }
+  .tk-tool-card { display: flex; flex-direction: column; min-height: 0; height: auto; border-radius: 18px; }
+  .tk-tool-media { order: -1; height: clamp(180px, 29svh, 280px); flex: none; margin: 10px 10px 0; border-radius: 10px; }
+  .tk-tool-copy { padding: 22px 24px 28px; gap: 20px; }
+  .tk-tool-number { font-size: .75rem; }
+  .tk-tool-copy h3 { font-size: clamp(23px, 5.7vw, 30px); }
+  .tk-tool-names { margin-top: 8px; }
+  .tk-tool-description { margin-top: 16px; line-height: 1.8; }
+  .tk-tool-placeholder { padding: 14px; min-height: 0; }
+  .tk-tool-placeholder > svg { height: 100px; width: auto; margin-bottom: 6px; }
+  .tk-tool-placeholder > small { margin-top: 6px; }
+  .tk-poster-info .tk-event-meta { font-size: .875rem; margin-top: 14px; }
 }
+@media (max-width: 639px) {
+  .tk-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .tk-gallery-column { gap: 18px; }
+  .tk-gallery .tk-poster-open { display: none; }
+}
+/* At short heights or large font settings each card remains readable in the
+   document flow, instead of pinning content taller than the available screen. */
+@media (max-height: 560px) {
+  .tk-tool-slot { position: relative; top: auto; margin-bottom: 28px; }
+  .tk-tool-stack { padding-bottom: 0; }
+  .tk-tool-stack::after { display: none; }
+  .tk-tool-gap { display: none; }
+  .tk-tool-card { height: auto; min-height: 0; transform: none; }
+  .tk-tool-media { min-height: 220px; }
+}
+.tk-tool-stack.is-static .tk-tool-slot { position: relative; top: auto; margin-bottom: 28px; }
+.tk-tool-stack.is-static .tk-tool-card { transform: none; height: auto; }
+.tk-tool-stack.is-static { padding-bottom: 0; }
+.tk-tool-stack.is-static::after, .tk-tool-stack.is-static .tk-tool-gap { display: none; }
 @media (max-height: 650px) and (min-width: 768px) {
   .tk-hero { min-height: 560px; }
   .tk-title-cn { font-size: min(7.2vw, 18vh); }
@@ -254,6 +341,11 @@
 @media (prefers-reduced-motion: reduce) {
   .tk-shell *, .tk-shell *::before, .tk-shell *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .tk-is-focused .tk-scene { transform: none; }
+  .tk-gallery-column { transform: none; }
+  .tk-tool-slot { position: relative; top: auto; margin-bottom: 28px; }
+  .tk-tool-card { transform: none; }
+  .tk-tool-stack { padding-bottom: 0; }
+  .tk-tool-stack::after, .tk-tool-gap { display: none; }
 }
 @keyframes tk-title-in { from { opacity: 0; transform: translateY(35px); filter: blur(10px); } to { opacity: 1; transform: none; filter: blur(0); } }
 @keyframes tk-fade-in { from { opacity: 0; } to { opacity: 1; } }
@@ -263,3 +355,4 @@
 
 .tk-featured.tk-poster-only { grid-template-columns: minmax(0, 1fr); padding-inline: 0; }
 .tk-poster-title { font-size: 18px; font-weight: 500; overflow-wrap: anywhere; }
+.tk-poster-info .tk-event-description { margin-top: 20px; font-size: max(16px, 1rem); }

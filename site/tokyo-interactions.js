@@ -3,6 +3,7 @@ import { publicRepository } from './repository.js';
 import { mountLiquid } from './tokyo-liquid.js';
 import { tokyoEventInfo } from './tokyo-view.js';
 import { exhibitionEvents } from './tokyo-demo.js';
+import { galleryOffsets, stackDepth } from './tokyo-gallery.js';
 
 export function mountTokyo(app) {
   const root = app.querySelector('[data-tk-root]');
@@ -19,8 +20,15 @@ export function mountTokyo(app) {
   const art = root.querySelector('[data-tk-focus-art]');
   const info = root.querySelector('[data-tk-focus-info]');
   const contact = root.querySelector('[data-tk-contact-dialog]');
+  const featured = root.querySelector('.tk-featured-art');
+  const gallery = root.querySelector('[data-tk-gallery]');
+  const galleryItems = [...root.querySelectorAll('.tk-gallery-item')];
+  const mobileGallery = window.matchMedia('(max-width: 639px)');
+  const slots = [...root.querySelectorAll('[data-tk-slot]')];
+  const stack = root.querySelector('[data-tk-stack]');
+  let columns = [];
   let trigger, sourceImage, flight, closing = false, disposed = false, scrollFrame = 0, motionVersion = 0;
-  let savedOverflow, savedPadding, locked = false;
+  let savedOverflow, savedPadding, savedPosition, savedTop, savedWidth, lockedY, locked = false;
   const flights = new Set();
   const images = root.querySelectorAll('.tk-poster img');
   function imageFailed(image) {
@@ -32,6 +40,32 @@ export function mountTokyo(app) {
     image.addEventListener('error', () => imageFailed(image), { signal });
     if (image.complete && !image.naturalWidth) imageFailed(image);
   });
+  root.querySelectorAll('.tk-tool-media img').forEach(image => {
+    const failed = () => {
+      image.hidden = true;
+      image.parentElement.querySelector('.tk-tool-placeholder').hidden = false;
+    };
+    image.addEventListener('error', failed, { signal });
+    if (image.complete && !image.naturalWidth) failed();
+  });
+
+  function arrangeGallery() {
+    if (!gallery) return;
+    const active = gallery.contains(document.activeElement) ? document.activeElement : null;
+    const count = mobileGallery.matches ? 2 : 3;
+    columns = Array.from({ length: count }, () => {
+      const column = document.createElement('div');
+      column.className = 'tk-gallery-column';
+      column.setAttribute('role', 'presentation');
+      return column;
+    });
+    // Date-descending, row by row. Reparent the same buttons at the breakpoint:
+    // no copies, new image requests, Event records or separate mobile gallery.
+    galleryItems.forEach((item, index) => columns[index % count].append(item));
+    gallery.replaceChildren(...columns);
+    active?.focus({ preventScroll: true });
+    scheduleScroll();
+  }
 
   const observer = new IntersectionObserver(entries => entries.forEach(entry => {
     if (entry.isIntersecting) {
@@ -44,35 +78,95 @@ export function mountTokyo(app) {
 
   function updateScroll() {
     scrollFrame = 0;
+    // Read all geometry before writing transforms. At most one RAF per frame;
+    // neither animation creates its own scroll container or prevents scrolling.
+    const viewport = window.innerHeight;
     const heroBottom = hero?.getBoundingClientRect().bottom ?? 0;
-    if (hero) hero.style.setProperty('--tk-exit', Math.max(0, Math.min(1, 1 - heroBottom / hero.offsetHeight)));
+    const heroHeight = hero?.offsetHeight;
+    const featuredTop = featured?.getBoundingClientRect().top;
+    const galleryRect = gallery?.getBoundingClientRect();
+    const slotRects = slots.map(slot => slot.getBoundingClientRect());
+    const stickyTops = slots.map(slot => parseFloat(getComputedStyle(slot).top) || 0);
+    if (hero) hero.style.setProperty('--tk-exit', Math.max(0, Math.min(1, 1 - heroBottom / heroHeight)));
     root.classList.toggle('tk-past-hero', heroBottom < 70);
     nav.classList.toggle('is-compact', window.scrollY > 60);
-    const featured = root.querySelector('.tk-featured-art');
-    if (featured && !reduced.matches) {
-      const progress = Math.max(0, Math.min(1, -featured.getBoundingClientRect().top / window.innerHeight));
-      featured.style.setProperty('--tk-retreat', progress);
+    if (featured) featured.style.setProperty('--tk-retreat', reduced.matches ? 0 : Math.max(0, Math.min(1, -featuredTop / viewport)));
+    if (galleryRect) {
+      const offsets = galleryOffsets((viewport - galleryRect.top) / (viewport + galleryRect.height), mobileGallery.matches);
+      columns.forEach((column, index) => column.style.setProperty('--tk-column-y', (reduced.matches ? 0 : offsets[index]) + 'px'));
     }
+    slots.forEach((slot, index) => {
+      const next = slotRects[index + 1];
+      const height = slotRects[index].height;
+      const depth = stackDepth(next && !reduced.matches ? stickyTops[index] + height - next.top : 0, height);
+      slot.style.setProperty('--tk-card-scale', depth.scale);
+      slot.style.setProperty('--tk-card-y', depth.y + 'px');
+      slot.style.setProperty('--tk-card-shadow', depth.shadow);
+    });
   }
-  window.addEventListener('scroll', () => {
+  function scheduleScroll() {
     if (!scrollFrame) scrollFrame = requestAnimationFrame(updateScroll);
-  }, { passive: true, signal });
-  updateScroll();
+  }
+  window.addEventListener('scroll', scheduleScroll, { passive: true, signal });
+  window.addEventListener('resize', scheduleScroll, { passive: true, signal });
+  reduced.addEventListener('change', scheduleScroll, { signal });
+  mobileGallery.addEventListener('change', arrangeGallery, { signal });
+  function updateStackFit() {
+    if (!stack) return;
+    const viewport = window.innerHeight;
+    const base = parseFloat(getComputedStyle(slots[0]).top) || 70;
+    const mobile = window.matchMedia('(max-width: 767px)').matches;
+    const tooTall = slots.some(slot => {
+      const card = slot.firstElementChild;
+      if (mobile) return card.offsetHeight + base + 36 + 20 > viewport;
+      const copy = card.querySelector('.tk-tool-copy');
+      const style = getComputedStyle(copy);
+      const content = [...copy.children].reduce((sum, child) => sum + child.offsetHeight, 0) +
+        parseFloat(style.rowGap) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      return content > Math.max(440, Math.min(570, viewport - 180));
+    });
+    stack.classList.toggle('is-static', tooTall);
+  }
+  const resizeObserver = new ResizeObserver(() => { updateStackFit(); scheduleScroll(); });
+  if (gallery) resizeObserver.observe(gallery);
+  slots.forEach(slot => resizeObserver.observe(slot));
+  window.addEventListener('resize', updateStackFit, { passive: true, signal });
+  arrangeGallery();
+  scheduleScroll();
 
   function lockScroll() {
     if (locked) return;
     locked = true;
     savedOverflow = document.body.style.overflow;
     savedPadding = document.body.style.paddingRight;
+    savedPosition = document.body.style.position;
+    savedTop = document.body.style.top;
+    savedWidth = document.body.style.width;
+    lockedY = window.scrollY;
     const gutter = window.innerWidth - document.documentElement.clientWidth;
     if (gutter) document.body.style.paddingRight = gutter + 'px';
     document.body.style.overflow = 'hidden';
+    // Fixed-body locking also prevents Safari's background rubber-banding.
+    document.body.style.position = 'fixed';
+    document.body.style.top = -lockedY + 'px';
+    document.body.style.width = '100%';
   }
   function unlockScroll() {
     if (!locked) return;
     document.body.style.overflow = savedOverflow;
     document.body.style.paddingRight = savedPadding;
+    document.body.style.position = savedPosition;
+    document.body.style.top = savedTop;
+    document.body.style.width = savedWidth;
+    window.scrollTo({ top: lockedY, behavior: 'instant' });
     locked = false;
+  }
+  function posterRect(image) {
+    const rect = image.getBoundingClientRect();
+    if (!image.naturalWidth || !image.naturalHeight) return rect;
+    const scale = Math.min(rect.width / image.naturalWidth, rect.height / image.naturalHeight);
+    const width = image.naturalWidth * scale, height = image.naturalHeight * scale;
+    return { left: rect.left + (rect.width - width) / 2, top: rect.top + (rect.height - height) / 2, width, height };
   }
   async function sharedFlight(from, to, returning = false) {
     if (!sourceImage || sourceImage.hidden || !from.width || !to.width || reduced.matches) return;
@@ -85,11 +179,11 @@ export function mountTokyo(app) {
     Object.assign(image.style, { left: to.left + 'px', top: to.top + 'px', width: to.width + 'px', height: to.height + 'px' });
     dialog.append(image);
     flight = image;
-    const transform = 'translate(' + (from.left - to.left) + 'px,' + (from.top - to.top) + 'px) scale(' +
+    const transform = 'translate3d(' + (from.left - to.left) + 'px,' + (from.top - to.top) + 'px,0) scale(' +
       from.width / to.width + ',' + from.height / to.height + ')';
     const animation = image.animate([
-      { transform: transform + ' perspective(1200px) rotateY(' + (returning ? '2' : '-3') + 'deg)' },
-      { transform: 'translate(0,0) scale(1) perspective(1200px) rotateY(0deg)' },
+      { transform },
+      { transform: 'translate3d(0,0,0) scale(1)' },
     ], { duration: returning ? 480 : 680, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'both' });
     flights.add(animation);
     await animation.finished.catch(() => {});
@@ -103,7 +197,7 @@ export function mountTokyo(app) {
     if (!event) return;
     trigger = button;
     sourceImage = button.querySelector('img');
-    const sourceRect = sourceImage?.getBoundingClientRect();
+    const sourceRect = sourceImage && posterRect(sourceImage);
     art.innerHTML = event.poster && !sourceImage?.hidden ? '<img src="' + esc(event.poster) + '" alt="' + esc(event.title) +
       ' 活动海报" referrerpolicy="no-referrer">' : '<div class="tk-focus-pending">海报待补</div>';
     art.querySelector('img')?.addEventListener('error', event => {
@@ -124,7 +218,7 @@ export function mountTokyo(app) {
       const version = ++motionVersion;
       target.style.visibility = 'hidden';
       sourceImage.style.visibility = 'hidden';
-      await sharedFlight(sourceRect, target.getBoundingClientRect());
+      await sharedFlight(sourceRect, posterRect(target));
       if (!disposed && version === motionVersion) target.style.visibility = '';
     }
   }
@@ -134,11 +228,11 @@ export function mountTokyo(app) {
     ++motionVersion;
     flights.forEach(animation => animation.cancel());
     const target = art.querySelector('img');
-    const from = target?.getBoundingClientRect();
+    const from = target && posterRect(target);
     if (target) target.style.visibility = 'hidden';
     root.classList.remove('tk-is-focused');
     dialog.classList.add('is-closing');
-    if (sourceImage && from) await sharedFlight(from, sourceImage.getBoundingClientRect(), true);
+    if (sourceImage && from) await sharedFlight(from, posterRect(sourceImage), true);
     if (disposed) return;
     dialog.close();
     if (sourceImage) sourceImage.style.visibility = '';
@@ -193,7 +287,7 @@ export function mountTokyo(app) {
     if (dialog.open && !closing) { flights.forEach(animation => animation.finish()); art.style.transform = ''; }
   }, { passive: true, signal });
   return () => {
-    disposed = true; controller.abort(); observer.disconnect(); unmountLiquid();
+    disposed = true; controller.abort(); observer.disconnect(); resizeObserver.disconnect(); unmountLiquid();
     cancelAnimationFrame(scrollFrame); flights.forEach(animation => animation.cancel()); flight?.remove();
     if (dialog.open) dialog.close();
     if (contact.open) contact.close();

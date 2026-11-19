@@ -4,6 +4,7 @@ import { publicRepository } from './repository.js';
 import { exhibitionEvents } from './tokyo-demo.js';
 import { publicPosterSync } from './public-posters.js';
 import { archivePosters } from './tokyo-gallery.js';
+import { tokyoExperienceView } from './tokyo-experiences.js';
 
 // Editable brand copy. Contact stays an explicit placeholder until a real URL exists.
 export const tokyoCopy = {
@@ -40,7 +41,12 @@ function hero() {
 }
 
 export function tokyoEventInfo(event, { focus = false } = {}) {
-  if (event.posterOnly) return '<h2 class="tk-poster-title"' + (focus ? ' id="tk-focus-title"' : '') + '>' + esc(event.title) + '</h2>';
+  // Poster-only Events never expose private Workshop descriptions. The existing
+  // projection already includes the public title/date; use only those fields.
+  if (event.posterOnly) return '<div class="tk-poster-info"><h2 class="tk-poster-title"' +
+    (focus ? ' id="tk-focus-title"' : '') + '>' + esc(event.title) + '</h2>' +
+    (event.date ? '<p class="tk-event-meta"><time datetime="' + esc(event.date) + '">' + esc(event.date) + '</time></p>' : '') +
+    (event.description ? '<p class="tk-event-description">' + esc(event.description) + '</p>' : '') + '</div>';
   return '<div class="tk-event-info' + (focus ? ' tk-focus-info' : ' tk-reveal') + '">' +
     '<p class="tk-eyebrow tk-event-state' + (event.recruiting ? ' is-open' : '') + '"><span></span>' +
     (event.demo ? 'DEMO / 演示海报' : event.recruiting ? '正在募集中 · JOIN US' : event.cancelled ? '活动已取消' : '一期一会 · ENCOUNTER') + '</p>' +
@@ -62,15 +68,18 @@ function poster(event, featured = false) {
     '<span class="tk-poster-open" aria-hidden="true">' + arrow + '</span></button>';
 }
 
-function exhibition(events) {
+function exhibition(events, { home = false } = {}) {
   const open = events.filter(event => event.recruiting);
   const [featured] = open;
-  const past = archivePosters(events.filter(event => !event.recruiting));
+  const past = home ? archivePosters(events) : events.filter(event => !event.recruiting);
   const gallery = (rows, label) => '<div class="tk-mosaic" aria-label="' + label + '海报">' + rows.map(event =>
     '<div class="tk-mosaic-item tk-reveal">' + poster(event) + '</div>').join('') + '</div>';
   const notice = publicPosterSync.status === 'loading' ? '<p role="status">正在加载活动海报…</p>' :
     publicPosterSync.status === 'error' ? '<p role="alert">' + esc(publicPosterSync.message) +
       '</p><button type="button" class="tk-text-link" data-public-posters-retry>重新加载海报</button>' : '';
+  const archiveGallery = home ? '<div class="tk-gallery" data-tk-gallery role="list" aria-label="已结束的公开活动，按日期从新到旧">' +
+    past.map((event, index) => '<div class="tk-gallery-item" role="listitem" aria-posinset="' + (index + 1) +
+      '" aria-setsize="' + past.length + '">' + poster(event) + '</div>').join('') + '</div>' : gallery(past, '往期活动');
   return '<section class="tk-exhibition" id="tk-events" aria-label="活动海报">' +
     '<section class="tk-recruitment" aria-label="募集中活动">' +
     (featured ? (notice ? '<div class="tk-poster-notice">' + notice + '</div>' : '') +
@@ -80,9 +89,10 @@ function exhibition(events) {
       (open.length > 1 ? gallery(open.slice(1), '募集中活动') : '') :
       '<div class="tk-empty-recruitment">' + (notice || '<p>暂无募集中活动，敬请期待后续活动</p>') + '</div>') + '</section>' +
     (past.length ? '<section class="tk-archive" aria-labelledby="tk-archive-title"><div class="tk-gallery-heading tk-reveal">' +
-      '<h2 id="tk-archive-title">往期活动</h2>' + (past.some(event => event.demo) ? '<span class="tk-gallery-count">DEMO GALLERY / 演示海报</span>' : '') +
-      '</div>' + gallery(past, '往期活动') + '</section>' :
-      (!notice && !events.length ? '<div class="tk-empty-archive"><p>暂无公开海报</p></div>' : '')) + '</section>';
+      '<h2 id="tk-archive-title">' + (home ? '往期回顾' : '往期活动') + '</h2>' +
+      (past.some(event => event.demo) ? '<span class="tk-gallery-count">DEMO GALLERY / 演示海报</span>' : '') +
+      '</div>' + archiveGallery + '</section>' :
+      (!notice ? '<div class="tk-empty-archive"><p>' + (!events.length ? '暂无公开海报' : '往期回顾，等待下一次相遇') + '</p></div>' : '')) + '</section>';
 }
 
 function footer() {
@@ -108,9 +118,10 @@ export function tokyoView({ pageId = 'home', page, showDemo = false } = {}) {
   return '<div class="tk-shell' + (pageId !== 'home' ? ' tk-inner-page' : '') + '" data-tk-root>' +
     tokyoNavigation(pageId) + '<div class="tk-scene">' +
     (pageId === 'home' ? hero() : '') +
-    (exhibitionPage ? exhibition(events) : '<section class="tk-about"><p class="tk-eyebrow">' + (pageId === 'stories' ? 'JOURNAL' : pageId === 'interactions' ? 'PLAY & EXPLORE' : '') + '</p><h1>' +
+    (exhibitionPage ? exhibition(events, { home: pageId === 'home' }) : '<section class="tk-about"><p class="tk-eyebrow">' + (pageId === 'stories' ? 'JOURNAL' : pageId === 'interactions' ? 'PLAY & EXPLORE' : '') + '</p><h1>' +
       (pageId === 'about' ? '一期一会。<br>每一次，只有一次。' : esc(page?.label ?? '一期一会')) + '</h1><p>' +
       esc(pageId === 'about' ? '东京线下活动与公开内容。' : page?.description ?? page?.empty ?? '') + '</p>' +
       '<span class="tk-empty-note">' + esc(pageId === 'about' ? '品牌介绍待发布。' : page?.empty ?? '') + '</span><a class="tk-text-link" href="' +
-      publicHref('yiqiyihui') + '">回到首页' + arrow + '</a></section>') + footer() + '</div>' + dialogs() + '</div>';
+      publicHref('yiqiyihui') + '">回到首页' + arrow + '</a></section>') +
+    (pageId === 'home' ? tokyoExperienceView() : '') + footer() + '</div>' + dialogs() + '</div>';
 }

@@ -9,7 +9,7 @@ import { tokyoView } from '../site/tokyo-view.js';
 import { demoPosters, exhibitionEvents } from '../site/tokyo-demo.js';
 import { publicRepository } from '../site/repository.js';
 import { readRoute } from '../site/pages.js';
-import { archivePosters, shufflePosters } from '../site/tokyo-gallery.js';
+import { archivePosters, galleryOffsets, stackDepth } from '../site/tokyo-gallery.js';
 import { SaxesParser } from 'saxes';
 
 const now = new Date('2026-11-18T16:00:00Z'); // Nov 19 in Tokyo
@@ -42,6 +42,7 @@ test('linked posters require an uploaded image or poster URL; Event editor start
   const state = emptyStudio();
   const row = saveEvent(state, { title: '无海报', status: 'completed', tokyoPosterStatus: 'ended' });
   assert.deepEqual(publicEvents(state), []);
+  assert.deepEqual(publicEvents({ events: [{ id: 'internal-missing-cover', title: 'PRIVATE', status: 'completed', coverAssetId: 'missing' }] }), []);
   const before = studioStore.state;
   try {
     studioStore.receiveCloud(state, 0);
@@ -90,16 +91,22 @@ test('cancelled posters join the archive without exposing private Event content 
   assert.equal('body' in row, false);
 });
 
-test('archive randomization preserves every poster, keeps source order untouched and stays stable during a visit', () => {
-  const rows = ['a', 'b', 'c', 'd'].map(id => ({ id }));
-  assert.deepEqual(shufflePosters(rows, () => 0).map(row => row.id), ['b', 'c', 'd', 'a']);
-  assert.deepEqual(rows.map(row => row.id), ['a', 'b', 'c', 'd']);
-  const order = archivePosters(rows).map(row => row.id);
-  assert.deepEqual(archivePosters([...rows].reverse()).map(row => row.id), order);
-  assert.equal(new Set(order).size, rows.length);
+test('archive includes only ended public events, newest first, without mutating or repeating rows', () => {
+  const rows = [
+    { id: 'older', date: '2026-09-01', ended: true },
+    { id: 'future', date: '2026-12-01' },
+    { id: 'cancelled', date: '2026-11-01', ended: true, cancelled: true },
+    { id: 'newer', date: '2026-11-18' },
+    { id: 'no-date', date: '' },
+    { id: 'open', date: '2026-11-01', recruiting: true },
+  ];
+  const before = structuredClone(rows);
+  assert.deepEqual(archivePosters(rows, { now }).map(row => row.id), ['newer', 'older']);
+  assert.deepEqual(archivePosters([...rows].reverse(), { now }).map(row => row.id), ['newer', 'older']);
+  assert.deepEqual(rows, before);
 });
 
-test('no open recruitment gets a centered notice and every ended or cancelled poster stays in the past gallery', () => {
+test('recruitment stays separate; cancelled events never masquerade as past encounters', () => {
   const before = studioStore.state;
   try {
     studioStore.receiveCloud({ ...emptyStudio(), events: [
@@ -108,10 +115,11 @@ test('no open recruitment gets a centered notice and every ended or cancelled po
     const html = tokyoView();
     assert.match(html, /tk-empty-recruitment/);
     assert.match(html, /暂无募集中活动，敬请期待后续活动/);
-    assert.match(html, /<h2 id="tk-archive-title">往期活动<\/h2>/);
+    assert.match(html, /<h2 id="tk-archive-title">往期回顾<\/h2>/);
     assert.doesNotMatch(html, /class="tk-featured|<h2[^>]*>已结束/);
     const archive = html.slice(html.indexOf('class="tk-archive"'));
-    for (const id of ['ended', 'cancelled']) assert.equal((archive.match(new RegExp('data-tk-poster="' + id + '"', 'g')) ?? []).length, 1);
+    assert.equal((archive.match(/data-tk-poster="ended"/g) ?? []).length, 1);
+    assert.doesNotMatch(archive, /data-tk-poster="cancelled"/);
     const state = studioStore.state;
     state.events.push(event('open', { status: 'recruiting' }));
     const withOpen = tokyoView();
@@ -181,8 +189,8 @@ test('empty homepage has labelled placeholders and no fabricated event, open sta
 test('featured event belongs to the same gallery and occurs once; markup escapes public copy', () => {
   const before = studioStore.state;
   try {
-    studioStore.receiveCloud({ ...emptyStudio(), events: [event('one', { title: '<script>alert(1)</script>', date: '2099-01-01' }),
-      event('two', { date: '2098-01-01' })] }, 0);
+    studioStore.receiveCloud({ ...emptyStudio(), events: [event('one', { title: '<script>alert(1)</script>', date: '2026-11-01', status: 'completed' }),
+      event('two', { date: '2026-10-01', status: 'completed' })] }, 0);
     const html = tokyoView();
     assert.equal((html.match(/data-tk-poster="one"/g) ?? []).length, 1);
     assert.equal((html.match(/data-tk-poster="two"/g) ?? []).length, 1);
@@ -212,4 +220,44 @@ test('demo posters are isolated presentation data and real public events take pr
       assert.equal(readRoute('#/public/yiqiyihui/' + page).type, 'public');
     }
   } finally { studioStore.receiveCloud(before, before.revision); }
+});
+
+test('homepage adds four editorial tools after the archive; other public pages keep their scope', () => {
+  const html = tokyoView({ showDemo: true });
+  assert.equal((html.match(/data-tk-slot/g) ?? []).length, 4);
+  assert.ok(html.indexOf('data-tk-gallery') < html.indexOf('data-tk-stack'));
+  assert.ok(html.indexOf('data-tk-stack') < html.indexOf('class="tk-footer"'));
+  assert.doesNotMatch(tokyoView({ pageId: 'activities' }), /data-tk-stack/);
+  assert.doesNotMatch(tokyoView({ pageId: 'activities', showDemo: true }), /data-tk-gallery/);
+  assert.doesNotMatch(html, /<img src=""/);
+});
+
+test('public missing-poster events retain placeholders and poster-only copy never falls back to private notes', () => {
+  const before = studioStore.state;
+  try {
+    studioStore.receiveCloud({ ...emptyStudio(), events: [
+      event('missing', { date: '2026-11-01', status: 'completed', posterUrl: '' }),
+      event('public-summary', { date: '2026-10-01', status: 'completed', publicDescription: '公开的活动简介', description: 'PRIVATE NOTES', body: 'PRIVATE SCRIPT' }),
+    ] }, 0);
+    const html = tokyoView();
+    assert.match(html, /data-tk-poster="missing"/);
+    assert.match(html, /海报待补/);
+    const summary = publicRepository.activities().find(row => row.id === 'public-summary');
+    assert.equal(summary.description, '公开的活动简介');
+    assert.equal('body' in summary, false);
+    assert.doesNotMatch(JSON.stringify(summary), /PRIVATE/);
+  } finally { studioStore.receiveCloud(before, before.revision); }
+});
+
+test('scroll motion is bounded, column-specific and deterministic when reversing', () => {
+  const start = galleryOffsets(0), end = galleryOffsets(1);
+  assert.equal(start.length, 3);
+  assert.equal(galleryOffsets(.5, true).length, 2);
+  assert.ok(end[0] < 0 && end[1] > 0 && end[2] < 0);
+  assert.equal(new Set(end).size, 3);
+  assert.deepEqual(galleryOffsets(-10), start);
+  assert.deepEqual(galleryOffsets(10), end);
+  assert.deepEqual(galleryOffsets(0), start);
+  assert.equal(stackDepth(1000, 500).scale, .955);
+  assert.equal(stackDepth(-100, 500).scale, 1);
 });
