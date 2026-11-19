@@ -1,6 +1,7 @@
 import { addDays, dateKey, parseDate, planReminderDates } from './calendar.js';
 import { isDiscover, objectFor, relatedObjects, studioStore } from './studio-data.js';
 import { publicEvents } from './public-event-data.js';
+import { publicPosterSync } from './public-posters.js';
 
 const stories = [];
 
@@ -24,7 +25,7 @@ export const studioRepository = {
 };
 
 export const publicRepository = {
-  activities() { return publicEvents(studioStore.state); },
+  activities() { return publicPosterSync.events ?? publicEvents(studioStore.state); },
   stories() { return stories; },
 };
 

@@ -18,7 +18,7 @@
 
 ## 数据与当前占位
 
-活动继续来自 `startStudioSync()` / `refreshStudioSync()` 使用的现有云端 Studio snapshot；静态本地预览继续使用 IndexedDB。新联动使用 Event 的募集中／已结束状态与海报作为仅海报的公开条件，`tokyoPosterHidden` 可明确关闭；兼容原有 `visibility: public`，或明确的 `publication.status: published` / `workshopPublication.status: published`。显式私有、unlisted、草稿、撤回、删除、归档及其他品牌均排除。现有 `workshopPublication.preview` 只是私有预览，绝不据此公开活动。
+活动仍来自现有云端 Studio snapshot，但公开页面通过经过原有 Access 鉴权的只读 `GET /api/studio/posters` 获取字段白名单投影，不再向浏览器传输整个私有 snapshot。`site/public-posters.js` 独立管理加载、错误重试和 revision 增量检查；进入私有管理页才初始化完整 Studio 同步。真实快照验收中，首次传输从 83,318,775 字节减少为 7,708,525 字节（两张原始海报），无变化时返回 204。加载中和加载失败不会再误报为「暂无公开海报」。静态本地预览在接口返回 404 时继续使用 IndexedDB。新联动使用 Event 的募集中／已结束状态与海报作为仅海报的公开条件，`tokyoPosterHidden` 可明确关闭；兼容原有 `visibility: public`，或明确的 `publication.status: published` / `workshopPublication.status: published`。草稿、撤回、删除、归档及其他品牌均排除。现有 `workshopPublication.preview` 只是私有预览，绝不据此公开活动。
 
 旧发布投影字段仅限活动 ID、标题、日期／时间、地点、公开简介（`publicDescription`，其次 `description` / `theme`）、海报和真实报名 URL。不会读取 Project 文档、主持稿、参与者、现场记录等私有信息。海报复用 `coverAssetId` 指向的已有图片，或 `posterUrl` / `coverUrl`。
 
@@ -28,7 +28,7 @@ Workshop Event 的「状态」是公开海报分区的唯一依据：有海报�
 
 默认关闭 Demo 回退；无已勾选的海报时显示真实空状态。`showDemo: true` 仍可在独立验收中使用演示素材。Event 默认阅读模式隐藏编辑器；点击基础信息编辑、内容编辑或添加动作才显示输入框，保存或取消后收起，未提交草稿保留现有保护。
 
-公开页沿用现有云端刷新；本地预览在切回标签页或定期刷新时重新读取 IndexedDB，以同步其他 Workshop 标签页的保存结果。左上角图标略缩小、副标题增大一号，主推海报不再显示序号。
+公开页切回标签页或每 30 秒通过海报投影接口检查 revision；本地预览重新读取 IndexedDB，以同步其他 Workshop 标签页的保存结果。左上角图标略缩小、副标题增大一号，主推海报不再显示序号。
 
 Worker 的既有 Access 与云端权限不变；此改造不把私有 Studio 服务变成匿名公共服务，也不改变生产部署配置。
 
@@ -46,6 +46,6 @@ Shader 只在 Hero 可见且文档前台时运行；小屏 DPR 上限 1，大屏
 
 运行 `npm test`（76 项通过）。本轮浏览器检查覆盖 375、390、430、600、768、1280、1440、1920px；使用八张横／竖 Demo 海报检查不重复的主推、拼贴、详情、FLIP 中间帧、关闭／Escape、下滑退出、焦点和滚动位置恢复。另检查纯文字悬浮导航、手记／互动路由、小红书占位及既有 Worker CSP 下的 SVG 加载和聚焦。前一轮已覆盖 WebGL 禁用、减少动态效果、鼠标扰动、离屏暂停、长简介独立滚动、图片失效和私有入口。
 
-没有执行生产部署，也没有写入生产活动。
+已按用户授权部署到既有 Worker；没有写入生产活动或更改访问控制。
 
 浏览器验收基于 Chrome、响应式视口和触摸输入模拟；未进行实体 iPhone / Safari 验收。最终首屏截图保存在 `deliverables/yiqiyihui-home/`。

@@ -127,6 +127,37 @@ test('private Studio sync migrates existing IDs and gives one device at a time p
   assert.equal(objects.size, 4); // Two retained snapshots, each with its small catalog.
 });
 
+test('poster reader returns only eligible poster fields and bytes, retains auth and supports unchanged revisions', async t => {
+  const { call, lock, save } = studioApi(t);
+  const state = emptyStudio();
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN1cAAAAASUVORK5CYII=';
+  const posterId = addAsset(state, { name: 'poster.png', mime: 'image/png', data: png });
+  const privateBytes = Buffer.from('PRIVATE_ATTACHMENT'.repeat(10_000)).toString('base64');
+  addAsset(state, { name: 'private.txt', mime: 'text/plain', data: privateBytes });
+  saveEvent(state, { title: '公开海报', status: 'completed', coverAssetId: posterId,
+    body: 'PRIVATE_FACILITATOR_NOTES', description: 'PRIVATE_DESCRIPTION' });
+  saveEvent(state, { title: 'PRIVATE_DRAFT', status: 'draft', coverAssetId: posterId });
+  const token = crypto.randomUUID();
+  await lock(token);
+  assert.equal((await save(token, 0, studioExport(state))).status, 200);
+  assert.equal((await call('/posters', { owner: '' })).status, 401);
+  const response = await call('/posters');
+  assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+  const body = await response.text();
+  const result = JSON.parse(body);
+  assert.equal(result.revision, 1);
+  assert.equal(result.events.length, 1);
+  assert.equal(result.events[0].title, '公开海报');
+  assert.equal(result.events[0].poster, 'data:image/png;base64,' + png);
+  assert.equal(result.events[0].ended, true);
+  assert.doesNotMatch(body, /PRIVATE_|assets|coverAssetId|sessions/);
+  assert.ok(!body.includes(privateBytes));
+  assert.ok(body.length < 1000);
+  assert.equal((await call('/posters?revision=1')).status, 204);
+  assert.deepEqual((await (await call('/posters', { owner: 'other-user' })).json()).events, []);
+  assert.equal((await call('/posters', { method: 'PUT', value: {} })).status, 405);
+});
+
 test('legacy Studio snapshots can grow past 64 MiB and reload after a delta', async t => {
   const { call, lock, save, db, objects } = studioApi(t);
   const token = crypto.randomUUID();

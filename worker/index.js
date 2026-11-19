@@ -7,6 +7,8 @@ import { feedView, getSource, refreshDue, refreshSource, removeSource, saveSourc
 import { getPlanner, savePlanner, validSnapshot } from './planner.js';
 import { normalizeSource, readText } from './source.js';
 import { studioCloudApi } from './studio-cloud.js';
+import { readStudio } from './capture-state.js';
+import { publicEvents } from '../site/public-event-data.js';
 
 const privateHeaders = {
   'Cache-Control': 'private, no-store',
@@ -153,6 +155,13 @@ export function createHandler(authorize = authenticate, caldav = createCalDavSer
       }
       if (path === '/api/storage' && ['GET', 'POST'].includes(request.method)) {
         return json(await storageUsage(env, request.method === 'POST'));
+      }
+      if (path === '/api/studio/posters') {
+        if (request.method !== 'GET') return json({ error: 'method' }, 405);
+        if (!env.STUDIO_CONTENT) return json({ error: 'not_found' }, 404);
+        const result = await readStudio(env, owner, url.searchParams.get('revision'));
+        return result.unchanged ? new Response(null, { status: 204, headers: privateHeaders }) :
+          json({ revision: result.row?.revision ?? 0, events: publicEvents(result.state) });
       }
       if (url.pathname === '/api/studio' || url.pathname === '/api/studio/lease') {
         return await studioCloudApi(request, env, ctx, owner, url, { body, json });

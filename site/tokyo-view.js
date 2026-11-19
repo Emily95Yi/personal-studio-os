@@ -2,6 +2,7 @@ import { escapeHtml as esc } from './html.js';
 import { publicHref } from './pages.js';
 import { publicRepository } from './repository.js';
 import { exhibitionEvents } from './tokyo-demo.js';
+import { publicPosterSync } from './public-posters.js';
 
 // Editable brand copy. Contact stays an explicit placeholder until a real URL exists.
 export const tokyoCopy = {
@@ -66,14 +67,18 @@ function exhibition(events) {
     '<div class="tk-mosaic" aria-label="' + label + '海报">' + rows.map((event, i) =>
       '<div class="tk-mosaic-item tk-reveal tk-mosaic-' + i % 7 + '">' + poster(event) + '</div>').join('') + '</div>' : '';
   const remaining = events.slice(1);
+  const notice = publicPosterSync.status === 'loading' ? '<p role="status">正在加载活动海报…</p>' :
+    publicPosterSync.status === 'error' ? '<p role="alert">' + esc(publicPosterSync.message) +
+      '</p><button type="button" class="tk-text-link" data-public-posters-retry>重新加载海报</button>' : '';
   return '<section class="tk-exhibition" id="tk-events" aria-label="活动海报">' +
+    (events.length && notice ? '<div class="tk-poster-notice">' + notice + '</div>' : '') +
     (featured ? '<div class="tk-section-caption tk-reveal"><span>' + (featured.recruiting ? '募集中' : featured.ended ? '已结束' : '活动海报') +
       '</span><span>' + (featured.demo ? 'DEMO GALLERY / 演示海报' : '') + '</span></div>' +
       '<div class="tk-featured' + (featured.posterOnly ? ' tk-poster-only' : '') + '"><div class="tk-featured-art tk-reveal">' +
       poster(featured, true) + '</div>' + (featured.posterOnly ? '' : tokyoEventInfo(featured)) + '</div>' +
       group(remaining.filter(e => e.recruiting), '募集中') + group(remaining.filter(e => !e.recruiting && (e.ended || e.demo)), '已结束') +
       group(remaining.filter(e => !e.recruiting && !e.ended && !e.demo), '活动海报') :
-      '<div class="tk-empty-archive"><p>暂无公开海报</p><span>Workshop 中上传海报并选择「募集中」或「已结束」后，将自动显示在这里。</span></div>') + '</section>';
+      '<div class="tk-empty-archive">' + (notice || '<p>暂无公开海报</p><span>Workshop 中上传海报并选择「募集中」或「已结束」后，将自动显示在这里。</span>') + '</div>') + '</section>';
 }
 
 function footer() {

@@ -29,6 +29,7 @@ import { contentTitle, isSelfBoard, studioStore } from './studio-data.js';
 import { beginStudioEdit, closeStudioSync, migrateLocalStudio, onStudioNotice, refreshStudioSync,
   startStudioSync, studioNotice, studioSync } from './studio-cloud.js';
 import { mountTokyo } from './tokyo-interactions.js';
+import { publicPosterSync, refreshPublicPosters } from './public-posters.js';
 
 const app = document.querySelector('#app');
 let mountBoardEditor;
@@ -38,6 +39,19 @@ let mountLibrary;
 let topicLease;
 let refreshInbox;
 let unmountTokyo;
+let studioStarted;
+const ensureStudioStarted = () => studioStarted ??= startStudioSync();
+
+async function loadPublicPosters() {
+  const changed = await refreshPublicPosters();
+  if (publicPosterSync.local) {
+    await ensureStudioStarted();
+    const before = studioStore.state.revision;
+    await studioStore.load({ refresh: true }).catch(() => {});
+    return changed || studioStore.state.revision !== before;
+  }
+  return changed;
+}
 
 function syncBanner() {
   return '<div data-studio-sync><p role="status" data-studio-notice' + (studioSync.message ? '' : ' hidden') + '>' +
@@ -263,6 +277,12 @@ function render({ focus = false } = {}) {
 }
 
 app.addEventListener('click', event => {
+  if (event.target.closest('[data-public-posters-retry]')) {
+    if (publicPosterSync.events === null) publicPosterSync.status = 'loading';
+    render();
+    void loadPublicPosters().then(() => { if (readRoute(location.hash).type === 'public') render(); });
+    return;
+  }
   if (event.target.closest('.skip')) {
     event.preventDefault();
     app.querySelector('main').focus();
@@ -674,6 +694,8 @@ app.addEventListener('click', async event => {
   }
 });
 window.addEventListener('hashchange', async () => {
+  if (readRoute(location.hash).type === 'public') await loadPublicPosters();
+  else await ensureStudioStarted();
   await prepareTopicEdit();
   window.scrollTo(0, 0);
   render({ focus: true });
@@ -682,10 +704,8 @@ window.addEventListener('hashchange', async () => {
 async function pollStudioContent({ manual = false } = {}) {
   if (document.visibilityState !== 'visible' || app.querySelector('dialog[open]')) return;
   const route = readRoute(location.hash);
-  if (route.type === 'public' && studioSync.mode === 'local') {
-    const before = studioStore.state.revision;
-    await studioStore.load({ refresh: true }).catch(() => {});
-    if (studioStore.state.revision !== before) render();
+  if (route.type === 'public') {
+    if (await loadPublicPosters() && readRoute(location.hash).type === 'public' && !app.querySelector('dialog[open]')) render();
     return;
   }
   if (renderedDay !== dateKey() && (route.type === 'calendar' || route.collectionId === 'auto' || isBoardOverview(route))) render();
@@ -703,8 +723,11 @@ document.addEventListener('visibilitychange', pollStudioContent);
 setInterval(pollVisibleFeed, 30_000);
 setInterval(pollStudioContent, 30_000);
 // The public Hero can appear immediately while the existing data reader loads.
-if (readRoute(location.hash).type === 'public') render();
-await startStudioSync();
+if (readRoute(location.hash).type === 'public') {
+  publicPosterSync.status = 'loading';
+  render();
+  await loadPublicPosters();
+} else await ensureStudioStarted();
 await prepareTopicEdit();
 render();
 enterPrivateSurface();
