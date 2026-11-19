@@ -8,6 +8,7 @@ import { contentTitle, currentVersion, imageTypes, objectFor, projectSections, r
 import { isWorkshopWiki } from './self-board-data.js';
 import { tagsFor } from './workshop-library.js';
 import { groupEvents, legacyProjectOrder, orderedEvents, orderedProjects, projectKey } from './workshop-event-data.js';
+import { chronologicalEvents } from './workshop-event-sort.js';
 import { creationForm, eventStatus, orderControls } from './workshop-event-view.js';
 import { linkedWorkshopPanel, workshopTabs } from './workshop-library-view.js';
 
@@ -169,7 +170,7 @@ function workshopEntries() {
 }
 
 function eventCards(events, kind, projectId = '', { sort = false, projects = [], query = '' } = {}) {
-  const matches = events.filter(event => [event.title, event.theme, ...tagsFor(studioStore.state, event)]
+  const matches = (sort ? events : chronologicalEvents(events)).filter(event => [event.title, event.theme, ...tagsFor(studioStore.state, event)]
     .join(' ').toLocaleLowerCase().includes(query));
   const grid = '<div class="gallery-grid poster-grid" data-event-group="' + esc(projectId) + '">';
   return grid + matches.map((event, i) => {

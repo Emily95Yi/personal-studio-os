@@ -18,7 +18,7 @@ const xiaohongshu = '<svg class="tk-xiaohongshu" viewBox="0 0 56 28" aria-hidden
 
 export function tokyoNavigation(pageId = 'home') {
   return '<a class="tk-brand-logo" href="' + publicHref('yiqiyihui') + '" aria-label="一期一会 inTokyo 首页">' +
-    '<img src="./tokyo-orbit-logo.svg" width="48" height="48" alt="" aria-hidden="true"></a>' +
+    '<img src="./yiqiyihui-web-logo-dark.svg" width="198" height="103" alt="" aria-hidden="true"></a>' +
     '<nav class="tk-nav" aria-label="一期一会导航" data-tk-nav>' +
     '<a aria-label="活动" href="' + publicHref('yiqiyihui', 'activities') + '"' + (pageId === 'home' ? ' data-tk-scroll="events"' : '') +
     '><span class="tk-nav-mask"><span data-label="活动">活动</span></span></a>' +

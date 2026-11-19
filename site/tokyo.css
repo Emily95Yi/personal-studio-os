@@ -19,8 +19,8 @@
 .tk-shell :is(button, a):focus-visible { outline: 2px solid #8271e2; outline-offset: 7px; }
 .tk-shell svg { stroke: currentColor; stroke-width: 1.3; }
 .tk-shell button { border-radius: 0; }
-.tk-brand-logo { position: absolute; top: max(28px, env(safe-area-inset-top)); left: max(clamp(24px, 4.5vw, 88px), env(safe-area-inset-left)); z-index: 20; display: grid; place-items: center; width: 52px; height: 52px; transition: opacity .3s; }
-.tk-brand-logo img { display: block; width: 40px; height: 40px; object-fit: contain; }
+.tk-brand-logo { position: absolute; top: max(28px, env(safe-area-inset-top)); left: max(clamp(24px, 4.5vw, 88px), env(safe-area-inset-left)); z-index: 20; display: grid; place-items: center; width: 80px; height: 48px; transition: opacity .3s; }
+.tk-brand-logo img { display: block; width: 76px; height: auto; object-fit: contain; }
 .tk-nav {
   position: fixed; top: max(28px, env(safe-area-inset-top)); right: max(clamp(24px, 4.5vw, 88px), env(safe-area-inset-right));
   display: flex; align-items: center; gap: 24px; padding: 0 14px;
@@ -237,8 +237,8 @@
 }
 @media (max-width: 767px) {
   .tk-hero { min-height: 620px; height: 100svh; }
-  .tk-brand-logo { top: max(20px, env(safe-area-inset-top)); left: max(24px, env(safe-area-inset-left)); width: 44px; height: 44px; }
-  .tk-brand-logo img { width: 36px; height: 36px; }
+  .tk-brand-logo { top: max(20px, env(safe-area-inset-top)); left: max(24px, env(safe-area-inset-left)); width: 68px; height: 44px; }
+  .tk-brand-logo img { width: 64px; height: auto; }
   .tk-nav { top: max(20px, env(safe-area-inset-top)); right: max(15px, env(safe-area-inset-right)); gap: 16px; padding: 0 8px; }
   .tk-nav :is(a, button) { font-size: 12px; padding-inline: 2px; gap: 5px; }
   .tk-nav.is-compact { gap: 16px; padding: 1px 16px; }

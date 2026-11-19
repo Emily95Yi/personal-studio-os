@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="14 10 198 103" role="img" aria-label="一期一会 in Tokyo abstract orbital logo">
+  <defs>
+    <mask id="orbit-cut" maskContentUnits="userSpaceOnUse" x="0" y="0" width="240" height="130">
+      <rect x="0" y="0" width="240" height="130" fill="white"/>
+      <path d="M 33 86 C 68 99, 149 66, 194 47" stroke="black" stroke-width="5.8" stroke-linecap="round" fill="none"/>
+    </mask>
+  </defs>
+  <g mask="url(#orbit-cut)">
+    <!-- 1. Upward motion / invitation -->
+    <path fill="#C8C8C8" d="M49 64 C52 43 79 22 115 20 C126 19 137 22 136 29 C134 35 125 35 114 32 C90 27 69 40 49 64 Z"/>
+    <!-- 2. Response / meeting -->
+    <path fill="#F0F0F0" d="M120 37 C149 29 173 43 177 63 C180 74 173 80 165 77 C158 74 162 63 157 55 C149 41 136 36 120 37 Z"/>
+    <!-- 3. Outgoing movement / continuation -->
+    <path fill="#FFFFFF" d="M62 62 C48 69 44 84 59 94 C77 106 108 104 146 88 C117 100 89 99 72 88 C61 81 65 70 74 66 C79 64 80 59 74 58 C69 57 65 60 62 62 Z"/>
+    <!-- 4. New idea / emergent mark -->
+    <path fill="#999999" d="M116 91 C123 77 138 68 153 68 C161 68 164 74 158 79 C152 83 136 84 116 91 Z"/>
+  </g>
+  <!-- small satellite points -->
+  <circle cx="144" cy="23" r="4.3" fill="#F5F5F5" />
+  <circle cx="40" cy="70" r="4.4" fill="#999999"/>
+  <circle cx="178" cy="86" r="3.8" fill="#C5C5C5"/>
+  <!-- Curtailed tips of the orbit; the center is actual transparent negative space -->
+  <path d="M34 79 C25 83 24 90 37 92" stroke="#C5C5C5" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+  <path d="M186 46 C205 43 204 55 192 63" stroke="#C5C5C5" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+</svg>

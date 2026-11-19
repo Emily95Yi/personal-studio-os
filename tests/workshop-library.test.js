@@ -108,7 +108,7 @@ test('tags, card roles and formats compose without mutating Project and Tool pro
     cardUses: card('primary'), formats: ['weaving', 'intuitive_drawing'] });
   const supporting = saveEvent(state, { title: 'Support', projectId: project.id, cardUses: card('supporting'),
     format: '编织' });
-  assert.deepEqual(searchEvents(state, { card: oh.id, formats: ['weaving'] }).map(row => row.id), [primary.id, supporting.id]);
+  assert.deepEqual(searchEvents(state, { card: oh.id, formats: ['weaving'] }).map(row => row.id), [supporting.id, primary.id]);
   assert.deepEqual(searchEvents(state, { project: project.id, card: oh.id, role: 'primary', tag: tag.title,
     formats: ['weaving', 'intuitive_drawing'] }).map(row => row.id), [primary.id]);
   assert.deepEqual(tagsFor(state, project), ['Series only']);

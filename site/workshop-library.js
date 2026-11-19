@@ -1,4 +1,5 @@
 import { externalWorkshopTool } from './workshop-external-tools.js';
+import { chronologicalEvents } from './workshop-event-sort.js';
 import { safeUrl } from './html.js';
 import { boardContent, boardRecords, initialDiscoverCategories, isWorkshopWiki, resourcesCategory, saveBoardContent } from './self-board-data.js';
 import { objectFor, relatedObjects, saveRecord, saveRelation } from './studio-data.js';
@@ -150,7 +151,7 @@ export function formatsFor(event) {
 
 export function searchEvents(state, { project = '', tag = '', card = '', role = '', formats = [], wiki = '', query = '' } = {}) {
   const term = query.trim().toLocaleLowerCase();
-  return state.events.filter(event =>
+  return chronologicalEvents(state.events).filter(event =>
     (!project || event.projectId === project) &&
     (!tag || tagsFor(state, event).includes(tag)) &&
     ((!card && !role) || (event.cardUses ?? []).some(use => (!card || use.cardSetId === card) && (!role || use.role === role))) &&
