@@ -3,7 +3,8 @@ import { publicRepository } from './repository.js';
 import { mountLiquid } from './tokyo-liquid.js';
 import { tokyoEventInfo } from './tokyo-view.js';
 import { exhibitionEvents } from './tokyo-demo.js';
-import { galleryLayout, galleryMotion, stackDepth } from './tokyo-gallery.js';
+import { stackDepth } from './tokyo-gallery.js';
+import { mountPosterGallery } from './tokyo-gallery-motion.js';
 
 export function mountTokyo(app) {
   const root = app.querySelector('[data-tk-root]');
@@ -22,14 +23,8 @@ export function mountTokyo(app) {
   const contact = root.querySelector('[data-tk-contact-dialog]');
   const featured = root.querySelector('.tk-featured-art');
   const gallery = root.querySelector('[data-tk-gallery]');
-  const galleryToggle = root.querySelector('[data-tk-gallery-toggle]');
-  const galleryItems = [...root.querySelectorAll('.tk-gallery-item')];
-  const mobileGallery = window.matchMedia('(max-width: 639px)');
   const slots = [...root.querySelectorAll('[data-tk-slot]')];
   const stack = root.querySelector('[data-tk-stack]');
-  let columns = [];
-  let galleryAnimations = [], galleryVisible = false, galleryPaused = false, galleryFocused = false;
-  let galleryLayoutFrame = 0, galleryAnimationFrame = 0, gallerySize = '';
   let trigger, sourceImage, flight, closing = false, disposed = false, scrollFrame = 0, motionVersion = 0;
   let savedOverflow, savedPadding, savedPosition, savedTop, savedWidth, lockedY, locked = false;
   const flights = new Set();
@@ -40,6 +35,7 @@ export function mountTokyo(app) {
     image.parentElement.setAttribute('data-image-error', '海报暂时无法显示');
   }
   images.forEach(image => {
+    image.draggable = false;
     image.addEventListener('error', () => imageFailed(image), { signal });
     if (image.complete && !image.naturalWidth) imageFailed(image);
   });
@@ -52,120 +48,7 @@ export function mountTokyo(app) {
     if (image.complete && !image.naturalWidth) failed();
   });
 
-  function arrangeGallery() {
-    if (!gallery) return;
-    const active = gallery.contains(document.activeElement) ? document.activeElement : null;
-    const count = mobileGallery.matches ? 2 : 3;
-    columns = Array.from({ length: count }, () => {
-      const column = document.createElement('div');
-      column.className = 'tk-gallery-column';
-      column.setAttribute('role', 'presentation');
-      const track = document.createElement('div');
-      track.className = 'tk-gallery-track';
-      track.setAttribute('role', 'presentation');
-      column.append(track);
-      return column;
-    });
-    // Date-descending, row by row. Reparent the same buttons at the breakpoint:
-    // no copies, new image requests, Event records or separate mobile gallery.
-    galleryItems.forEach((item, index) => columns[index % count].firstElementChild.append(item));
-    gallery.replaceChildren(...columns);
-    active?.focus({ preventScroll: true });
-    gallerySize = '';
-    scheduleGalleryLayout();
-  }
-
-  function syncGalleryPlayback() {
-    if (disposed) return;
-    const playing = galleryVisible && !galleryPaused && !galleryFocused && !locked &&
-      !reduced.matches && document.visibilityState === 'visible';
-    galleryAnimations.forEach(animation => playing ? animation.play() : animation.pause());
-    if (galleryToggle) {
-      galleryToggle.hidden = reduced.matches || !galleryAnimations.length;
-      galleryToggle.setAttribute('aria-pressed', String(galleryPaused));
-      galleryToggle.setAttribute('aria-label', galleryPaused ? '播放海报自动移动' : '暂停海报自动移动');
-    }
-  }
-  function scheduleGalleryLayout() {
-    if (!gallery || galleryLayoutFrame || disposed) return;
-    galleryLayoutFrame = requestAnimationFrame(() => {
-      galleryLayoutFrame = 0;
-      if (reduced.matches) {
-        galleryAnimations.forEach(animation => animation.cancel());
-        galleryAnimations = [];
-        gallerySize = '';
-        syncGalleryPlayback();
-        return;
-      }
-      const style = getComputedStyle(gallery);
-      const gap = parseFloat(style.columnGap) || 0;
-      const rowGap = parseFloat(getComputedStyle(columns[0].firstElementChild).rowGap) || 0;
-      const layout = galleryLayout(gallery.parentElement.clientWidth, window.innerHeight, mobileGallery.matches, gap, rowGap);
-      const signature = [layout.width.toFixed(2), layout.height.toFixed(2), rowGap, columns.length].join(':');
-      if (signature === gallerySize) return;
-      gallerySize = signature;
-      gallery.style.setProperty('--tk-gallery-width', layout.width + 'px');
-      gallery.style.setProperty('--tk-gallery-height', layout.height + 'px');
-      cancelAnimationFrame(galleryAnimationFrame);
-      // Animate only after the resized geometry settles; no layout reads in an
-      // animation loop. WAAPI runs the actual motion on compositor transforms.
-      galleryAnimationFrame = requestAnimationFrame(() => {
-        galleryAnimationFrame = 0;
-        const phases = galleryAnimations.map(animation => Number(animation.currentTime ?? 0) /
-          Number(animation.effect.getTiming().duration));
-        galleryAnimations.forEach(animation => animation.cancel());
-        galleryAnimations = [];
-        const travel = columns.map(column => Math.max(0, column.firstElementChild.scrollHeight - column.clientHeight));
-        columns.forEach((column, index) => {
-          if (travel[index] < 1) return;
-          const spec = galleryMotion(travel[index], layout.stride, index);
-          const animation = column.firstElementChild.animate([
-            { transform: 'translate3d(0,0,0)' },
-            { transform: 'translate3d(0,-' + spec.travel + 'px,0)' },
-          ], { duration: spec.duration, iterations: Infinity, direction: spec.direction, easing: 'linear', fill: 'both' });
-          animation.pause();
-          animation.currentTime = (phases[index] ?? 0) * spec.duration;
-          galleryAnimations.push(animation);
-        });
-        syncGalleryPlayback();
-      });
-    });
-  }
-  const galleryObserver = new IntersectionObserver(entries => {
-    galleryVisible = entries[0].isIntersecting;
-    syncGalleryPlayback();
-  }, { rootMargin: '40px 0px' });
-  if (gallery) {
-    galleryObserver.observe(gallery);
-    gallery.addEventListener('focusin', event => {
-      galleryFocused = event.target.matches(':focus-visible');
-      syncGalleryPlayback();
-      if (galleryFocused && !reduced.matches) {
-        const column = event.target.closest('.tk-gallery-column');
-        const item = event.target.closest('.tk-gallery-item');
-        const track = column?.firstElementChild;
-        const animation = galleryAnimations.find(row => row.effect.target === track);
-        if (animation && item) {
-          const rect = item.getBoundingClientRect(), frame = column.getBoundingClientRect();
-          if (rect.top < frame.top || rect.bottom > frame.bottom) {
-            const travel = track.scrollHeight - column.clientHeight;
-            const progress = Math.max(0, Math.min(1, item.offsetTop / travel));
-            const timing = animation.effect.getTiming();
-            animation.currentTime = Number(timing.duration) * (timing.direction === 'alternate-reverse' ? 1 - progress : progress);
-          }
-        }
-      }
-    }, { signal });
-    gallery.addEventListener('focusout', () => {
-      queueMicrotask(() => {
-        if (disposed) return;
-        galleryFocused = gallery.contains(document.activeElement) && document.activeElement.matches(':focus-visible');
-        syncGalleryPlayback();
-      });
-    }, { signal });
-    galleryToggle?.addEventListener('click', () => { galleryPaused = !galleryPaused; syncGalleryPlayback(); }, { signal });
-  }
-  document.addEventListener('visibilitychange', syncGalleryPlayback, { signal });
+  const posterGallery = mountPosterGallery(gallery, { signal, reduced, isLocked: () => locked });
 
   const observer = new IntersectionObserver(entries => entries.forEach(entry => {
     if (entry.isIntersecting) {
@@ -204,8 +87,7 @@ export function mountTokyo(app) {
   }
   window.addEventListener('scroll', scheduleScroll, { passive: true, signal });
   window.addEventListener('resize', scheduleScroll, { passive: true, signal });
-  reduced.addEventListener('change', () => { scheduleGalleryLayout(); scheduleScroll(); }, { signal });
-  mobileGallery.addEventListener('change', arrangeGallery, { signal });
+  reduced.addEventListener('change', scheduleScroll, { signal });
   function updateStackFit() {
     if (!stack) return;
     const viewport = window.innerHeight;
@@ -216,17 +98,14 @@ export function mountTokyo(app) {
       if (mobile) return card.offsetHeight + base + 36 + 20 > viewport;
       const copy = card.querySelector('.tk-tool-copy');
       const style = getComputedStyle(copy);
-      const content = [...copy.children].reduce((sum, child) => sum + child.offsetHeight, 0) +
-        parseFloat(style.rowGap) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      const content = copy.offsetHeight + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
       return content > Math.max(440, Math.min(570, viewport - 180));
     });
     stack.classList.toggle('is-static', tooTall);
   }
-  const resizeObserver = new ResizeObserver(() => { if (!disposed) { updateStackFit(); scheduleGalleryLayout(); scheduleScroll(); } });
-  if (gallery) resizeObserver.observe(gallery);
+  const resizeObserver = new ResizeObserver(() => { if (!disposed) { updateStackFit(); scheduleScroll(); } });
   slots.forEach(slot => resizeObserver.observe(slot));
-  window.addEventListener('resize', () => { updateStackFit(); scheduleGalleryLayout(); }, { passive: true, signal });
-  arrangeGallery();
+  window.addEventListener('resize', updateStackFit, { passive: true, signal });
   scheduleScroll();
 
   function lockScroll() {
@@ -245,7 +124,7 @@ export function mountTokyo(app) {
     document.body.style.position = 'fixed';
     document.body.style.top = -lockedY + 'px';
     document.body.style.width = '100%';
-    syncGalleryPlayback();
+    posterGallery.sync();
   }
   function unlockScroll() {
     if (!locked) return;
@@ -256,7 +135,7 @@ export function mountTokyo(app) {
     document.body.style.width = savedWidth;
     window.scrollTo({ top: lockedY, behavior: 'instant' });
     locked = false;
-    syncGalleryPlayback();
+    posterGallery.sync();
   }
   function posterRect(image) {
     const rect = image.getBoundingClientRect();
@@ -349,6 +228,7 @@ export function mountTokyo(app) {
     dialog.close();
     if (sourceImage) sourceImage.style.visibility = '';
     scene.inert = false;
+    posterGallery.pauseFor(trigger);
     unlockScroll();
     trigger?.focus({ preventScroll: true });
     closing = false;
@@ -409,9 +289,7 @@ export function mountTokyo(app) {
     if (dialog.open && !closing) { flights.forEach(animation => animation.finish()); art.style.transform = ''; }
   }, { passive: true, signal });
   return () => {
-    disposed = true; controller.abort(); observer.disconnect(); galleryObserver.disconnect(); resizeObserver.disconnect(); unmountLiquid();
-    cancelAnimationFrame(galleryLayoutFrame); cancelAnimationFrame(galleryAnimationFrame);
-    galleryAnimations.forEach(animation => animation.cancel());
+    disposed = true; controller.abort(); observer.disconnect(); resizeObserver.disconnect(); posterGallery.dispose(); unmountLiquid();
     cancelAnimationFrame(scrollFrame); flights.forEach(animation => animation.cancel()); flight?.remove();
     if (dialog.open) dialog.close();
     if (contact.open) contact.close();

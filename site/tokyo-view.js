@@ -77,7 +77,7 @@ function exhibition(events, { home = false } = {}) {
   const notice = publicPosterSync.status === 'loading' ? '<p role="status">正在加载活动海报…</p>' :
     publicPosterSync.status === 'error' ? '<p role="alert">' + esc(publicPosterSync.message) +
       '</p><button type="button" class="tk-text-link" data-public-posters-retry>重新加载海报</button>' : '';
-  const archiveGallery = home ? '<div class="tk-gallery" id="tk-archive-gallery" data-tk-gallery role="list" aria-label="已结束的公开活动，按日期从新到旧；各列自动上下往返移动">' +
+  const archiveGallery = home ? '<div class="tk-gallery" id="tk-archive-gallery" data-tk-gallery role="list" aria-label="已结束的公开活动；第一、三列向下，第二列向上循环。触摸或点击某列后可手动滑动，10秒无操作后继续播放。">' +
     past.map((event, index) => '<div class="tk-gallery-item" role="listitem" aria-posinset="' + (index + 1) +
       '" aria-setsize="' + past.length + '">' + poster(event) + '</div>').join('') + '</div>' : gallery(past, '往期活动');
   return '<section class="tk-exhibition" id="tk-events" aria-label="活动海报">' +
@@ -90,10 +90,7 @@ function exhibition(events, { home = false } = {}) {
       '<div class="tk-empty-recruitment">' + (notice || '<p>暂无募集中活动，敬请期待后续活动</p>') + '</div>') + '</section>' +
     (past.length ? '<section class="tk-archive"' + (home ? ' data-tk-auto-archive' : '') + ' aria-labelledby="tk-archive-title"><div class="tk-gallery-heading tk-reveal">' +
       '<h2 id="tk-archive-title">' + (home ? '往期回顾' : '往期活动') + '</h2>' +
-      '<div class="tk-gallery-actions">' + (past.some(event => event.demo) ? '<span class="tk-gallery-count">DEMO GALLERY / 演示海报</span>' : '') +
-      (home ? '<button type="button" class="tk-gallery-toggle" data-tk-gallery-toggle aria-controls="tk-archive-gallery" aria-label="暂停海报自动移动" aria-pressed="false" hidden>' +
-        '<svg class="tk-gallery-pause-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg>' +
-        '<svg class="tk-gallery-play-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 5 10 7-10 7z"/></svg></button>' : '') + '</div>' +
+      (past.some(event => event.demo) ? '<span class="tk-gallery-count">DEMO GALLERY / 演示海报</span>' : '') +
       '</div>' + archiveGallery + '</section>' :
       (!notice ? '<div class="tk-empty-archive"><p>' + (!events.length ? '暂无公开海报' : '往期回顾，等待下一次相遇') + '</p></div>' : '')) + '</section>';
 }

@@ -19,12 +19,21 @@ export function galleryLayout(availableWidth, viewportHeight, mobile, gap, rowGa
   return { columns, rows, width, height: cardHeight * rows + rowGap * (rows - 1), stride: cardHeight + rowGap };
 }
 
-// About one poster every 12 seconds. Alternate over the finite original track,
-// rather than cloning posters or duplicating public Event records for a loop.
-export function galleryMotion(travel, stride, column) {
+// Fixed directions: first/third move down; the second moves up. Native scroll
+// offsets have the opposite sign to the visible movement of the posters.
+export function galleryMotion(stride, column) {
   const speed = Math.max(1, stride / 12) * [1, .92, 1.06][column % 3];
-  return { travel: Math.max(0, travel), duration: Math.max(1000, Math.max(0, travel) / speed * 1000),
-    direction: column % 2 ? 'alternate-reverse' : 'alternate' };
+  return { speed, scrollSign: column % 2 ? 1 : -1, direction: column % 2 ? 'up' : 'down', idleMs: 10_000 };
+}
+
+// Recycle only fully hidden original items. Reordering and compensating the
+// native scroll offset together keep the visible posters in the same place.
+export function galleryLoopStep(position, delta, max, stride) {
+  if (max < 1 || stride < 1) return { position: 0, rotate: 0 };
+  let next = position + delta, rotate = 0;
+  if (delta > 0) while (next >= max - .25) { next -= stride; rotate++; }
+  if (delta < 0) while (next <= .25) { next += stride; rotate--; }
+  return { position: Math.max(0, Math.min(max, next)), rotate };
 }
 
 export function stackDepth(distance, travel) {

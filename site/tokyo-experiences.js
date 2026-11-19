@@ -1,25 +1,28 @@
 import { escapeHtml as esc, safeUrl } from './html.js';
 
-// Public editorial content, not a second Event database. Replace each image.src
-// with a rights-cleared real tool/activity photo. Empty URLs render honest slots.
+// Public editorial content, not a second Event database. User-supplied images
+// remain configurable; an empty URL renders an explicit replacement slot.
 // Keep private Workshop resources out of this public configuration.
 export const tokyoExperiences = [
   {
     id: 'projection', title: '心理投射图卡', tools: 'OH卡 · 观系游戏', tone: 'blue',
     description: '从一张图像开始，观察自己的联想、感受与不同视角。借助图卡展开分享与交流，没有固定答案，也不急于得出结论。',
-    image: { src: '', alt: 'OH卡与观系图卡在桌面上的真实排列', width: 1600, height: 1200, fit: 'cover' },
+    panelSide: 'left',
+    image: { src: './tokyo-tool-projection.jpg', alt: '桌面上散放的图卡水彩插画', width: 1448, height: 1086, fit: 'cover' },
     photoLabel: 'OH卡 / 观系图卡',
   },
   {
     id: 'transformation', title: '自我觉察桌游', tools: '蜕变游戏', tone: 'pink',
     description: '借助游戏中的选择、提问与不同卡牌，探索当下的状态、困惑和可能性，在互动中发现新的思路。',
-    image: { src: '', alt: '蜕变游戏卡牌与桌游布局的真实照片', width: 1600, height: 1200, fit: 'cover' },
+    panelSide: 'right',
+    image: { src: './tokyo-tool-transformation.jpg', alt: '蜕变游戏桌游布局与卡牌插画', width: 1448, height: 1086, fit: 'cover' },
     photoLabel: '蜕变游戏 / 桌游布局',
   },
   {
     id: 'creation', title: '正念与创作体验', tools: '直觉涂鸦 · 情绪编织等', tone: 'sage',
     description: '通过颜色、线条、触感与创作，让注意力回到当下。无需绘画基础，也不以作品好坏作为衡量标准。',
-    image: { src: '', alt: '直觉涂鸦、手绘纸张或情绪编织的真实创作画面', width: 1600, height: 1200, fit: 'cover' },
+    panelSide: 'left',
+    image: { src: './tokyo-tool-creation.jpg', alt: '彩色粉笔与自由涂鸦的创作插画', width: 1448, height: 1086, fit: 'cover' },
     photoLabel: '直觉涂鸦 / 情绪编织',
   },
   {
@@ -40,7 +43,7 @@ const motifs = {
 function media(card) {
   const src = safeUrl(card.image.src);
   const placeholder = '<div class="tk-tool-placeholder"' + (src ? ' hidden' : '') + '>' +
-    '<span>' + esc(card.photoLabel) + '</span><small>真实工具照片待补</small></div>';
+    '<span>' + esc(card.photoLabel) + '</span><small>工具图片待补</small></div>';
   return '<div class="tk-tool-media' + (card.image.fit === 'contain' ? ' tk-tool-media-contain' : '') + '">' +
     (src ? '<img src="' + esc(src) + '" alt="' + esc(card.image.alt) + '" width="' + card.image.width +
       '" height="' + card.image.height + '" loading="lazy" decoding="async" referrerpolicy="no-referrer">' : '') + placeholder + '</div>';
@@ -50,11 +53,11 @@ export function tokyoExperienceView() {
   return '<section class="tk-experiences" aria-labelledby="tk-experiences-title">' +
     '<div class="tk-experience-heading tk-reveal"><p class="tk-eyebrow">EXPERIENCES & TOOLS</p>' +
     '<h2 id="tk-experiences-title">活动体验与工具</h2></div><div class="tk-tool-stack" data-tk-stack>' +
-    tokyoExperiences.map(card => '<article class="tk-tool-slot" data-tk-slot><div class="tk-tool-card tk-tool-' + card.tone + '">' +
-      '<div class="tk-tool-copy"><span class="tk-tool-icon" aria-hidden="true"><svg viewBox="0 0 300 220" fill="none">' +
-      motifs[card.id] + '</svg></span>' +
-      '<div><h3>' + esc(card.title) + '</h3><p class="tk-tool-names">' + esc(card.tools) + '</p>' +
-      '<p class="tk-tool-description">' + esc(card.description) + '</p></div></div>' + media(card) + '</div></article>')
+    tokyoExperiences.map(card => '<article class="tk-tool-slot" data-tk-slot><div class="tk-tool-card tk-tool-' + card.tone +
+      (card.panelSide === 'right' ? ' tk-tool-panel-right' : '') + '">' + media(card) +
+      '<div class="tk-tool-copy"><div class="tk-tool-heading"><h3>' + esc(card.title) + '</h3>' +
+      '<span class="tk-tool-icon" aria-hidden="true"><svg viewBox="0 0 300 220" fill="none">' + motifs[card.id] + '</svg></span></div>' +
+      '<p class="tk-tool-names">' + esc(card.tools) + '</p><p class="tk-tool-description">' + esc(card.description) + '</p></div></div></article>')
       .join('<div class="tk-tool-gap" aria-hidden="true"></div>') +
     '</div></section>';
 }

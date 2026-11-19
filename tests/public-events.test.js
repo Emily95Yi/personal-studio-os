@@ -9,7 +9,8 @@ import { tokyoView } from '../site/tokyo-view.js';
 import { demoPosters, exhibitionEvents } from '../site/tokyo-demo.js';
 import { publicRepository } from '../site/repository.js';
 import { readRoute } from '../site/pages.js';
-import { archivePosters, galleryLayout, galleryMotion, stackDepth } from '../site/tokyo-gallery.js';
+import { archivePosters, galleryLayout, galleryLoopStep, galleryMotion, stackDepth } from '../site/tokyo-gallery.js';
+import { tokyoExperiences } from '../site/tokyo-experiences.js';
 import { SaxesParser } from 'saxes';
 
 const now = new Date('2026-11-18T16:00:00Z'); // Nov 19 in Tokyo
@@ -261,7 +262,7 @@ test('autonomous gallery fits desktop 3×2 and mobile 2×3 portrait posters into
   }
 });
 
-test('twelve public posters render once each with one gallery pause control', () => {
+test('twelve public posters render once each without a pause button', () => {
   const before = studioStore.state;
   try {
     const events = Array.from({ length: 12 }, (_, index) => event('archive-' + index, {
@@ -271,17 +272,36 @@ test('twelve public posters render once each with one gallery pause control', ()
     const html = tokyoView();
     assert.equal((html.match(/data-tk-poster=/g) ?? []).length, 12);
     for (const row of events) assert.equal((html.match(new RegExp('data-tk-poster="' + row.id + '"', 'g')) ?? []).length, 1);
-    assert.equal((html.match(/data-tk-gallery-toggle/g) ?? []).length, 1);
+    assert.doesNotMatch(html, /data-tk-gallery-toggle/);
   } finally { studioStore.receiveCloud(before, before.revision); }
 });
 
-test('automatic columns alternate direction at a moderate pace and card stacking stays bounded', () => {
-  const up = galleryMotion(600, 300, 0), down = galleryMotion(600, 300, 1);
-  assert.equal(up.direction, 'alternate');
-  assert.equal(down.direction, 'alternate-reverse');
-  assert.equal(up.duration, 24_000);
-  assert.ok(down.duration > up.duration);
-  assert.equal(galleryMotion(-10, 300, 0).travel, 0);
+test('columns keep fixed down/up/down directions and resume after ten seconds of inactivity', () => {
+  const specs = [0, 1, 2].map(column => galleryMotion(300, column));
+  assert.deepEqual(specs.map(spec => spec.direction), ['down', 'up', 'down']);
+  assert.deepEqual(specs.map(spec => spec.scrollSign), [-1, 1, -1]);
+  assert.equal(specs[0].speed, 25);
+  assert.ok(specs.every(spec => spec.idleMs === 10_000));
   assert.equal(stackDepth(1000, 500).scale, .955);
   assert.equal(stackDepth(-100, 500).scale, 1);
+});
+
+test('loop recycling compensates offsets without a reversal or visible jump', () => {
+  for (const [position, delta] of [[590, 20], [10, -40], [200, 50], [300, -60], [500, 1000], [10, -900]]) {
+    const result = galleryLoopStep(position, delta, 600, 300);
+    assert.ok(result.position >= 0 && result.position <= 600);
+    assert.equal(900 - (position + delta), (900 - result.rotate * 300) - result.position);
+    if (delta > 0) assert.ok(result.rotate >= 0);
+    else assert.ok(result.rotate <= 0);
+  }
+});
+
+test('the first three tool cards use supplied images and retain title-associated icons', () => {
+  assert.deepEqual(tokyoExperiences.slice(0, 3).map(card => card.image.src), [
+    './tokyo-tool-projection.jpg', './tokyo-tool-transformation.jpg', './tokyo-tool-creation.jpg',
+  ]);
+  const html = tokyoView();
+  assert.equal((html.match(/class="tk-tool-heading"/g) ?? []).length, 4);
+  assert.equal((html.match(/class="tk-tool-icon"/g) ?? []).length, 4);
+  assert.match(html, /tk-tool-panel-right/);
 });
